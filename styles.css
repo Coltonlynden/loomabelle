@@ -79,3 +79,9 @@ body{
 .preview{max-width:100%; display:block; border-radius:8px; background:#0b0e16}
 .tips ul{margin:.25rem 0 0 1rem; padding:0}
 .tips li{margin:.5rem 0; color:var(--muted)}
+.status{margin:8px 2px 0; font-size:.92rem; color:#cbd5e1}
+
+.status.ok{color:#34d399}
+.status.warn{color:#f59e0b}
+.status.error{color:#f87171}
+

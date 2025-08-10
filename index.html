@@ -2,84 +2,27 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Loomabelle</title>
   <link rel="stylesheet" href="styles.css" />
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #fafafa;
-      color: #333;
-      margin: 0;
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      min-height: 100vh;
-    }
-    header {
-      background: #6b4eff;
-      color: white;
-      width: 100%;
-      padding: 1rem;
-      text-align: center;
-      font-size: 1.8rem;
-      font-weight: bold;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    main {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 2rem;
-      max-width: 800px;
-      width: 100%;
-    }
-    .controls {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      margin-bottom: 1rem;
-    }
-    .controls input[type="file"] {
-      margin-bottom: 0.5rem;
-    }
-    .status {
-      margin-top: 0.5rem;
-      font-size: 0.9rem;
-      color: #666;
-    }
-    canvas {
-      margin-top: 1.5rem;
-      border: 1px solid #ddd;
-      background: white;
-    }
-    button {
-      background: #6b4eff;
-      color: white;
-      border: none;
-      padding: 0.5rem 1rem;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 1rem;
-    }
-    button:disabled {
-      background: #aaa;
-      cursor: not-allowed;
-    }
-  </style>
 </head>
 <body>
-  <header>Loomabelle</header>
+  <header>
+    <h1>Loomabelle</h1>
+  </header>
+
   <main>
-    <div class="controls">
-      <input type="file" id="file" accept="image/*">
-      <button id="process" disabled>Process</button>
+    <div class="upload-section">
+      <input type="file" id="fileInput" accept="image/png, image/jpeg" />
+      <button id="processBtn" disabled>Process</button>
       <p id="status" class="status">Upload a JPG/PNG to begin.</p>
     </div>
-    <canvas id="work"></canvas>
+
+    <div class="canvas-container">
+      <canvas id="work"></canvas>
+    </div>
   </main>
+
   <script type="module" src="./app.js"></script>
 </body>
 </html>

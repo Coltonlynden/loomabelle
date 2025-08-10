@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Loomabelle — Turn art into stitches</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <link rel="preconnect" href="https://esm.run" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="shell">
+      <div class="brand">
+        <span class="logo-dot"></span>
+        <h1>Loomabelle</h1>
+      </div>
+      <p class="tagline">Turn your art into embroidery stitches — right in your browser.</p>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="panel controls">
+      <div class="controls-row">
+        <label class="file">
+          <input id="file" type="file" accept="image/*" />
+          <span>Upload image</span>
+        </label>
+
+        <div class="field">
+          <label>Colors (max 5)</label>
+          <input id="colors" type="number" min="2" max="5" value="4" />
+        </div>
+
+        <div class="field checkbox">
+          <label><input id="removeBg" type="checkbox" checked /> Remove background</label>
+        </div>
+
+        <div class="field checkbox">
+          <label><input id="outline" type="checkbox" checked /> Add outline</label>
+        </div>
+
+        <div class="field">
+          <label>Hoop</label>
+          <select id="hoop">
+            <option value="4x4">4×4 (100×100mm)</option>
+            <option value="5x7">5×7 (130×180mm)</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Fill angle (°)</label>
+          <input id="angle" type="number" value="45" />
+        </div>
+
+        <div class="field">
+          <label>Density (mm)</label>
+          <input id="density" type="number" step="0.05" value="0.40" />
+        </div>
+
+        <button id="process" class="btn primary" disabled>Process</button>
+        <a id="download" class="btn ghost disabled" download="design.dst">Download .DST</a>
+      </div>
+    </section>
+
+    <section class="grid">
+      <div class="panel">
+        <h3>Preview</h3>
+        <div class="preview-wrap">
+          <img id="preview" class="preview" alt="Preview will appear here" />
+        </div>
+        <canvas id="work" style="display:none"></canvas>
+      </div>
+
+      <div class="panel tips">
+        <h3>Tips</h3>
+        <ul>
+          <li>Works best with logo‑style, high‑contrast images.</li>
+          <li>Try 3–5 colors; turn on Background Removal for white/solid backgrounds.</li>
+          <li>Exports <strong>.DST (Tajima)</strong>, which many Brother machines can read.</li>
+          <li>This is a simple hatch fill + optional outline; test on scrap fabric first.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="shell">
+      <small>© <span id="year"></span> Loomabelle</small>
+    </div>
+  </footer>
+
+  <!-- Single script; it dynamically loads tiny libs from CDN when needed -->
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

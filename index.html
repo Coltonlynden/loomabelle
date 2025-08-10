@@ -1,95 +1,85 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Loomabelle — Turn art into stitches</title>
-  <link rel="stylesheet" href="./styles.css" />
-  <link rel="preconnect" href="https://esm.run" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Loomabelle</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #fafafa;
+      color: #333;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+    header {
+      background: #6b4eff;
+      color: white;
+      width: 100%;
+      padding: 1rem;
+      text-align: center;
+      font-size: 1.8rem;
+      font-weight: bold;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem;
+      max-width: 800px;
+      width: 100%;
+    }
+    .controls {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+    .controls input[type="file"] {
+      margin-bottom: 0.5rem;
+    }
+    .status {
+      margin-top: 0.5rem;
+      font-size: 0.9rem;
+      color: #666;
+    }
+    canvas {
+      margin-top: 1.5rem;
+      border: 1px solid #ddd;
+      background: white;
+    }
+    button {
+      background: #6b4eff;
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+    button:disabled {
+      background: #aaa;
+      cursor: not-allowed;
+    }
+  </style>
 </head>
 <body>
-  <header class="site-header">
-    <div class="shell">
-      <div class="brand">
-        <span class="logo-dot"></span>
-        <h1>Loomabelle</h1>
-      </div>
-      <p class="tagline">Turn your art into embroidery stitches — right in your browser.</p>
+  <header>Loomabelle</header>
+  <main>
+    <div class="controls">
+      <input type="file" id="file" accept="image/*">
+      <button id="process" disabled>Process</button>
+      <p id="status" class="status">Upload a JPG/PNG to begin.</p>
     </div>
-  </header>
-
-  <main class="shell">
-    <section class="panel controls">
-      <div class="controls-row">
-        <label class="file">
-          <input id="file" type="file" accept="image/*" />
-          <span>Upload image</span>
-        </label>
-
-        <div class="field">
-          <label>Colors (max 5)</label>
-          <input id="colors" type="number" min="2" max="5" value="4" />
-        </div>
-
-        <div class="field checkbox">
-          <label><input id="removeBg" type="checkbox" checked /> Remove background</label>
-        </div>
-
-        <div class="field checkbox">
-          <label><input id="outline" type="checkbox" checked /> Add outline</label>
-        </div>
-
-        <div class="field">
-          <label>Hoop</label>
-          <select id="hoop">
-            <option value="4x4">4×4 (100×100mm)</option>
-            <option value="5x7">5×7 (130×180mm)</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label>Fill angle (°)</label>
-          <input id="angle" type="number" value="45" />
-        </div>
-
-        <div class="field">
-          <label>Density (mm)</label>
-          <input id="density" type="number" step="0.05" value="0.40" />
-        </div>
-
-        <button id="process" class="btn primary" disabled>Process</button>
-        <a id="download" class="btn ghost disabled" download="design.dst">Download .DST</a>
-      </div>
-    </section>
-
-    <section class="grid">
-      <div class="panel">
-        <h3>Preview</h3>
-        <div class="preview-wrap">
-          <img id="preview" class="preview" alt="Preview will appear here" />
-        </div>
-        <canvas id="work" style="display:none"></canvas>
-      </div>
-
-      <div class="panel tips">
-        <h3>Tips</h3>
-        <ul>
-          <li>Works best with logo‑style, high‑contrast images.</li>
-          <li>Try 3–5 colors; turn on Background Removal for white/solid backgrounds.</li>
-          <li>Exports <strong>.DST (Tajima)</strong>, which many Brother machines can read.</li>
-          <li>This is a simple hatch fill + optional outline; test on scrap fabric first.</li>
-        </ul>
-      </div>
-    </section>
+    <canvas id="canvas"></canvas>
   </main>
-
-  <footer class="site-footer">
-    <div class="shell">
-      <small>© <span id="year"></span> Loomabelle</small>
-    </div>
-  </footer>
-
-  <!-- Single script; it dynamically loads tiny libs from CDN when needed -->
-  <script type="module" src="./app.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

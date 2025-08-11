@@ -6,11 +6,10 @@ const els = {
   fileInput: $('#fileInput'),
   preview: $('#preview'),
   log: $('#log'),
-  // draw
+  // tabs / draw
   tabs: document.querySelectorAll('.tab'),
-  drawCanvas: $('#drawCanvas'),
-  drawClear: $('#drawClear'),
-  brushSize: $('#brushSize'),
+  tabUpload: $('#tab-upload'),
+  tabDraw: $('#tab-draw'),
   // options
   toggleOptions: $('#toggleOptions'),
   optionsPanel: $('#optionsPanel'),
@@ -23,9 +22,10 @@ const els = {
   fillAngle: $('#fillAngle'),
   density: $('#density'),
   autoColors: $('#autoColors'),
-  autoEmb: $('#autoEmb'),
   removeBg: $('#removeBg'),
   outline: $('#outline'),
+  bgStrength: $('#bgStrength'),
+  manualPalette: $('#manualPalette'),
   // actions
   btnProcess: $('#btnProcess'),
   btnDownloadDST: $('#btnDownloadDST'),
@@ -59,7 +59,8 @@ worker.onmessage = (e)=>{
 };
 function postToWorker(payload){ worker.postMessage(payload, payload.transfer || []); }
 
-/* ---------- Tabs (Draw tab content only when active) ---------- */
+/* ---------- Tabs (draw content created lazily) ---------- */
+let drawInited = false;
 els.tabs.forEach(btn=>{
   btn.addEventListener('click',()=>{
     els.tabs.forEach(b=>{ b.classList.remove('active'); b.setAttribute('aria-selected','false'); });
@@ -67,9 +68,10 @@ els.tabs.forEach(btn=>{
     document.querySelectorAll('.tab-body').forEach(b=>b.classList.remove('active'));
     const t = document.getElementById(`tab-${btn.dataset.tab}`);
     t.classList.add('active');
-    // a11y
-    document.getElementById('tab-upload').setAttribute('aria-hidden', btn.dataset.tab!=='upload');
-    document.getElementById('tab-draw').setAttribute('aria-hidden', btn.dataset.tab!=='draw');
+    els.tabUpload.setAttribute('aria-hidden', btn.dataset.tab!=='upload');
+    els.tabDraw.setAttribute('aria-hidden', btn.dataset.tab!=='draw');
+
+    if(btn.dataset.tab==='draw' && !drawInited){ initDraw(); drawInited=true; }
     syncProcessEnabled();
   });
 });
@@ -80,6 +82,21 @@ els.toggleOptions.addEventListener('change', ()=>{
   els.optionsPanel.classList.toggle('hidden', !show);
   els.optionsPanel.setAttribute('aria-hidden', (!show).toString());
 });
+
+/* Show/hide dependent controls */
+function refreshVisibility(){
+  const autoOn = els.autoColors.checked;
+  // "Max colors" shown only when Auto colors ON
+  toggleByWhen('autoColors:on', autoOn);
+  toggleByWhen('autoColors:off', !autoOn);
+  // Remove BG strength section only when removeBg ON
+  toggleByWhen('removeBg:on', els.removeBg.checked);
+}
+function toggleByWhen(expr, show){
+  document.querySelectorAll(`[data-when="${expr}"]`).forEach(el=>{
+    el.classList.toggle('hidden', !show);
+  });
+}
 
 /* ---------- Preset & hoop ---------- */
 els.preset.addEventListener('change',()=>{
@@ -118,18 +135,27 @@ async function loadFile(file){
   }catch(err){ log(`Load failed: ${String(err)}`,'err'); }
 }
 
-/* ---------- Draw tools (only when tab is active) ---------- */
-const dctx = els.drawCanvas?.getContext('2d', {willReadFrequently:true});
-let drawing=false;
-function setBrush(){ if(!dctx) return; dctx.lineCap='round'; dctx.lineJoin='round'; dctx.strokeStyle='#333'; dctx.lineWidth=Number(els.brushSize.value); }
-if(dctx){ setBrush(); els.brushSize.addEventListener('input', setBrush); }
-function canvasPos(e){ const r=els.drawCanvas.getBoundingClientRect(); const x=(e.touches?e.touches[0].clientX:e.clientX)-r.left; const y=(e.touches?e.touches[0].clientY:e.clientY)-r.top; return {x:x*(els.drawCanvas.width/r.width), y:y*(els.drawCanvas.height/r.height)}; }
+/* ---------- Draw tools (injected when tab opened) ---------- */
+let dctx, drawCanvas, drawClear, brushSize, drawing=false;
+function initDraw(){
+  els.tabDraw.innerHTML = `
+    <canvas id="drawCanvas" width="720" height="480" aria-label="Drawing canvas"></canvas>
+    <div class="toolbar">
+      <button id="drawClear" class="btn">Clear</button>
+      <label>Brush size <input id="brushSize" type="range" min="2" max="36" value="10"></label>
+    </div>`;
+  drawCanvas = $('#drawCanvas'); drawClear = $('#drawClear'); brushSize = $('#brushSize');
+  dctx = drawCanvas.getContext('2d', {willReadFrequently:true});
+  setBrush(); brushSize.addEventListener('input', setBrush);
+  ['mousedown','touchstart'].forEach(v=>drawCanvas.addEventListener(v,(e)=>{ drawing=true; const {x,y}=canvasPos(e); dctx.beginPath(); dctx.moveTo(x,y); drawLine(e); }));
+  ['mousemove','touchmove'].forEach(v=>drawCanvas.addEventListener(v, drawLine));
+  ['mouseup','mouseleave','touchend','touchcancel'].forEach(v=>drawCanvas.addEventListener(v,()=>{ if(!drawing) return; drawing=false; cacheCanvasAsImage(); }));
+  drawClear.addEventListener('click',()=>{ dctx.clearRect(0,0,drawCanvas.width,drawCanvas.height); cacheCanvasAsImage(); });
+}
+function setBrush(){ if(!dctx) return; dctx.lineCap='round'; dctx.lineJoin='round'; dctx.strokeStyle='#333'; dctx.lineWidth=Number(brushSize.value); }
+function canvasPos(e){ const r=drawCanvas.getBoundingClientRect(); const x=(e.touches?e.touches[0].clientX:e.clientX)-r.left; const y=(e.touches?e.touches[0].clientY:e.clientY)-r.top; return {x:x*(drawCanvas.width/r.width), y:y*(drawCanvas.height/r.height)}; }
 function drawLine(e){ if(!drawing) return; const {x,y}=canvasPos(e); dctx.lineTo(x,y); dctx.stroke(); e.preventDefault(); }
-['mousedown','touchstart'].forEach(v=>els.drawCanvas?.addEventListener(v,(e)=>{ drawing=true; const {x,y}=canvasPos(e); dctx.beginPath(); dctx.moveTo(x,y); drawLine(e); }));
-['mousemove','touchmove'].forEach(v=>els.drawCanvas?.addEventListener(v, drawLine));
-['mouseup','mouseleave','touchend','touchcancel'].forEach(v=>els.drawCanvas?.addEventListener(v,()=>{ if(!drawing) return; drawing=false; cacheCanvasAsImage(); }));
-els.drawClear?.addEventListener('click',()=>{ dctx.clearRect(0,0,els.drawCanvas.width,els.drawCanvas.height); cacheCanvasAsImage(); });
-function cacheCanvasAsImage(){ els.drawCanvas.toBlob(async (b)=>{ if(!b) return; const bmp=await createImageBitmap(b); state.srcImage=bmp; syncProcessEnabled(); drawImageQuick(bmp); }); }
+function cacheCanvasAsImage(){ drawCanvas.toBlob(async (b)=>{ if(!b) return; const bmp=await createImageBitmap(b); state.srcImage=bmp; syncProcessEnabled(); drawImageQuick(bmp); }); }
 
 /* ---------- Preview ---------- */
 const pctx = els.preview.getContext('2d', {alpha:false, desynchronized:true});
@@ -145,6 +171,13 @@ function drawPreview({width,height,imageData}){
   pctx.putImageData(new ImageData(imageData,width,height),0,0);
 }
 
+/* ---------- Visibility wiring ---------- */
+['change','input'].forEach(evt=>{
+  els.autoColors.addEventListener(evt, refreshVisibility);
+  els.removeBg.addEventListener(evt, refreshVisibility);
+});
+refreshVisibility();
+
 /* ---------- Enable/Busy ---------- */
 function syncProcessEnabled(){ els.btnProcess.disabled = !state.srcImage || state.busy; }
 function setBusy(b){ state.busy=b; els.btnProcess.disabled=b||!state.srcImage; document.body.style.cursor=b?'progress':'auto'; }
@@ -158,17 +191,26 @@ els.btnProcess.addEventListener('click', ()=>{
     ? {w:Number(els.hoopW.value||130), h:Number(els.hoopH.value||180)}
     : (()=>{ const [w,h]=els.hoop.value.split('x').map(Number); return {w,h}; })();
 
+  // Manual palette if autoColors is off
+  let manualPalette = [];
+  if(!els.autoColors.checked){
+    manualPalette = Array.from(els.manualPalette.querySelectorAll('input[type="color"]'))
+      .map(inp => inp.value.trim())
+      .filter(Boolean);
+  }
+
   postToWorker({
     cmd:'process',
     options:{
       hoopMM: hoop,
+      autoColors: els.autoColors.checked,
+      manualPalette,                      // hex strings or []
       maxColors: clampInt(els.maxColors?.value||4,2,6),
       fillAngle: clampInt(els.fillAngle?.value||45,0,180),
       densityMM: clampNumber(els.density?.value||0.4,0.25,1.5),
-      autoColors: els.autoColors?.checked ?? true,
-      autoEmb: els.autoEmb?.checked ?? true,
-      removeBg: els.removeBg?.checked ?? true,
-      outline: els.outline?.checked ?? true,
+      removeBg: els.removeBg.checked,
+      bgStrength: clampInt(els.bgStrength?.value||30,0,100),
+      outline: els.outline.checked,
       devicePixelRatio: Math.min(2, window.devicePixelRatio || 1)
     },
     bitmap: state.srcImage
@@ -196,6 +238,6 @@ els.btnDownloadPalette.addEventListener('click', ()=>{
 function hex(n){ return n.toString(16).padStart(2,'0'); }
 
 /* ---------- Brother tips ---------- */
-els.btnBrotherTips.addEventListener('click', ()=> els.brotherDialog.showModal());
+$('#btnBrotherTips')?.addEventListener('click', ()=> els.brotherDialog.showModal());
 
-log('Ready. Upload or switch to Draw, then Process.','ok');
+log('Ready. Upload (or switch to Draw), then Process.','ok');

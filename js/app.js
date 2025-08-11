@@ -57,27 +57,81 @@ const state = {
 function canvasCtx(c){ return c.getContext('2d',{willReadFrequently:true}); }
 
 /* ------------------------ image loading ------------------------- */
-$('file')?.addEventListener('change', async (e)=>{
-  clearLog(); prog(0);
-  const f = e.target.files && e.target.files[0];
-  if(!f){ log('No file chosen'); return; }
-  state.imgFile = f;
-  log(`Loaded image ${f.name}`);
-  // Draw into work canvas (limit longest side to 1024 for mobile)
-  const bmp = await createImageBitmap(f);
-  const maxSide = 1024;
-  let W = bmp.width, H = bmp.height;
-  if (Math.max(W,H) > maxSide){
-    const r = maxSide / Math.max(W,H); W = (W*r)|0; H = (H*r)|0;
+// Robust loader (works even if your file input ID isn't "file")
+function getFileInput(){
+  return document.getElementById('file') || document.querySelector('input[type="file"]');
+}
+
+async function loadImageToCanvas(file){
+  // iOS/Safari can be picky: avoid createImageBitmap; use HTMLImageElement
+  const url = URL.createObjectURL(file);
+  try{
+    const img = await new Promise((res, rej)=>{
+      const im = new Image();
+      im.onload = ()=>res(im);
+      im.onerror = (e)=>rej(e);
+      im.src = url;
+    });
+    // Fit longest side to 1024 to keep mobile fast
+    const maxSide = 1024;
+    let W = img.naturalWidth, H = img.naturalHeight;
+    if (Math.max(W,H) > maxSide){
+      const r = maxSide / Math.max(W,H); W = (W*r)|0; H = (H*r)|0;
+    }
+    // Prepare canvases
+    const work = state.work, mask = state.maskCanvas, prev = state.preview;
+    work.width = W; work.height = H;
+    mask.width = W; mask.height = H;
+    // preview size: max 640 wide
+    prev.width = Math.min(640, W);
+    prev.height = Math.min(640, Math.round(H*(prev.width/W)));
+
+    const ctx = work.getContext('2d', {willReadFrequently:true});
+    ctx.clearRect(0,0,W,H);
+    ctx.drawImage(img, 0, 0, W, H);
+
+    // Reset mask + state
+    const mctx = mask.getContext('2d'); mctx.clearRect(0,0,W,H);
+    state.userMask = null;
+
+    // Enable Process button now that an image exists
+    const p = document.getElementById('process'); if (p) p.disabled = false;
+
+    // Optional status text if you have #status element
+    const st = document.getElementById('status');
+    if (st) st.textContent = `Loaded ${file.name} (${W}×${H})`;
+
+    log(`Loaded image ${file.name} (${W}x${H})`);
+    bump(8);
+  } finally {
+    URL.revokeObjectURL(url);
   }
-  state.work.width = W; state.work.height = H;
-  state.maskCanvas.width = W; state.maskCanvas.height = H;
-  state.preview.width = Math.min(640, W); state.preview.height = Math.min(640, Math.round(H*(state.preview.width/W)));
-  canvasCtx(state.work).drawImage(bmp,0,0,W,H);
-  canvasCtx(state.maskCanvas).clearRect(0,0,W,H);
-  state.userMask = null;
-  bump(8);
-});
+}
+
+// Bind once (and re-bind if the element is swapped by the framework)
+function bindFileLoader(){
+  const input = getFileInput();
+  if (!input) {
+    // Try again after DOM settles (some UIs render late)
+    setTimeout(bindFileLoader, 300);
+    return;
+  }
+  // Avoid duplicate handlers
+  input.onchange = async (e)=>{
+    clearLog(); prog(0);
+    const f = e.target.files && e.target.files[0];
+    if (!f){ log('No file chosen'); return; }
+    await loadImageToCanvas(f);
+  };
+  log('File loader bound to <input type="file">');
+}
+
+// Kick it once at load
+if (document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', bindFileLoader, {once:true});
+} else {
+  bindFileLoader();
+}
 
 /* ------------------------- paint tools -------------------------- */
 // (Optional) very simple paint to select subject. If you already had a richer tool,

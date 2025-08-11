@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
   <title>Loomabelle — Image → Embroidery</title>
 
-  <!-- Brand fonts -->
+  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Merienda:wght@700&family=Quicksand:wght@500;700&display=swap" rel="stylesheet">
@@ -18,7 +18,7 @@
       <img src="assets/logo.png" class="logo" alt="Loomabelle logo">
       <div class="title-wrap">
         <h1 class="stitched-title">Loomabelle</h1>
-        <p class="subtitle">Turn art into embroidery files — fast, pretty, and on your phone.</p>
+        <p class="subtitle">Turn art into embroidery files — fast and phone-friendly.</p>
       </div>
     </div>
     <div class="seam"></div>
@@ -33,7 +33,7 @@
         <button class="tab" data-tab="draw" aria-selected="false">Draw</button>
       </nav>
 
-      <!-- Upload tab -->
+      <!-- Upload tab (default) -->
       <div class="tab-body active" id="tab-upload">
         <label class="dropzone" id="dz">
           <input type="file" id="fileInput" accept="image/png,image/jpeg,image/heic,image/heif" />
@@ -44,16 +44,16 @@
         </label>
       </div>
 
-      <!-- Draw tab (hidden until selected) -->
+      <!-- Draw tab (completely hidden unless selected) -->
       <div class="tab-body" id="tab-draw" aria-hidden="true">
         <canvas id="drawCanvas" width="720" height="480" aria-label="Drawing canvas"></canvas>
         <div class="toolbar">
           <button id="drawClear" class="btn">Clear</button>
-          <label>Brush size <input id="brushSize" type="range" min="2" max="36" value="10"></label>
+          <label>Brush <input id="brushSize" type="range" min="2" max="36" value="10"></label>
         </div>
       </div>
 
-      <!-- Minimal surface. Options are hidden until requested. -->
+      <!-- Simple surface; advanced options are hidden until requested -->
       <label class="toggle big">
         <input id="toggleOptions" type="checkbox">
         <span class="pill">✂︎ Edit options</span>
@@ -81,25 +81,39 @@
             <label>W (mm) <input id="hoopW" type="number" min="40" max="400" value="130"></label>
             <label>H (mm) <input id="hoopH" type="number" min="40" max="400" value="180"></label>
           </div>
-
-          <label>Colors (≤6)
-            <input id="maxColors" type="number" min="2" max="6" value="4">
-          </label>
-
-          <label>Fill angle°
-            <input id="fillAngle" type="number" min="0" max="180" value="45">
-          </label>
-
-          <label>Density (mm)
-            <input id="density" type="number" step="0.05" min="0.25" max="1.5" value="0.40">
-          </label>
         </div>
 
         <div class="toggles">
-          <label class="toggle"><input id="autoColors" type="checkbox" checked> Auto colors</label>
-          <label class="toggle"><input id="autoEmb" type="checkbox" checked> Auto embroider</label>
-          <label class="toggle"><input id="removeBg" type="checkbox" checked> Remove background</label>
-          <label class="toggle"><input id="outline" type="checkbox" checked> Outline (satin-ish)</label>
+          <label class="toggle">
+            <input id="autoColors" type="checkbox" checked>
+            Auto colors
+          </label>
+          <div id="group-colors" class="group">
+            <label>Colors (≤6)
+              <input id="maxColors" type="number" min="2" max="6" value="4">
+            </label>
+          </div>
+
+          <label class="toggle">
+            <input id="autoEmb" type="checkbox" checked>
+            Auto embroider (recommended)
+          </label>
+          <div id="group-emb" class="grid group">
+            <label>Fill angle°
+              <input id="fillAngle" type="number" min="0" max="180" value="45">
+            </label>
+            <label>Density (mm)
+              <input id="density" type="number" step="0.05" min="0.25" max="1.5" value="0.40">
+            </label>
+            <label class="toggle inline">
+              <input id="outline" type="checkbox" checked> Outline (satin-ish)
+            </label>
+          </div>
+
+          <label class="toggle inline">
+            <input id="removeBg" type="checkbox" checked>
+            Remove background
+          </label>
         </div>
       </div>
 
@@ -109,15 +123,6 @@
         <button id="btnDownloadPalette" class="btn" disabled>Palette (.txt)</button>
         <button id="btnBrotherTips" class="btn ghost">Brother tips</button>
       </div>
-
-      <details class="notes">
-        <summary>Helpful notes</summary>
-        <ul>
-          <li>Upload a simple logo (3–6 colors) for best results.</li>
-          <li>We add thread-change stops between colors.</li>
-          <li>Use Custom hoop if your frame differs.</li>
-        </ul>
-      </details>
 
       <div class="log" id="log" role="log" aria-live="polite"></div>
     </section>
@@ -133,15 +138,15 @@
 
   <footer class="foot">
     <div class="seam seam--foot"></div>
-    <small>Made with ♥ — runs 100% in your browser.</small>
+    <small>runs 100% in your browser.</small>
   </footer>
 
   <dialog id="brotherDialog">
     <h3>Brother SE2000 tips</h3>
     <ol>
-      <li>Select <b>5×7 (130×180mm)</b> hoop.</li>
-      <li>Tap <b>Process</b> → <b>Download .DST</b>. Put on USB (or use Brother app).</li>
-      <li>The machine will pause for color changes. Assign threads on-screen.</li>
+      <li>Select <b>5×7 (130×180mm)</b> hoop or use Custom to match your frame.</li>
+      <li>Tap <b>Process</b> → <b>Download .DST</b>, copy to USB (or use Brother’s app).</li>
+      <li>The SE2000 will pause for color changes between blocks.</li>
     </ol>
     <form method="dialog"><button class="btn primary">Got it</button></form>
   </dialog>

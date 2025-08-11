@@ -248,7 +248,12 @@ async function init() {
       // Quantize
       setStatus('Reducing colors…'); bump(18);
       const imgData = pre.getContext('2d',{willReadFrequently:true}).getImageData(0,0,pre.width,pre.height);
-      const {indexed, palette, W, H} = await quantizeSafe(imgData, k, activeMask);
+      const {indexed, palette, W, H} = await quantizeSafe(
+        imgData,
+        k,
+        activeMask,
+        (p)=>{ bump(Math.max(18, Math.min(99, p))); } // keep bar moving 18→99 during quantize
+      );
       const finalPalette = fixedPalette || palette;
       log(`Quantized palette (${finalPalette.length}): ${finalPalette.map(rgbToHex).join(', ')}`);
       if (!finalPalette.length) throw new Error('Palette empty after quantization');

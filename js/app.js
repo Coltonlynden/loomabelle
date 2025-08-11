@@ -169,7 +169,8 @@ async function init() {
       const maxSide = isIOS ? 1600 : 2200;
       const scale = Math.min(1, maxSide/Math.max(im.width,im.height));
       const W=Math.max(1,Math.round(im.width*scale)), H=Math.max(1,Math.round(im.height*scale));
-
+const safe = $('#safeMode').checked;
+const maxSide = safe ? (isIOS ? 1200 : 1600) : (isIOS ? 1600 : 2200);
       state.work.width=W; state.work.height=H;
       state.wctx.clearRect(0,0,W,H); state.wctx.drawImage(im,0,0,W,H);
 

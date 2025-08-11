@@ -7,6 +7,9 @@ import { quantizeSafe, sampleDominant } from './lib/quantize.js';
 import { planStitches, drawPreviewColored, HOOP_MM } from './lib/stitches.js';
 import { writeDST } from './lib/export_dst.js';
 
+const UA = navigator.userAgent || '';
+const IS_IOS = /\b(iPhone|iPad|iPod)\b/i.test(UA);
+
 const state = {
   work: document.createElement('canvas'),
   wctx: null,
@@ -31,7 +34,6 @@ function redrawPaint() {
   pctx.putImageData(imgD, 0, 0);
 }
 
-// ====== Color pickers ======
 function rebuildColorPickers(seed) {
   const k = clamp(+$('#colors').value || 4, 2, 6);
   const cont = $('#manualColors'); cont.innerHTML = '';
@@ -48,7 +50,6 @@ function suggestPaletteToPickers() {
   rebuildColorPickers(seed);
 }
 
-// ====== Subject painting ======
 function bindPaintEvents() {
   const { paint } = state;
   const brushRange = $('#brush'), eraser = $('#eraser'), selectToggle = $('#selectToggle');
@@ -56,7 +57,7 @@ function bindPaintEvents() {
   const toXY = (e) => {
     const r = paint.getBoundingClientRect();
     const x = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
-    const y = (e.touches ? e.touches[0].clientY : e.clientY) - r.top;
+    const y = (e.touches ? e.touches[0].clientY : e.touches ? e.touches[0].clientY : e.clientY) - r.top;
     return [Math.round(x * (paint.width / r.width)), Math.round(y * (paint.height / r.height))];
   };
   const stamp = (cx, cy, rad, on) => {
@@ -77,7 +78,7 @@ function bindPaintEvents() {
   paint.addEventListener('touchstart',start,{passive:false}); paint.addEventListener('touchmove',move,{passive:false}); window.addEventListener('touchend',end);
 }
 
-// ====== HEIC support ======
+// HEIC support
 async function heicToJpeg(file){
   if(!window.heic2any){
     const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';
@@ -98,7 +99,6 @@ async function init() {
   state.wctx = state.work.getContext('2d', { willReadFrequently: true });
   state.paint = $('#paint'); state.pctx = state.paint.getContext('2d', { willReadFrequently: true });
 
-  // Refine panel toggle
   $('#refineToggle').onchange = ()=> $('#refineBox').classList.toggle('hidden', !$('#refineToggle').checked);
 
   // Subject buttons
@@ -115,7 +115,15 @@ async function init() {
     let m = null;
     try { if ($('#smartAI').checked) { log('AI segment: DeepLab'); m = await segmentWithDeeplab(state.work); } }
     catch(e){ logError(e,'AI SEGMENT'); }
-    if (!m) { log('AI not used/failed; falling back to GrabCut'); m = await autoSubjectMaskGrabCut(state.work, state.userMask); }
+    if (!m) { 
+      // iOS: GrabCut can be heavy; only run if user painted some mask
+      if (IS_IOS && !(state.userMask && state.userMask.some(v=>v))){
+        setStatus('On iPhone, please paint a rough subject first, then Auto‑select.','warn');
+        return;
+      }
+      log('Fallback: GrabCut'); 
+      m = await autoSubjectMaskGrabCut(state.work, state.userMask); 
+    }
     if (m && m.some(v=>v)) { state.userMask = m; redrawPaint(); selectToggle.dataset.active='0'; selectToggle.textContent='✍️ Select subject'; setStatus('Subject selected. You can refine by painting.','ok'); }
     else { setStatus('Could not find a subject. Try painting a rough area.','error'); }
   };
@@ -162,9 +170,8 @@ async function init() {
       }
       const im=await loadImageFromFile(chosen);
 
-      // Downscale large images (iOS memory friendly)
-      const ua=navigator.userAgent||''; const isIOS=/\b(iPhone|iPad|iPod)\b/i.test(ua);
-      const maxSide = isIOS ? 1600 : 2200;
+      // Stronger downscale on iOS to prevent crashes
+      const maxSide = IS_IOS ? 1200 : 2200;
       const scale = Math.min(1, maxSide/Math.max(im.width,im.height));
       const W=Math.max(1,Math.round(im.width*scale)), H=Math.max(1,Math.round(im.height*scale));
 
@@ -174,13 +181,11 @@ async function init() {
       state.paint.width=W; state.paint.height=H; state.userMask=new Uint8Array(W*H);
       redrawPaint();
 
-      // Enable buttons now that we have an image
       $('#process').disabled=false; 
       $('#selectToggle').disabled=false; 
       $('#clearMask').disabled=false; 
       $('#autoMask').disabled=false;
 
-      // Reset downloads
       $('#download').classList.add('disabled'); 
       $('#downloadPalette').classList.add('disabled');
 
@@ -194,30 +199,19 @@ async function init() {
     log('=== SELF‑CHECK START ===');
     try{
       log(`UserAgent: ${navigator.userAgent}`);
-      log(`Cross‑origin isolation: ${self.crossOriginIsolated ? 'yes' : 'no'}`);
-      log('Checking OpenCV…');
-      await cvReady(); log(`cv.Mat OK. ${cv?.getBuildInformation ? 'has build info' : 'basic build'}`);
-      log(`CLAHE available: ${!!(cv.CLAHE && cv.Size)}`);
-      const c=document.createElement('canvas'); c.width=c.height=64;
-      const ctx=c.getContext('2d'); ctx.fillStyle='#f00'; ctx.fillRect(0,0,64,64);
-      const m=cv.imread(c); const g=new cv.Mat(); cv.cvtColor(m,g,cv.COLOR_RGBA2GRAY);
-      log(`OpenCV ops OK (gray ${g.rows}×${g.cols})`); m.delete(); g.delete();
-      // Worker test
-      let ok=true; try{ const url=URL.createObjectURL(new Blob(['onmessage=(e)=>postMessage(e.data+1)'],{type:'text/javascript'})); const w=new Worker(url);
-        const p=new Promise((res,rej)=>{w.onmessage=e=>res(e.data); w.onerror=rej;}); w.postMessage(41); const ans=await p; w.terminate(); URL.revokeObjectURL(url); ok=(ans===42);
-      }catch(_){ok=false;}
-      log(`Blob worker: ${ok?'OK':'BLOCKED'}`);
+      log(`Cross-origin isolation: ${self.crossOriginIsolated ? 'yes' : 'no'}`);
+      log('Checking OpenCV…'); await cvReady();
+      log('OpenCV ready');
     }catch(err){logError(err,'SELF‑CHECK');}
     log('=== SELF‑CHECK END ===');
   });
   $('#logClear').addEventListener('click', ()=> { $('#log').textContent=''; });
 
-  // ===== Process button =====
+  // Process
   $('#process').onclick = async ()=>{
     const { work } = state;
     if(!work.width){ setStatus('No image loaded.','error'); log('Aborting: work canvas empty','error'); return; }
 
-    // Disable while running
     $('#process').disabled=true; 
     $('#download').classList.add('disabled'); 
     $('#downloadPalette').classList.add('disabled'); 
@@ -226,48 +220,49 @@ async function init() {
 
     try{
       const auto = $('#autoMode').checked;
-      const k = clamp(+$('#colors').value || 4, 2, 6);
+      let k = clamp(+$('#colors').value || 4, 2, 6);
       const fixedPalette = $('#autoColors').checked ? null :
         [...$('#manualColors').querySelectorAll('input[type="color"]')].slice(0,k).map(el=>hexToRgb(el.value));
       const hoop = HOOP_MM[$('#hoop').value];
 
-      const removeBg   = auto ? true : $('#removeBg').checked;
+      // iOS: keep k modest for performance
+      if (IS_IOS) k = Math.min(k, 4);
+
+      const removeBg   = auto ? (!IS_IOS) : $('#removeBg').checked; // iOS auto mode: skip background removal
       const wantOutline= auto ? true : $('#outline').checked;
       const angleDeg   = auto ? 45   : (+$('#angle').value||45);
       const densityMM  = auto ? 0.40 : (+$('#density').value||0.40);
       const sizePct    = auto ? 80   : (+$('#sizePct').value||80);
 
       setStatus('Preparing…'); bump(5);
-      log(`Settings: k=${k}, auto=${auto}, angle=${angleDeg}, density=${densityMM}, sizePct=${sizePct}, hoop=${$('#hoop').value}`);
-      if (fixedPalette) log(`Manual palette: ${fixedPalette.map(rgbToHex).join(', ')}`);
-
-      log('Waiting for OpenCV…'); await cvReady(); bump(8);
+      log(`Settings: k=${k}, auto=${auto}, iOS=${IS_IOS}, removeBg=${removeBg}, outline=${wantOutline}`);
 
       // Subject mask
       let activeMask = null;
       try{
         if (removeBg || (state.userMask && state.userMask.some(v=>v))) {
-          setStatus('Finding subject…'); log('Running GrabCut (with optional paint mask)…');
-          activeMask = await autoSubjectMaskGrabCut(work, state.userMask);
-          log(`GrabCut mask: ${activeMask && activeMask.some(v=>v) ? 'OK' : 'empty'}`);
-        } else if (state.userMask && state.userMask.some(v=>v)) {
-          activeMask = state.userMask; log('Using user-painted mask only.');
+          if (IS_IOS && !(state.userMask && state.userMask.some(v=>v))){
+            log('iOS: Skipping GrabCut (no painted hint)'); // stability first
+          } else {
+            setStatus('Finding subject…'); log('Running GrabCut…'); bump(10);
+            activeMask = await autoSubjectMaskGrabCut(work, state.userMask);
+          }
         }
       }catch(e){ logError(e,'Subject selection'); }
 
       // Preprocess
-      setStatus('Enhancing contrast…'); bump(12);
+      setStatus('Enhancing contrast…'); bump(15);
+      await cvReady();
       const pre = preprocessForQuantize(work);
-      log(`Preprocess canvas: ${pre.width}×${pre.height}`);
 
-      // Quantize (progress callback keeps UI responsive)
+      // Quantize (progress updates keep UI responsive)
       setStatus('Reducing colors…'); bump(18);
       const imgData = pre.getContext('2d',{willReadFrequently:true}).getImageData(0,0,pre.width,pre.height);
       const {indexed, palette, W, H} = await quantizeSafe(
         imgData,
         k,
         activeMask,
-        (p)=>{ bump(Math.max(18, Math.min(99, p))); } // keep bar moving 18→99 during quantize
+        (p)=>{ bump(Math.max(18, Math.min(99, p))); }
       );
       const finalPalette = fixedPalette || palette;
       log(`Quantized palette (${finalPalette.length}): ${finalPalette.map(rgbToHex).join(', ')}`);
@@ -293,16 +288,12 @@ async function init() {
       logError(err,'PROCESS');
       setStatus('Processing failed. Check log and try a simpler image.','error');
     }finally{
-      // Re-enable
       $('#process').disabled=false; 
       setTimeout(()=>bump(0),1200);
     }
   };
 
-  // Enable painting gestures
   bindPaintEvents();
-
-  // Global error capture (keeps the log helpful)
   window.addEventListener('error', (e)=>{ log(`Window error: ${e.message} @ ${e.filename}:${e.lineno}:${e.colno}`, 'error'); if(e.error?.stack) log(e.error.stack,'error'); });
   window.addEventListener('unhandledrejection', (e)=>{ log(`Unhandled rejection: ${e.reason?.message || e.reason}`, 'error'); if(e.reason?.stack) log(e.reason.stack,'error'); });
 }

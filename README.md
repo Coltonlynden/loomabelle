@@ -1,4 +1,4 @@
-# loomabelle
+
 # Loomabelle (client-only)
 
 Embroidery design maker that converts images (or drawings) to multi-color stitch plans and exports **.DST** for Brother-compatible machines (via Artspira).

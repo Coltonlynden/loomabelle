@@ -1,66 +1,73 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Loomabelle</title>
-<style>
-  body { font-family: Arial, sans-serif; background: #f5f5f5; margin:0; padding:0; }
-  header { background: #7b57ff; color: white; text-align: center; padding: 1rem; font-size: 2rem; font-weight: bold; }
-  .container { max-width: 500px; margin: 1rem auto; background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);}
-  .btn { display:inline-block; padding:0.5rem 1rem; background:#7b57ff; color:white; border:none; border-radius:4px; cursor:pointer; text-decoration:none; }
-  .btn.disabled { background: grey; cursor:not-allowed; }
-  .form-group { margin-bottom:1rem; }
-  canvas { border: 1px solid #ddd; max-width: 100%; }
-  label { display:block; margin-bottom:0.5rem; }
-</style>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Loomabelle — Embroidery Maker</title>
+  <style>
+    :root{--bg:#0b0c10;--ink:#e9ecf1;--muted:#aab2bf;--line:#1f2330;--brand:#6b4eff}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+    .hero{padding:28px 16px;text-align:center;font-weight:800;font-size:42px;background:var(--brand)}
+    .wrap{max-width:1100px;margin:18px auto;padding:0 16px}
+    .panel{background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:14px;padding:14px}
+    .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
+    .controls input[type="number"], .controls select{background:#11131a;color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:6px 10px}
+    button,.btn{padding:10px 14px;border-radius:10px;border:1px solid var(--line);background:#1a1f2b;color:var(--ink);text-decoration:none;cursor:pointer;font-weight:600}
+    button:disabled,.btn.disabled{opacity:.6;cursor:not-allowed}
+    #download,#downloadPalette{margin-left:6px}
+    .grid{display:grid;grid-template-columns:1.2fr .8fr;gap:16px;margin-top:14px}
+    @media(max-width:900px){.grid{grid-template-columns:1fr}}
+    .frame{border:1px dashed #2b3142;border-radius:12px;background:#0e1320;padding:10px}
+    #preview{max-width:100%;display:block;background:#0e1320}
+    .status{margin:6px 0 0;color:var(--muted)}
+    .foot{border-top:1px solid var(--line);margin-top:24px;padding:14px 16px;text-align:center;color:var(--muted)}
+  </style>
 </head>
 <body>
+  <header class="hero">Loomabelle</header>
 
-<header>Loomabelle</header>
+  <main class="wrap">
+    <section class="panel controls">
+      <input id="file" type="file" accept="image/*"/>
+      <label>Colors (≤5) <input id="colors" type="number" min="2" max="5" value="4"/></label>
+      <label><input id="removeBg" type="checkbox" checked/> Remove background</label>
+      <label><input id="outline" type="checkbox" checked/> Outline</label>
+      <label>Hoop
+        <select id="hoop">
+          <option value="4x4">4×4 (100×100mm)</option>
+          <option value="5x7">5×7 (130×180mm)</option>
+        </select>
+      </label>
+      <label>Fill angle° <input id="angle" type="number" value="45"/></label>
+      <label>Density (mm) <input id="density" type="number" step="0.05" value="0.40"/></label>
 
-<div class="container">
-  <div class="form-group">
-    <label>Choose File</label>
-    <input type="file" id="fileInput" accept="image/png, image/jpeg" />
-  </div>
+      <button id="process" disabled>Process</button>
+      <a id="download" class="btn disabled" download="design.dst" href="#">Download .DST</a>
+      <a id="downloadPalette" class="btn disabled" download="palette.txt" href="#">Palette (.txt)</a>
+      <p id="status" class="status">Upload a JPG/PNG/HEIC to begin.</p>
+    </section>
 
-  <div class="form-group">
-    <label>Colors (≤5)</label>
-    <input type="number" id="colorCount" value="4" min="1" max="5" />
-  </div>
+    <section class="grid">
+      <div class="panel">
+        <h3>Preview</h3>
+        <div class="frame"><img id="preview" alt="preview"/></div>
+        <canvas id="work" style="display:none"></canvas>
+      </div>
+      <div class="panel">
+        <h3>Notes</h3>
+        <ul>
+          <li>Best with logo‑style art (3‑5 colors).</li>
+          <li>Hatch fills; outline is simplified.</li>
+          <li>Downloads Tajima <b>.DST</b> + <b>palette.txt</b>.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
 
-  <div class="form-group">
-    <input type="checkbox" id="removeBg" checked /> Remove background
-  </div>
+  <footer class="foot">© <span id="year"></span> Loomabelle</footer>
 
-  <div class="form-group">
-    <input type="checkbox" id="outline" checked /> Outline
-  </div>
-
-  <div class="form-group">
-    <label>Fill angle°</label>
-    <input type="number" id="fillAngle" value="45" />
-  </div>
-
-  <div class="form-group">
-    <label>Density (mm)</label>
-    <input type="number" id="density" value="0.40" step="0.01" />
-  </div>
-
-  <button id="processBtn" class="btn disabled">Process</button>
-
-  <div class="form-group" style="margin-top:1rem;">
-    <a id="download" class="btn disabled" download="design.dst" href="#">Download .DST</a>
-    <a id="downloadPalette" class="btn disabled" download="palette.txt" href="#">Palette (.txt)</a>
-  </div>
-
-  <p id="status">Upload a JPG/PNG to begin.</p>
-
-  <h3>Preview</h3>
-  <img id="previewImg" alt="preview" style="max-width:100%;" />
-</div>
-
-<script src="app.js"></script>
+  <!-- cache-busted so updates show up -->
+  <script type="module" src="./app.js?v=13"></script>
 </body>
 </html>

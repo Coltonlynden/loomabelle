@@ -339,7 +339,91 @@ function renderPreview(canvas, data, opts){
   c.beginPath(); c.roundRect(pad,pad,w-pad*2,h-pad*2,10); c.stroke();
   c.restore();
 }
+/* ====================== BUTTON WATCHDOG (add last) ====================== */
+(function buttonWatchdog(){
+  const $ = (id)=>document.getElementById(id);
 
+  function forceEnableProcess(reason='watchdog'){
+    const p = $('process');
+    if (!p) return;
+    // Remove anything that can make it appear disabled
+    p.disabled = false;
+    p.classList.remove('disabled');
+    p.style.pointerEvents = 'auto';
+    p.style.opacity = '';
+    // Optional: annotate for debugging
+    p.dataset.lastEnabledBy = reason;
+  }
+
+  // 1) Enable whenever we actually have an image on the work canvas
+  const imgReadyTimer = setInterval(()=>{
+    const work = $('work');
+    if (work && work.width > 0 && work.height > 0){
+      forceEnableProcess('canvas-has-image');
+    }
+  }, 600);
+
+  // 2) Re-enable on any input that suggests the user is ready
+  //    (file, color count, toggles, etc.)
+  const reEnableEvents = ['change','input','click'];
+  reEnableEvents.forEach(evt=>{
+    window.addEventListener(evt, (e)=>{
+      // Cheap heuristic: if the target is inside the controls card, enable
+      const target = e.target;
+      if (!target || !(target instanceof Element)) return;
+      const inControls = target.closest
+        ? target.closest('#controls, .controls, .card')
+        : null;
+      if (inControls) forceEnableProcess('user-interaction');
+    }, true);
+  });
+
+  // 3) MutationObserver to catch anything that disables it afterwards.
+  //    We log the stack so you can find who is doing it.
+  const p = $('process');
+  if (p){
+    const obs = new MutationObserver((muts)=>{
+      muts.forEach(m=>{
+        if (m.attributeName === 'disabled' || m.attributeName === 'class' || m.attributeName === 'style'){
+          if (p.disabled || p.classList.contains('disabled') || (p.style.pointerEvents === 'none')){
+            console.warn('[watchdog] Process was disabled; forcing enable.', new Error().stack);
+            forceEnableProcess('mutation-observer');
+          }
+        }
+      });
+    });
+    obs.observe(p, { attributes:true, attributeFilter:['disabled','class','style'] });
+
+    // Also, if something swaps out the button node entirely:
+    const parent = p.parentElement;
+    if (parent){
+      const parentObs = new MutationObserver(()=>{
+        const np = $('process');
+        if (np) {
+          forceEnableProcess('node-replaced');
+        }
+      });
+      parentObs.observe(parent, { childList:true, subtree:true });
+    }
+  } else {
+    // If button isn't in DOM yet, try again soon
+    setTimeout(buttonWatchdog, 500);
+    return;
+  }
+
+  // 4) As a last resort, never leave it disabled after processing ends
+  //    (our main code calls setProcessing(false), but belt & suspenders)
+  window.addEventListener('blur', ()=>forceEnableProcess('blur'));
+  window.addEventListener('focus', ()=>forceEnableProcess('focus'));
+
+  // 5) Make sure the file input always re-enables the button
+  const file = document.getElementById('file') || document.querySelector('input[type=file]');
+  if (file) {
+    file.addEventListener('change', ()=>forceEnableProcess('file-change'));
+  }
+
+  console.log('[watchdog] Process button watchdog active.');
+})();
 /* =========================== Utils ============================= */
 function toHex([r,g,b]){ return [r,g,b].map(v=>v.toString(16).padStart(2,'0')).join(''); }
 function downloadBlob(blob, name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 1000); }

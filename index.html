@@ -55,6 +55,22 @@ canvas{max-width:100%;display:block}
   justify-content:center;color:#9fb0ff;background:
   repeating-linear-gradient(45deg,#151a28 0,#151a28 10px,#0f1420 10px,#0f1420 20px);
   border-radius:8px;text-align:center;line-height:1.3}
+
+/* ===== SECTION B: Debug Log UI (added) ===== */
+.log {
+  max-height: 180px;
+  overflow: auto;
+  font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: #0c1220;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px;
+}
+.log .row { margin: 0; white-space: pre-wrap; }
+.log .ts { color: #8893a7; margin-right: 6px; }
+.log .info { color: #cfe0ff; }
+.log .warn { color: #ffd589; }
+.log .error { color: #ff9b9b; }
 </style>
 </head>
 <body>
@@ -105,9 +121,16 @@ canvas{max-width:100%;display:block}
       <a id="downloadPalette" class="btn disabled" download="palette.txt" href="#">Palette (.txt)</a>
     </div>
 
-    <!-- SECTION G: Loading bar + status text -->
+    <!-- Progress + Status -->
     <div class="pbar" style="margin-top:10px"><span id="bar"></span></div>
     <p id="status" class="status">Upload a JPG/PNG/HEIC to begin.</p>
+
+    <!-- ===== SECTION G: Debug Log UI (added) ===== -->
+    <div class="tools" style="margin-top:10px">
+      <button id="logClear">Clear log</button>
+      <span class="small">Debug log (client‑side)</span>
+    </div>
+    <div id="log" class="log" aria-live="polite"></div>
   </section>
 
   <!-- Draw tab (simple handwriting) -->
@@ -178,13 +201,17 @@ canvas{max-width:100%;display:block}
 /* ========= UTILITIES ========= */
 /* SECTION I: Helpers */
 const $=s=>document.querySelector(s); $('#year').textContent=new Date().getFullYear();
-const setStatus=(m,cls='')=>{const el=$('#status'); el.textContent=m; el.className='status '+cls;};
+const _statusEl = ()=>$('#status');
+const _barEl = ()=>$('#bar');
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const hexToRgb=h=>{const m=h.replace('#','');return [parseInt(m.slice(0,2),16),parseInt(m.slice(2,4),16),parseInt(m.slice(4,6),16)]};
 const rgbToHex=([r,g,b])=>'#'+[r,g,b].map(x=>x.toString(16).padStart(2,'0')).join('');
-const bar=$('#bar'); const bump=p=>bar.style.width=p+'%';
+const bump=p=>{const b=_barEl(); if(b) b.style.width=p+'%';};
 const hasAny=mask=>{if(!mask) return false; for(let i=0;i<mask.length;i++) if(mask[i]) return true; return false;};
 const cvReady=()=>new Promise(res=>{if(window.cv&&cv.Mat)res();else{const t=setInterval(()=>{if(window.cv&&cv.Mat){clearInterval(t);res();}},50);}});
+
+// setStatus that also logs (actual log helpers defined later)
+function setStatus(msg, cls=''){ const el=_statusEl(); if(el){ el.textContent=msg; el.className='status '+cls; } if(window.log){ log(msg, cls==='error'?'error':(cls==='warn'?'warn':'info')); }}
 
 /* ========= TABS ========= */
 const tabUpload=$('#tabUpload'), tabDraw=$('#tabDraw'), panelUpload=$('#panelUpload'), panelDraw=$('#panelDraw');
@@ -255,7 +282,7 @@ const overlay=$('#paintOverlay');
 let userMask=null, painting=false;
 function ensureMask(){ if(!userMask) userMask=new Uint8Array(paint.width*paint.height); }
 function redrawPaint(){
-  overlay.classList.add('hidden');
+  overlay?.classList.add('hidden');
   pctx.clearRect(0,0,paint.width,paint.height);
   if (work.width) pctx.drawImage(work,0,0,paint.width,paint.height);
   if(!userMask) return;
@@ -297,10 +324,10 @@ const fileInput=$('#file'), processBtn=$('#process'), dlDst=$('#download'), dlPa
 fileInput.onchange=async()=>{
   const f=fileInput.files?.[0]; if(!f) return;
   try{
-    setStatus('Loading image…'); bump(5);
+    setStatus('Loading image…'); bump(5); log('File selected: '+(f.name||'(blob)'));
     let chosen=f; const n=(f.name||'').toLowerCase(), t=(f.type||'').toLowerCase();
     if(t.includes('heic')||t.includes('heif')||n.endsWith('.heic')||n.endsWith('.heif')){
-      setStatus('Converting HEIC to JPEG…'); bump(10); chosen=await heicToJpeg(f);
+      setStatus('Converting HEIC to JPEG…'); bump(10); chosen=await heicToJpeg(f); log('HEIC converted to JPEG');
     }
     const im=await loadImageFromFile(chosen);
     const K=clamp(+$('#colors').value||4,2,6);
@@ -314,7 +341,7 @@ fileInput.onchange=async()=>{
     dlDst.classList.add('disabled'); dlPal.classList.add('disabled');
     if(!$('#autoColors').checked) suggestPaletteToPickers();
     setStatus(`Image ready (${work.width}×${work.height}). Refine subject if needed, then Process.`,'ok'); bump(12);
-  }catch(e){console.error(e);setStatus('Could not read image. Try a JPG/PNG.','error');}
+  }catch(e){logError(e,'FILE LOAD'); setStatus('Could not read image. Try a JPG/PNG.','error');}
 };
 
 /* ========= AI SEGMENTER (optional) ========= */
@@ -325,6 +352,7 @@ async function loadDeeplab(){
   await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
   await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@tensorflow-models/deeplab@1.4.0/dist/deeplab.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
   deeplabModel = await deeplab.load({base:'mobilenetv2', quantizationBytes:2});
+  log('TF.js + DeepLab loaded');
   return deeplabModel;
 }
 async function segmentWithDeeplab(canvas){
@@ -381,7 +409,7 @@ async function autoSubjectMaskGrabCut(){
     rgba.delete(); rgb.delete(); sm.delete(); edges.delete(); mask.delete(); bgd.delete(); fgd.delete();
     return hasAny(out) ? out : null;
   }catch(err){
-    console.warn('grabCut failed, using full image', err);
+    logError(err,'GRABCUT');
     const all=new Uint8Array(W*H); all.fill(1); return all;
   }
 }
@@ -390,11 +418,12 @@ async function autoSubjectMaskGrabCut(){
 $('#autoMask').onclick = async ()=>{
   setStatus('Selecting subject…'); bump(15);
   let m = null;
-  if ($('#smartAI').checked){
-    try { m = await segmentWithDeeplab(work); }
-    catch(e){ console.warn('AI segment failed, falling back', e); }
-  }
-  if (!m) m = await autoSubjectMaskGrabCut();
+  try{
+    if ($('#smartAI').checked){
+      log('AI segment: DeepLab'); m = await segmentWithDeeplab(work);
+    }
+  }catch(e){ logError(e,'AI SEGMENT'); }
+  if (!m) { log('AI not used or failed; falling back to GrabCut'); m = await autoSubjectMaskGrabCut(); }
   if (m && hasAny(m)) { userMask = m; redrawPaint(); selectToggle.dataset.active='0'; selectToggle.textContent='✍️ Select subject'; setStatus('Subject selected. You can refine by painting.','ok'); }
   else { setStatus('Could not find a subject. Try painting a rough area.','error'); }
 };
@@ -457,7 +486,7 @@ async function quantizeSafe(imgData,k,mask){
     const worker=new Worker(window._qWorkerURL);
     const p=new Promise((res,rej)=>{worker.onmessage=e=>{if(e.data.err) rej(e.data.err); else res(e.data)}; worker.onerror=rej;});
     worker.postMessage({img:imgData,k,mask}); const out=await p; worker.terminate(); return out;
-  }catch(err){ console.warn('Worker blocked, using main thread',err); return medianCutQuantize(imgData,k,mask); }
+  }catch(err){ logError(err,'WORKER'); return medianCutQuantize(imgData,k,mask); }
 }
 
 /* ========= PRE‑PROCESS (contrast enhance) ========= */
@@ -550,78 +579,48 @@ function pack(dx,dy,jump){let b1=0,b2=0,b3=0;const ax=Math.abs(dx),ay=Math.abs(d
   if(ay&1)b1|=8;if(ay&2)b1|=16;if(ay&4)b1|=32;if(ay&8)b2|=8;if(ay&16)b2|=16;if(ay&32)b2|=32;if(ay&64)b3|=2;
   if(dx<0)b3|=0x20;if(dy<0)b3|=0x40;if(jump)b3|=0x10;return[b1,b2,b3]}
 
+/* ========= SECTION L: Debug Log helpers ========= */
+function nowTs(){ const d=new Date(); return d.toLocaleTimeString(); }
+function log(msg,type='info'){
+  const box = document.querySelector('#log');
+  if(!box) return;
+  const row = document.createElement('div');
+  row.className = `row ${type}`;
+  row.innerHTML = `<span class="ts">[${nowTs()}]</span> ${msg}`;
+  box.appendChild(row);
+  box.scrollTop = box.scrollHeight;
+}
+function logError(err, where=''){
+  console.error(where || 'error', err);
+  log(`${where ? where+': ' : ''}${err?.message || err}`, 'error');
+  if(err?.stack) log(String(err.stack), 'error');
+}
+document.querySelector('#logClear')?.addEventListener('click', ()=> {
+  const box=document.querySelector('#log'); if(box) box.innerHTML='';
+});
+
 /* ========= PROCESS HANDLER ========= */
 const HOOP=HOOP_MM; const hoopSel=$('#hoop');
 const sizePctEl=$('#sizePct'); const processBtnEl=$('#process');
-processBtnEl.onclick=async()=>{
-  if(!work.width) return;
-  processBtn.disabled=true; dlDst.classList.add('disabled'); dlPal.classList.add('disabled'); setStatus('Processing…'); bump(3);
 
-  const auto=$('#autoMode').checked, k=clamp(+$('#colors').value||4,2,6);
-  const fixedPalette = $('#autoColors').checked ? null : [...$('#manualColors').querySelectorAll('input[type="color"]')].slice(0,k).map(el=>hexToRgb(el.value));
-  const hoop=HOOP[hoopSel.value];
-  const removeBg = auto ? true : $('#removeBg').checked;
-  const wantOutline = auto ? true : $('#outline').checked;
-  const angleDeg = auto ? 45 : (+$('#angle').value||45);
-  const densityMM = auto ? 0.40 : (+$('#density').value||0.40);
-  const sizePct = auto ? 80 : (+sizePctEl.value||80);
+// ===== SECTION N: Logged Process handler =====
+processBtnEl.onclick = async ()=>{
+  if(!work.width){ setStatus('No image loaded.','error'); log('Aborting: work canvas empty','error'); return; }
 
+  processBtn.disabled = true;
+  dlDst.classList.add('disabled');
+  dlPal.classList.add('disabled');
+  bump(0);
+  log('=== PROCESS START ===');
   try{
-    await cvReady(); bump(8);
-    let activeMask = (removeBg || hasAny(userMask)) ? await autoSubjectMaskGrabCut() : (hasAny(userMask)?userMask:null);
-    if(activeMask && !hasAny(activeMask)) activeMask=null;
+    const auto = $('#autoMode').checked;
+    const k = clamp(+$('#colors').value || 4, 2, 6);
+    const fixedPalette = $('#autoColors').checked ? null :
+      [...$('#manualColors').querySelectorAll('input[type="color"]')].slice(0,k).map(el=>hexToRgb(el.value));
+    const hoop = HOOP[$('#hoop').value];
 
-    // Enhance contrast first
-    const pre = preprocessForQuantize(work);
-    const imgData = pre.getContext('2d',{willReadFrequently:true}).getImageData(0,0,pre.width,pre.height);
-    const {indexed,palette}= await quantizeSafe(imgData,k,activeMask); bump(40);
-    const finalPalette = fixedPalette || palette;
-    if(!finalPalette.length){ setStatus('No colors detected. Try different options.','error'); processBtn.disabled=false; return; }
-
-    const W=work.width,H=work.height;
-    const masks=finalPalette.map((_,ci)=>{const m=new Uint8Array(W*H); for(let i=0;i<W*H;i++) if(indexed[i]===ci) m[i]=1; return m;});
-    const bbox=masks.reduce((b,m)=>{for(let y=0;y<H;y++){const row=y*W;for(let x=0;x<W;x++) if(m[row+x]){if(x<b.minx)b.minx=x;if(y<b.miny)b.miny=y;if(x>b.maxx)b.maxx=x;if(y>b.maxy)b.maxy=y;}} return b;},{minx:Infinity,miny:Infinity,maxx:-Infinity,maxy:-Infinity});
-    if(!(bbox.maxx>bbox.minx && bbox.maxy>bbox.miny)){ setStatus('No solid areas found.','error'); processBtn.disabled=false; return; }
-
-    const bw=bbox.maxx-bbox.minx,bh=bbox.maxy-bbox.miny,cx=(bbox.minx+bbox.maxx)/2,cy=(bbox.miny+bbox.maxy)/2;
-    const mmPerPx=Math.min(hoop.w/bw,hoop.h/bh)*(sizePct/100); const pxPerMM=1/mmPerPx;
-    const spacingPx=Math.max(1,Math.round(densityMM*pxPerMM)); const stepPx=Math.max(1,Math.round(0.6*pxPerMM)); const insetPx=Math.max(1,Math.round(0.5*pxPerMM));
-
-    const plan={stitches:[],colors:finalPalette.slice()};
-    for(let ci=0;ci<masks.length;ci++){
-      if(ci>0) plan.stitches.push({colorChange:true,x:0,y:0});
-      const outlinePx=marchingSquaresOutline(masks[ci],W,H);
-      const outlineMM=outlinePx.map(([x,y])=>[(x-cx)*mmPerPx,(y-cy)*mmPerPx]);
-      runningOutline(plan.stitches,outlineMM,3);
-      const inset=erodeMask(masks[ci],W,H,insetPx);
-      const segs=hatchSegmentsFromMask(inset,W,H,bbox,angleDeg,spacingPx,stepPx);
-      for(const [a,b] of segs){const sMM=[(a[0]-cx)*mmPerPx,(a[1]-cy)*mmPerPx], eMM=[(b[0]-cx)*mmPerPx,(b[1]-cy)*mmPerPx];
-        plan.stitches.push({x:sMM[0],y:sMM[1],jump:true}); lineStitch(plan.stitches,sMM,eMM,7);}
-      if(wantOutline && outlineMM.length>4) satinOutline(plan.stitches,outlineMM,0.8,0.6);
-      bump(65+Math.round(30*(ci+1)/masks.length));
-    }
-    plan.stitches.push({end:true,x:0,y:0});
-
-    drawPreviewColored(plan,hoop,sizePct);
-    const dstBlob=new Blob([writeDST(plan)],{type:'application/octet-stream'}); dlDst.href=URL.createObjectURL(dstBlob); dlDst.classList.remove('disabled');
-    const palText=plan.colors.map((rgb,i)=>`Color ${i+1}: rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`).join('\n');
-    const palBlob=new Blob([palText],{type:'text/plain'}); dlPal.href=URL.createObjectURL(palBlob); dlPal.classList.remove('disabled');
-
-    bump(100); setStatus('Done! Download your .DST and palette.txt.','ok');
-  }catch(e){console.error(e);setStatus('Processing failed. Try a simpler image.','error');}
-  finally{processBtn.disabled=false; setTimeout(()=>bump(0),1200);}
-};
-
-/* ========= HOOKS AFTER DRAW IMPORT ========= */
-function afterImageReady(){
-  paint.width=work.width; paint.height=work.height; userMask=new Uint8Array(work.width*work.height);
-  redrawPaint(); processBtn.disabled=false; selectToggle.disabled=false; clearMaskBtn.disabled=false; autoMaskBtn.disabled=false;
-  dlDst.classList.add('disabled'); dlPal.classList.add('disabled');
-  if(!$('#autoColors').checked) suggestPaletteToPickers();
-}
-
-/* ========= INITIAL ======== */
-$('#manualColors').classList.toggle('hidden',$('#autoColors').checked);
-</script>
-</body>
-</html>
+    const removeBg   = auto ? true : $('#removeBg').checked;
+    const wantOutline= auto ? true : $('#outline').checked;
+    const angleDeg   = auto ? 45   : (+$('#angle').value||45);
+    const densityMM  = auto ? 0.40 : (+$('#density').value||0.40);
+   

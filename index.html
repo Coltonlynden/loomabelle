@@ -2,127 +2,107 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Loomabelle — Embroidery Maker</title>
-  <link rel="stylesheet" href="css/styles.css"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+  <title>Loomabelle — Image → Embroidery (.DST)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;900&family=Quicksand:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css"/>
 </head>
 <body>
-  <header class="hero">Loomabelle</header>
+  <header class="hero">
+    <h1 class="stitched-title">Loomabelle</h1>
+    <p class="subtitle">Turn simple art into embroidery (.DST) — right in your browser.</p>
+  </header>
 
   <main class="wrap">
-    <!-- Tabs -->
-    <div class="tabbar">
-      <button class="tab active" id="tabUpload">Upload</button>
-      <button class="tab" id="tabDraw">Draw</button>
-    </div>
+    <section class="panel controls">
+      <div class="tabs">
+        <button class="tab active" data-tab="upload">Upload</button>
+        <button class="tab" data-tab="draw">Draw</button>
+      </div>
 
-    <!-- Upload panel -->
-    <section class="panel" id="panelUpload">
-      <div class="controls">
-        <input id="file" type="file" accept="image/*"/>
+      <div class="tab-body active" id="tab-upload">
+        <label class="file">
+          <input type="file" id="fileInput" accept="image/png,image/jpeg,image/heic,image/heif" />
+          <span>Choose image (JPG/PNG/HEIC)</span>
+        </label>
+      </div>
+
+      <div class="tab-body" id="tab-draw">
+        <canvas id="drawCanvas" width="600" height="400"></canvas>
+        <div class="row">
+          <button id="drawClear" class="btn">Clear</button>
+          <label>Brush <input id="brushSize" type="range" min="2" max="32" value="8"></label>
+        </div>
+      </div>
+
+      <div class="grid">
         <label>Hoop
           <select id="hoop">
-            <option value="4x4">4×4 (100×100mm)</option>
-            <option value="5x7">5×7 (130×180mm)</option>
+            <option value="100x100">4×4 (100×100mm)</option>
+            <option value="130x180">5×7 (130×180mm)</option>
+            <option value="160x260">6×10 (160×260mm)</option>
+            <option value="custom">Custom…</option>
           </select>
         </label>
+        <label id="customHoopFields" class="row hidden">
+          <span>W (mm) <input id="hoopW" type="number" min="40" max="400" value="100"></span>
+          <span>H (mm) <input id="hoopH" type="number" min="40" max="400" value="100"></span>
+        </label>
 
-        <label>Colors (≤6) <input id="colors" type="number" min="2" max="6" value="4"/></label>
+        <label>Colors (≤6)
+          <input id="maxColors" type="number" min="2" max="6" value="4">
+        </label>
 
-        <label class="tag"><input id="autoColors" type="checkbox" checked/> Auto colors</label>
-        <div id="manualColors" class="color-row hidden"></div>
+        <label>Fill angle°
+          <input id="fillAngle" type="number" min="0" max="180" value="45">
+        </label>
 
-        <label class="tag"><input id="autoMode" type="checkbox" checked/> Auto embroider</label>
-
-        <div id="adv" class="controls">
-          <label><input id="removeBg" type="checkbox" checked/> Remove background</label>
-          <label><input id="outline" type="checkbox" checked/> Outline (satin)</label>
-          <label>Fill angle° <input id="angle" type="number" value="45"/></label>
-          <label>Density (mm) <input id="density" type="number" step="0.05" value="0.40"/></label>
-          <label>Size (% hoop) <input id="sizePct" type="range" min="20" max="100" value="80"/></label>
-          <span id="sizeOut" class="tag">80%</span>
-        </div>
-
-        <button id="process" disabled>Process</button>
-        <a id="download" class="btn disabled" download="design.dst" href="#">Download .DST</a>
-        <a id="downloadPalette" class="btn disabled" download="palette.txt" href="#">Palette (.txt)</a>
+        <label>Density (mm)
+          <input id="density" type="number" step="0.05" min="0.25" max="1.5" value="0.40">
+        </label>
       </div>
 
-      <div class="pbar" style="margin-top:10px"><span id="bar"></span></div>
-      <p id="status" class="status">Upload a JPG/PNG/HEIC to begin.</p>
+      <div class="toggles">
+        <label class="toggle"><input id="autoColors" type="checkbox" checked> Auto colors</label>
+        <label class="toggle"><input id="autoEmb" type="checkbox" checked> Auto embroider</label>
+        <label class="toggle"><input id="removeBg" type="checkbox" checked> Remove background</label>
+        <label class="toggle"><input id="outline" type="checkbox" checked> Outline (satin-ish)</label>
+        <label class="toggle"><input id="refine" type="checkbox"> Refine subject (paint tools; v1.1)</label>
+      </div>
 
-      <div class="tools" style="margin-top:10px">
-        <button id="logClear">Clear log</button>
-        <button id="envCheck">Run self‑check</button>
-        <span class="small">Debug log (client‑side)</span>
+      <div class="row actions">
+        <button id="btnProcess" class="btn primary" disabled>Process</button>
+        <button id="btnDownloadDST" class="btn" disabled>Download .DST</button>
+        <button id="btnDownloadPalette" class="btn" disabled>Palette (.txt)</button>
       </div>
-      <div id="log" class="log" aria-live="polite"></div>
-    </section>
 
-    <!-- Draw panel -->
-    <section class="panel hidden" id="panelDraw">
-      <div class="controls">
-        <span class="tag">Handwriting canvas</span>
-        <label>Brush <input id="dBrush" type="range" min="2" max="40" value="10"/></label>
-        <label>Color <input id="dColor" type="color" value="#000000"/></label>
-        <button id="dClear">Clear</button>
-        <button id="dUse">Use for Embroidery</button>
-        <span class="small">Tip: write big, high contrast.</span>
-      </div>
-      <div class="frame">
-        <canvas id="draw" width="900" height="600" style="touch-action:none;background:#fff"></canvas>
-      </div>
-    </section>
-
-    <!-- Preview + notes -->
-    <section class="grid">
-      <div class="panel">
-        <h3>Preview (with hoop)</h3>
-        <div class="frame"><canvas id="preview" width="720" height="520"></canvas></div>
-        <p class="status">Rounded rectangle = hoop bounds.</p>
-      </div>
-      <div class="panel">
-        <h3>Notes</h3>
+      <details class="notes">
+        <summary>Notes</summary>
         <ul>
-          <li>Best with logo‑style art (3–6 colors).</li>
-          <li>Auto mode: outline + hatch fill; manual shows more options.</li>
-          <li>Use “Refine subject” if auto selection misses details.</li>
+          <li>Best with logo-style art (3–6 colors).</li>
+          <li>Auto mode: outline + hatch fill. Manual mask coming next.</li>
+          <li>Use custom hoop if your frame differs.</li>
         </ul>
-      </div>
+      </details>
+
+      <div class="log" id="log" role="log" aria-live="polite"></div>
     </section>
 
-    <!-- Refinement (hidden by default) -->
-    <section class="panel">
-      <label class="tag">
-        <input id="refineToggle" type="checkbox"/>
-        Refine subject (show painting tools)
-      </label>
-      <div id="refineBox" class="hidden" style="margin-top:10px">
-        <div class="frame">
-          <div id="paintOverlay" class="overlay">
-            Upload an image, then click <b>Auto‑select</b> or <b>Select subject</b> to paint.
-          </div>
-          <canvas id="paint"></canvas>
-        </div>
-        <div class="tools">
-          <button id="autoMask" disabled>✨ Auto‑select</button>
-          <label class="tag"><input id="smartAI" type="checkbox"/> Smart subject (AI, ~15 MB)</label>
-          <button id="selectToggle" disabled>✍️ Select subject</button>
-          <label>Brush <input id="brush" type="range" min="6" max="60" value="26"/></label>
-          <label><input id="eraser" type="checkbox"/> Erase</label>
-          <button id="clearMask" disabled>Clear</button>
-          <span class="small">Outside the painted area is ignored.</span>
-        </div>
+    <section class="panel preview">
+      <h2 class="stitched">Preview (with hoop)</h2>
+      <div class="hoop">
+        <canvas id="preview" width="600" height="600" aria-label="Embroidery preview"></canvas>
+        <p class="hint">Rounded rectangle = hoop bounds.</p>
       </div>
     </section>
   </main>
 
-  <footer class="foot">© <span id="year"></span> Loomabelle</footer>
+  <footer class="foot">
+    <small>Made with ♥ — runs 100% in your browser.</small>
+  </footer>
 
-  <!-- External libs -->
-  <script async src="https://docs.opencv.org/4.x/opencv.js"></script>
-
-  <!-- App (ES modules) -->
   <script type="module" src="js/app.js"></script>
 </body>
 </html>

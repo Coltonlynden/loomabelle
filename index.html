@@ -16,12 +16,14 @@
     button,.btn{padding:10px 14px;border-radius:10px;border:1px solid var(--line);background:#1a1f2b;color:var(--ink);text-decoration:none;cursor:pointer;font-weight:600}
     button:disabled,.btn.disabled{opacity:.6;cursor:not-allowed}
     #download,#downloadPalette{margin-left:6px}
-    .grid{display:grid;grid-template-columns:1.2fr .8fr;gap:16px;margin-top:14px}
+    .grid{display:grid;grid-template-columns:1.1fr .9fr;gap:16px;margin-top:14px}
     @media(max-width:900px){.grid{grid-template-columns:1fr}}
     .frame{border:1px dashed #2b3142;border-radius:12px;background:#0e1320;padding:10px}
-    #preview{max-width:100%;display:block;background:#0e1320}
+    canvas{max-width:100%;display:block}
+    .tools{display:flex;gap:10px;align-items:center;margin-top:8px;flex-wrap:wrap}
     .status{margin:6px 0 0;color:var(--muted)}
     .foot{border-top:1px solid var(--line);margin-top:24px;padding:14px 16px;text-align:center;color:var(--muted)}
+    .tag{padding:4px 8px;border:1px solid var(--line);border-radius:999px;background:#121523}
   </style>
 </head>
 <body>
@@ -30,7 +32,7 @@
   <main class="wrap">
     <section class="panel controls">
       <input id="file" type="file" accept="image/*"/>
-      <label>Colors (≤5) <input id="colors" type="number" min="2" max="5" value="4"/></label>
+      <label>Colors (≤10) <input id="colors" type="number" min="2" max="10" value="4"/></label>
       <label><input id="removeBg" type="checkbox" checked/> Remove background</label>
       <label><input id="outline" type="checkbox" checked/> Outline (satin)</label>
       <label>Hoop
@@ -41,31 +43,40 @@
       </label>
       <label>Fill angle° <input id="angle" type="number" value="45"/></label>
       <label>Density (mm) <input id="density" type="number" step="0.05" value="0.40"/></label>
+      <label>Size (% hoop) <input id="sizePct" type="range" min="20" max="100" value="80"/></label><span id="sizeOut" class="tag">80%</span>
 
       <button id="process" disabled>Process</button>
       <a id="download" class="btn disabled" download="design.dst" href="#">Download .DST</a>
       <a id="downloadPalette" class="btn disabled" download="palette.txt" href="#">Palette (.txt)</a>
+      <span class="tag">Tip: paint the subject below</span>
       <p id="status" class="status">Upload a JPG/PNG/HEIC to begin.</p>
     </section>
 
     <section class="grid">
       <div class="panel">
-        <h3>Preview</h3>
-        <div class="frame"><img id="preview" alt="preview"/></div>
-        <canvas id="work" style="display:none"></canvas>
+        <h3>Paint Subject</h3>
+        <div class="frame">
+          <canvas id="paint"></canvas>
+        </div>
+        <div class="tools">
+          <button id="selectToggle" disabled>✍️ Select subject</button>
+          <label>Brush <input id="brush" type="range" min="6" max="60" value="26"/></label>
+          <label><input id="eraser" type="checkbox"/> Erase</label>
+          <button id="clearMask" disabled>Clear</button>
+        </div>
       </div>
+
       <div class="panel">
-        <h3>Notes</h3>
-        <ul>
-          <li>Outline → Inset Fill → Satin border for crisp edges.</li>
-          <li>Best with logo‑style art (3–5 colors).</li>
-          <li>Downloads Tajima <b>.DST</b> + matching <b>palette.txt</b>.</li>
-        </ul>
+        <h3>Preview (with hoop)</h3>
+        <div class="frame">
+          <canvas id="preview" width="720" height="520"></canvas>
+        </div>
+        <p class="status">The rounded rectangle shows your hoop. Stitches are scaled to your “Size %”.</p>
       </div>
     </section>
   </main>
 
   <footer class="foot">© <span id="year"></span> Loomabelle</footer>
-  <script type="module" src="./app.js?v=21"></script>
+  <script type="module" src="./app.js?v=40"></script>
 </body>
 </html>

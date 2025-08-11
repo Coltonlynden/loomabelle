@@ -32,7 +32,7 @@
       <input id="file" type="file" accept="image/*"/>
       <label>Colors (≤5) <input id="colors" type="number" min="2" max="5" value="4"/></label>
       <label><input id="removeBg" type="checkbox" checked/> Remove background</label>
-      <label><input id="outline" type="checkbox" checked/> Outline</label>
+      <label><input id="outline" type="checkbox" checked/> Outline (satin)</label>
       <label>Hoop
         <select id="hoop">
           <option value="4x4">4×4 (100×100mm)</option>
@@ -57,17 +57,15 @@
       <div class="panel">
         <h3>Notes</h3>
         <ul>
-          <li>Best with logo‑style art (3‑5 colors).</li>
-          <li>Hatch fills; outline is simplified.</li>
-          <li>Downloads Tajima <b>.DST</b> + <b>palette.txt</b>.</li>
+          <li>Outline → Inset Fill → Satin border for crisp edges.</li>
+          <li>Best with logo‑style art (3–5 colors).</li>
+          <li>Downloads Tajima <b>.DST</b> + matching <b>palette.txt</b>.</li>
         </ul>
       </div>
     </section>
   </main>
 
   <footer class="foot">© <span id="year"></span> Loomabelle</footer>
-
-  <!-- cache-busted so updates show up -->
-  <script type="module" src="./app.js?v=13"></script>
+  <script type="module" src="./app.js?v=21"></script>
 </body>
 </html>

@@ -1,11 +1,12 @@
-:root{--bg:#0b0c10;--ink:#e9ecf1;--muted:#aab2bf;--line:#1f2330;--brand:#7c3aed;}
-*{box-sizing:border-box} body{margin:0;background:#0b0c10;color:var(--ink);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
-.hero{padding:28px 16px;text-align:center;font-weight:800;font-size:42px;background:#6b4eff}
+:root{--bg:#0b0c10;--ink:#e9ecf1;--muted:#aab2bf;--line:#1f2330;--brand:#6b4eff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+.hero{padding:28px 16px;text-align:center;font-weight:800;font-size:42px;background:var(--brand)}
 .wrap{max-width:1100px;margin:18px auto;padding:0 16px}
-.panel{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:14px;padding:14px}
+.panel{background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:14px;padding:14px}
 .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
 .controls input[type="number"], .controls select{background:#11131a;color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:6px 10px}
-button,#download{padding:10px 14px;border-radius:10px;border:1px solid var(--line);background:#1a1f2b;color:var(--ink);text-decoration:none;cursor:pointer;font-weight:600}
+button,.btn{padding:10px 14px;border-radius:10px;border:1px solid var(--line);background:#1a1f2b;color:var(--ink);text-decoration:none;cursor:pointer;font-weight:600}
 button:disabled,.btn.disabled{opacity:.6;cursor:not-allowed}
 #download{margin-left:6px}
 .grid{display:grid;grid-template-columns:1.2fr .8fr;gap:16px;margin-top:14px}

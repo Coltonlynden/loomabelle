@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
   <title>Loomabelle — Image → Embroidery</title>
 
-  <!-- Friendly, crafty fonts -->
+  <!-- Brand fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Merienda:wght@700&family=Quicksand:wght@500;700&display=swap" rel="stylesheet">
@@ -13,46 +13,53 @@
   <link rel="stylesheet" href="css/style.css"/>
 </head>
 <body>
-  <header class="hero">
+  <header class="hero" role="banner">
     <div class="hero-inner">
       <img src="assets/logo.png" class="logo" alt="Loomabelle logo">
       <div class="title-wrap">
         <h1 class="stitched-title">Loomabelle</h1>
-        <p class="subtitle">Turn simple art into embroidery files — right in your browser.</p>
+        <p class="subtitle">Turn art into embroidery files — fast, pretty, and on your phone.</p>
       </div>
     </div>
     <div class="seam"></div>
   </header>
 
-  <main class="wrap">
+  <main class="wrap" role="main">
     <section class="panel controls">
-      <div class="tabs">
-        <button class="tab active" data-tab="upload"><img src="assets/button.svg" alt="" aria-hidden="true"> Upload</button>
-        <button class="tab" data-tab="draw"><img src="assets/yarn.svg" alt="" aria-hidden="true"> Draw</button>
-      </div>
 
+      <!-- Tabs -->
+      <nav class="tabs" aria-label="Input mode">
+        <button class="tab active" data-tab="upload" aria-selected="true">Upload</button>
+        <button class="tab" data-tab="draw" aria-selected="false">Draw</button>
+      </nav>
+
+      <!-- Upload tab -->
       <div class="tab-body active" id="tab-upload">
-        <label class="file">
+        <label class="dropzone" id="dz">
           <input type="file" id="fileInput" accept="image/png,image/jpeg,image/heic,image/heif" />
-          <span>Choose image (JPG/PNG/HEIC)</span>
+          <div class="dz-visual">
+            <div class="dz-icon">🧵</div>
+            <div class="dz-text"><b>Drop image here</b> or tap to choose<br><small>JPG / PNG / HEIC</small></div>
+          </div>
         </label>
       </div>
 
-      <div class="tab-body" id="tab-draw">
-        <canvas id="drawCanvas" width="600" height="420" aria-label="Drawing canvas"></canvas>
-        <div class="row">
+      <!-- Draw tab (hidden until selected) -->
+      <div class="tab-body" id="tab-draw" aria-hidden="true">
+        <canvas id="drawCanvas" width="720" height="480" aria-label="Drawing canvas"></canvas>
+        <div class="toolbar">
           <button id="drawClear" class="btn">Clear</button>
-          <label>Brush <input id="brushSize" type="range" min="2" max="32" value="8"></label>
+          <label>Brush size <input id="brushSize" type="range" min="2" max="36" value="10"></label>
         </div>
       </div>
 
+      <!-- Minimal surface. Options are hidden until requested. -->
       <label class="toggle big">
         <input id="toggleOptions" type="checkbox">
         <span class="pill">✂︎ Edit options</span>
       </label>
 
-      <!-- Hidden by default; revealed when “Edit options” is checked -->
-      <div id="optionsPanel" class="options hidden">
+      <div id="optionsPanel" class="options hidden" aria-hidden="true">
         <div class="grid">
           <label>Machine preset
             <select id="preset">
@@ -70,10 +77,10 @@
             </select>
           </label>
 
-          <label id="customHoopFields" class="row hidden">
-            <span>W (mm) <input id="hoopW" type="number" min="40" max="400" value="130"></span>
-            <span>H (mm) <input id="hoopH" type="number" min="40" max="400" value="180"></span>
-          </label>
+          <div id="customHoopFields" class="row hidden">
+            <label>W (mm) <input id="hoopW" type="number" min="40" max="400" value="130"></label>
+            <label>H (mm) <input id="hoopH" type="number" min="40" max="400" value="180"></label>
+          </div>
 
           <label>Colors (≤6)
             <input id="maxColors" type="number" min="2" max="6" value="4">
@@ -86,12 +93,6 @@
           <label>Density (mm)
             <input id="density" type="number" step="0.05" min="0.25" max="1.5" value="0.40">
           </label>
-
-          <label>Format
-            <select id="format">
-              <option value="dst" selected>DST (Tajima — Brother-compatible)</option>
-            </select>
-          </label>
         </div>
 
         <div class="toggles">
@@ -99,11 +100,10 @@
           <label class="toggle"><input id="autoEmb" type="checkbox" checked> Auto embroider</label>
           <label class="toggle"><input id="removeBg" type="checkbox" checked> Remove background</label>
           <label class="toggle"><input id="outline" type="checkbox" checked> Outline (satin-ish)</label>
-          <label class="toggle"><input id="refine" type="checkbox"> Refine subject (paint tools; v1.1)</label>
         </div>
       </div>
 
-      <div class="row actions">
+      <div class="actions">
         <button id="btnProcess" class="btn primary" disabled>Process</button>
         <button id="btnDownloadDST" class="btn" disabled>Download .DST</button>
         <button id="btnDownloadPalette" class="btn" disabled>Palette (.txt)</button>
@@ -113,9 +113,9 @@
       <details class="notes">
         <summary>Helpful notes</summary>
         <ul>
-          <li>Best with logo-style art (3–6 colors).</li>
-          <li>Color-change stops are added between blocks for home machines.</li>
-          <li>Use Custom hoop to match your frame.</li>
+          <li>Upload a simple logo (3–6 colors) for best results.</li>
+          <li>We add thread-change stops between colors.</li>
+          <li>Use Custom hoop if your frame differs.</li>
         </ul>
       </details>
 
@@ -139,9 +139,9 @@
   <dialog id="brotherDialog">
     <h3>Brother SE2000 tips</h3>
     <ol>
-      <li>Use <b>5×7 (130×180mm)</b> hoop or set your custom size.</li>
-      <li>Tap <b>Process</b> → <b>Download .DST</b>, copy to USB (or use Brother’s app).</li>
-      <li>On the machine, assign thread colors when prompted between blocks.</li>
+      <li>Select <b>5×7 (130×180mm)</b> hoop.</li>
+      <li>Tap <b>Process</b> → <b>Download .DST</b>. Put on USB (or use Brother app).</li>
+      <li>The machine will pause for color changes. Assign threads on-screen.</li>
     </ol>
     <form method="dialog"><button class="btn primary">Got it</button></form>
   </dialog>

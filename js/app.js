@@ -1,4 +1,3 @@
-
 /* -------------------------------------------------------
    Loomabelle — UI, state, and worker orchestration
    ----------------------------------------------------- */
@@ -11,11 +10,8 @@ const els = {
   drawClear: document.getElementById('drawClear'),
   brushSize: document.getElementById('brushSize'),
   tabs: document.querySelectorAll('.tab'),
-  tabBodies: {
-    upload: document.getElementById('tab-upload'),
-    draw: document.getElementById('tab-draw')
-  },
   hoop: document.getElementById('hoop'),
+  preset: document.getElementById('preset'),
   hoopW: document.getElementById('hoopW'),
   hoopH: document.getElementById('hoopH'),
   customHoopFields: document.getElementById('customHoopFields'),
@@ -27,11 +23,14 @@ const els = {
   removeBg: document.getElementById('removeBg'),
   outline: document.getElementById('outline'),
   refine: document.getElementById('refine'),
+  format: document.getElementById('format'),
   btnProcess: document.getElementById('btnProcess'),
   btnDownloadDST: document.getElementById('btnDownloadDST'),
   btnDownloadPalette: document.getElementById('btnDownloadPalette'),
   preview: document.getElementById('preview'),
-  log: document.getElementById('log')
+  log: document.getElementById('log'),
+  brotherDialog: document.getElementById('brotherDialog'),
+  btnBrotherTips: document.getElementById('btnBrotherTips')
 };
 
 /* -------- logging -------- */
@@ -45,17 +44,14 @@ function log(message, level='info'){
 
 /* -------- state -------- */
 const state = {
-  mode: 'upload',
-  srcImage: null,          // ImageBitmap or null
-  srcFromCanvas: false,
-  lastResult: null,        // {stitches, palette, preview}
-  hoopMM: {w:100,h:100},
+  srcImage: null,
+  lastResult: null,
+  hoopMM: {w:130,h:180}, // Brother default
   busy: false
 };
 
 const worker = new Worker('./js/worker.js', {type:'module'});
 
-/* Worker message handling */
 worker.onmessage = (e)=>{
   const {type, data} = e.data;
   if(type==='log'){ log(data.msg, data.level); return; }
@@ -69,22 +65,30 @@ worker.onmessage = (e)=>{
   }
 };
 
-function postToWorker(payload){
-  worker.postMessage(payload, payload.transfer || []);
-}
+function postToWorker(payload){ worker.postMessage(payload, payload.transfer || []); }
 
 /* ---- Tabs ---- */
-els.tabs.forEach(btn=>{
+document.querySelectorAll('.tab').forEach(btn=>{
   btn.addEventListener('click',()=>{
-    els.tabs.forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
-    const tab = btn.dataset.tab;
-    state.mode = tab;
     document.querySelectorAll('.tab-body').forEach(b=>b.classList.remove('active'));
-    document.getElementById(`tab-${tab}`).classList.add('active');
+    document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
     syncProcessEnabled();
   });
 });
+
+/* ---- Preset ---- */
+els.preset.addEventListener('change',()=>{
+  if(els.preset.value==='brother-se2000'){
+    setHoopPreset('130x180');
+  }else{
+    setHoopPreset('100x100');
+  }
+});
+function setHoopPreset(val){
+  els.hoop.value = val; els.hoop.dispatchEvent(new Event('change'));
+}
 
 /* ---- Hoop ---- */
 els.hoop.addEventListener('change', ()=>{
@@ -98,7 +102,7 @@ els.hoop.addEventListener('change', ()=>{
 });
 ['hoopW','hoopH'].forEach(id=>{
   els[id].addEventListener('input', ()=>{
-    state.hoopMM = {w: Number(els.hoopW.value||100), h: Number(els.hoopH.value||100)};
+    state.hoopMM = {w: Number(els.hoopW.value||130), h: Number(els.hoopH.value||180)};
   });
 });
 
@@ -107,28 +111,19 @@ els.fileInput.addEventListener('change', async (ev)=>{
   const file = ev.target.files?.[0];
   if(!file){ syncProcessEnabled(); return; }
   try{
-    log(`Loaded file: ${file.name} (${Math.round(file.size/1024)} KB)`);
+    log(`Loaded: ${file.name} (${Math.round(file.size/1024)} KB)`);
     const bitmap = await createImageBitmap(file);
     state.srcImage = bitmap;
-    state.srcFromCanvas = false;
     syncProcessEnabled();
     drawImageQuick(bitmap);
-  }catch(err){
-    log(`Failed to load image: ${String(err)}`, 'err');
-  }
+  }catch(err){ log(`Load failed: ${String(err)}`, 'err'); }
 });
 
 /* ---- Draw ---- */
-const dctx = els.drawCanvas.getContext('2d', {willReadFrequently:true});
+const dctx = els.drawCanvas?.getContext('2d', {willReadFrequently:true});
 let drawing = false;
-function setBrush(){
-  dctx.lineCap = 'round';
-  dctx.lineJoin = 'round';
-  dctx.strokeStyle = '#333';
-  dctx.lineWidth = Number(els.brushSize.value);
-}
-setBrush();
-els.brushSize.addEventListener('input', setBrush);
+function setBrush(){ if(!dctx) return; dctx.lineCap='round'; dctx.lineJoin='round'; dctx.strokeStyle='#333'; dctx.lineWidth=Number(els.brushSize.value); }
+if(dctx){ setBrush(); els.brushSize.addEventListener('input', setBrush); }
 function canvasPos(e){
   const r = els.drawCanvas.getBoundingClientRect();
   const x = (e.touches? e.touches[0].clientX : e.clientX) - r.left;
@@ -136,28 +131,21 @@ function canvasPos(e){
   return {x: x*(els.drawCanvas.width/r.width), y: y*(els.drawCanvas.height/r.height)};
 }
 function drawLine(e){
-  if(!drawing) return;
-  const {x,y} = canvasPos(e);
-  dctx.lineTo(x,y); dctx.stroke();
-  e.preventDefault();
+  if(!drawing) return; const {x,y}=canvasPos(e); dctx.lineTo(x,y); dctx.stroke(); e.preventDefault();
 }
-['mousedown','touchstart'].forEach(ev=>els.drawCanvas.addEventListener(ev,(e)=>{
+['mousedown','touchstart'].forEach(ev=>els.drawCanvas?.addEventListener(ev,(e)=>{
   drawing = true; const {x,y}=canvasPos(e); dctx.beginPath(); dctx.moveTo(x,y); drawLine(e);
 }));
-['mousemove','touchmove'].forEach(ev=>els.drawCanvas.addEventListener(ev, drawLine));
-['mouseup','mouseleave','touchend','touchcancel'].forEach(ev=>els.drawCanvas.addEventListener(ev,()=>{
-  if(!drawing) return; drawing=false; cacheCanvasAsImage();
-}));
-els.drawClear.addEventListener('click',()=>{
+['mousemove','touchmove'].forEach(ev=>els.drawCanvas?.addEventListener(ev, drawLine));
+['mouseup','mouseleave','touchend','touchcancel'].forEach(ev=>els.drawCanvas?.addEventListener(ev,()=>{ if(!drawing) return; drawing=false; cacheCanvasAsImage(); }));
+els.drawClear?.addEventListener('click',()=>{
   dctx.clearRect(0,0,els.drawCanvas.width,els.drawCanvas.height);
   cacheCanvasAsImage();
 });
 function cacheCanvasAsImage(){
   els.drawCanvas.toBlob(async (blob)=>{
-    if(!blob) return;
-    const bmp = await createImageBitmap(blob);
-    state.srcImage = bmp; state.srcFromCanvas = true;
-    syncProcessEnabled(); drawImageQuick(bmp);
+    if(!blob) return; const bmp = await createImageBitmap(blob);
+    state.srcImage = bmp; syncProcessEnabled(); drawImageQuick(bmp);
   });
 }
 
@@ -171,30 +159,23 @@ function drawImageQuick(bitmap){
   pctx.drawImage(bitmap, (c.width-w)>>1, (c.height-h)>>1, w, h);
 }
 function drawPreview({width,height,imageData}){
-  const c = els.preview;
-  c.width = width; c.height = height;
+  const c = els.preview; c.width = width; c.height = height;
   pctx.putImageData(new ImageData(imageData, width, height), 0, 0);
 }
 
 /* ---- Enable/disable Process ---- */
-function syncProcessEnabled(){
-  els.btnProcess.disabled = !state.srcImage || state.busy;
-}
+function syncProcessEnabled(){ els.btnProcess.disabled = !state.srcImage || state.busy; }
 
 /* ---- Busy UI ---- */
-function setBusy(b){
-  state.busy = b;
-  els.btnProcess.disabled = b || !state.srcImage;
-  document.body.style.cursor = b? 'progress':'auto';
-}
+function setBusy(b){ state.busy=b; els.btnProcess.disabled = b || !state.srcImage; document.body.style.cursor=b?'progress':'auto'; }
 
 /* ---- Process ---- */
-els.btnProcess.addEventListener('click', async ()=>{
+els.btnProcess.addEventListener('click', ()=>{
   if(!state.srcImage) return;
   setBusy(true); els.btnDownloadDST.disabled = true; els.btnDownloadPalette.disabled = true;
 
   const hoop = (els.hoop.value==='custom')
-    ? {w: Number(els.hoopW.value||100), h: Number(els.hoopH.value||100)}
+    ? {w: Number(els.hoopW.value||130), h: Number(els.hoopH.value||180)}
     : (()=>{ const [w,h]=els.hoop.value.split('x').map(Number); return {w,h}; })();
 
   postToWorker({
@@ -213,18 +194,17 @@ els.btnProcess.addEventListener('click', async ()=>{
     bitmap: state.srcImage
   }, {transfer: [state.srcImage]});
 
-  state.srcImage = null;
-  syncProcessEnabled();
+  state.srcImage = null; syncProcessEnabled();
 });
 
-function clampInt(v, a, b){ v=Number(v|0); return Math.max(a,Math.min(b,v)); }
-function clampNumber(v, a, b){ v=Number(v); return Math.max(a,Math.min(b,v)); }
+function clampInt(v,a,b){ v=Number(v|0); return Math.max(a,Math.min(b,v)); }
+function clampNumber(v,a,b){ v=Number(v); return Math.max(a,Math.min(b,v)); }
 
 /* ---- Downloads ---- */
 els.btnDownloadDST.addEventListener('click', ()=>{
   if(!state.lastResult) return;
-  const {stitches, hoopMM} = state.lastResult;
-  const bytes = writeDST(stitches, hoopMM);
+  const {stitches, hoopMM, palette} = state.lastResult;
+  const bytes = writeDST(stitches, hoopMM, {insertColorStops:true});
   const blob = new Blob([bytes], {type:'application/octet-stream'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -243,5 +223,8 @@ els.btnDownloadPalette.addEventListener('click', ()=>{
 });
 function hex(n){ return n.toString(16).padStart(2,'0'); }
 
+/* ---- Brother tips ---- */
+els.btnBrotherTips.addEventListener('click', ()=> els.brotherDialog.showModal());
+
 /* ---- Start ---- */
-log('Ready. Upload or draw to begin.', 'ok');
+log('Ready. Pick an image or draw, then Process.', 'ok');

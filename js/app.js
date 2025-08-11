@@ -137,12 +137,12 @@ $('process')?.addEventListener('click', async ()=>{
     const hoop = $('hoop')?.value || '100x100';
     const doOutline = $('outline') ? !!$('outline').checked : true;
     const angle = parseFloat(($('angle')?.value)||'45')||45;
-    const density = Math.max(0.3, Math.min(0.8, parseFloat(($('density')?.value)||'0.40'))); // mm
+    const density = Math.max(0.3, Math.min(0.8, parseFloat(($('density')?.value)||'0.40')));
 
     log(`Settings: k=${k}, auto=${autoColors}, iOS=${IS_IOS}, removeBg=${!autoEmb?false:true}, outline=${doOutline}`);
     bump(6);
 
-    // (A) Preprocess – try OpenCV if available; otherwise simple contrast bump
+    // (A) Preprocess
     try{
       const work = state.work, ctx = canvasCtx(work);
       const id = ctx.getImageData(0,0,work.width,work.height);
@@ -159,8 +159,8 @@ $('process')?.addEventListener('click', async ()=>{
         src.delete(); ycrcb.delete(); ch.delete(); clahe.delete();
       } else {
         log('Enhancing contrast (fallback)…');
-        const d=id.data; for(let i=0;i<d.length;i+=4){ // simple S-curve
-          d[i] =   Math.max(0,Math.min(255, ((d[i]-128)*1.1 + 128) ));
+        const d=id.data; for(let i=0;i<d.length;i+=4){
+          d[i]   = Math.max(0,Math.min(255, ((d[i]-128)*1.1 + 128) ));
           d[i+1] = Math.max(0,Math.min(255, ((d[i+1]-128)*1.1 + 128) ));
           d[i+2] = Math.max(0,Math.min(255, ((d[i+2]-128)*1.1 + 128) ));
         }
@@ -171,7 +171,7 @@ $('process')?.addEventListener('click', async ()=>{
     }
     bump(12);
 
-    // (B) Subject mask – user mask wins; else BodyPix person mask; optional GrabCut fallback (non‑iOS)
+    // (B) Subject mask – user mask wins; else BodyPix; skip GrabCut on iOS
     const work = state.work;
     let activeMask = extractUserMask();
     if (activeMask){
@@ -183,7 +183,7 @@ $('process')?.addEventListener('click', async ()=>{
         const sum = activeMask.reduce((a,b)=>a+b,0);
         log(`Person mask pixels: ${sum}`);
         if (sum < work.width*work.height*0.02){
-          log('Subject mask too small.');
+          log('Subject mask too small; proceeding without it.');
           activeMask = null;
         }
       }catch(e){
@@ -192,7 +192,7 @@ $('process')?.addEventListener('click', async ()=>{
     }
     bump(24);
 
-    // (C) Reduce colors – iOS‑safe quantizer + progress
+    // (C) Reduce colors – iOS‑safe quantizer
     log('Reducing colors…');
     const ctxW = canvasCtx(work);
     const imgData = ctxW.getImageData(0,0,work.width,work.height);
@@ -208,7 +208,7 @@ $('process')?.addEventListener('click', async ()=>{
       const tmp = document.createElement('canvas'); tmp.width=W; tmp.height=H;
       const tctx = tmp.getContext('2d'); tctx.putImageData(imgData,0,0);
       const id = tctx.getImageData(0,0,W,H); const d=id.data;
-      for(let i=0;i<W*H;i++){ if(!activeMask[i]) d[i*4+3]=0; } // bg transparent
+      for(let i=0;i<W*H;i++){ if(!activeMask[i]) d[i*4+3]=0; }
       tctx.putImageData(id,0,0);
       const seeds = sampleDominant(tmp, Math.min(6, k));
       const out=[]; const add=(c)=>{ if(!out.some(u=>Math.hypot(u[0]-c[0],u[1]-c[1],u[2]-c[2])<15)) out.push(c); };
@@ -220,12 +220,12 @@ $('process')?.addEventListener('click', async ()=>{
 
     // (E) Plan stitches
     log('Planning stitches…');
-    const spmm = 1 / Math.max(0.2, Math.min(1.0, density)); // higher density -> smaller spacing
+    const spmm = 1 / Math.max(0.2, Math.min(1.0, density));
     const opts = {
       outline: !!doOutline,
       angle: parseFloat(angle)||45,
-      spacingMM: 1/spmm,       // used by your stitcher
-      hoop,                    // "100x100" etc.
+      spacingMM: 1/spmm,
+      hoop,
       mask: activeMask || null
     };
     const t0 = Date.now();
@@ -237,15 +237,12 @@ $('process')?.addEventListener('click', async ()=>{
     renderPreview(state.preview, { indexed, palette: finalPalette, W, H }, opts);
     state.lastResult = { indexed, palette: finalPalette, W, H };
     state.lastOps = ops;
-    // palette text
     state.lastPaletteTxt = finalPalette.map((c,i)=>`${i+1}. #${toHex(c)}`).join('\n');
 
+    // ✅ enable downloads only on success
     $('dlDST')?.removeAttribute('disabled');
     $('dlPAL')?.removeAttribute('disabled');
-
-    log('Writing .DST…');
-    const blob = writeDST(ops, finalPalette, opts);
-    $('dlDST').onclick = ()=> downloadBlob(blob, 'loomabelle.dst');
+    $('dlDST').onclick = ()=> downloadBlob(writeDST(ops, finalPalette, opts), 'loomabelle.dst');
     $('dlPAL').onclick = ()=>{
       const pb = new Blob([state.lastPaletteTxt], {type:'text/plain'});
       downloadBlob(pb, 'palette.txt');
@@ -257,7 +254,7 @@ $('process')?.addEventListener('click', async ()=>{
   }catch(err){
     log('Processing failed: '+(err?.message||err), 'error');
   }finally{
-    setProcessing(false);
+    setProcessing(false);   // ✅ re‑enable Process button no matter what
   }
 });
 

@@ -5,17 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>Loomabelle — Embroidery Maker</title>
 <style>
-:root{--bg:#0b0c10;--ink:#e9ecf1;--muted:#aab2bf;--line:#1f2330;--brand:#6b4eff}
+:root{--bg:#0b0c10;--ink:#e9ecf1;--muted:#aab2bf;--line:#1f2330;--brand:#6b4eff;--accent:#28c76f}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
 .hero{padding:28px 16px;text-align:center;font-weight:800;font-size:42px;background:var(--brand)}
 .wrap{max-width:1100px;margin:18px auto;padding:0 16px}
 .panel{background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:14px;padding:14px}
 .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
-.controls input[type="number"], .controls select{background:#11131a;color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:6px 10px}
+.controls input[type="number"], .controls input[type="range"], .controls select{
+  background:#11131a;color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:6px 10px}
 button,.btn{padding:10px 14px;border-radius:10px;border:1px solid var(--line);background:#1a1f2b;color:var(--ink);text-decoration:none;cursor:pointer;font-weight:600}
 button:disabled,.btn.disabled{opacity:.6;cursor:not-allowed}
-#download,#downloadPalette{margin-left:6px}
+.btn-toggle{background:#121523}
 .grid{display:grid;grid-template-columns:1.1fr .9fr;gap:16px;margin-top:14px}
 @media(max-width:900px){.grid{grid-template-columns:1fr}}
 .frame{border:1px dashed #2b3142;border-radius:12px;background:#0e1320;padding:10px}
@@ -24,81 +25,183 @@ canvas{max-width:100%;display:block}
 .status{margin:6px 0 0;color:var(--muted)}
 .foot{border-top:1px solid var(--line);margin-top:24px;padding:14px 16px;text-align:center;color:var(--muted)}
 .tag{padding:4px 8px;border:1px solid var(--line);border-radius:999px;background:#121523}
+.tabs{display:flex;gap:10px;margin-bottom:10px}
+.tab{padding:10px 14px;border-radius:10px;border:1px solid var(--line);background:#141a2a;cursor:pointer}
+.tab.active{background:#1f2740;border-color:#3b4360}
+.hidden{display:none}
+.pbar{width:100%;height:10px;background:#111522;border:1px solid #243; border-radius:999px; overflow:hidden}
+.pbar>span{display:block;height:100%;background:linear-gradient(90deg,#5e8bff,#8f67ff);width:0%}
+.color-row{display:flex;gap:6px;flex-wrap:wrap}
+.color-row input[type="color"]{width:38px;height:32px;border:1px solid #333;border-radius:6px;background:#000;padding:0}
+.small{font-size:13px;color:var(--muted)}
+.sep{height:1px;background:#1e2432;margin:10px 0}
+.badge{font-size:12px;padding:4px 8px;border:1px solid #2c3550;border-radius:999px;background:#12172a}
 </style>
 </head>
 <body>
 <header class="hero">Loomabelle</header>
 
 <main class="wrap">
-  <section class="panel controls">
-    <input id="file" type="file" accept="image/*"/>
-    <label>Colors (≤10) <input id="colors" type="number" min="2" max="10" value="4"/></label>
-    <label><input id="removeBg" type="checkbox" checked/> Remove background</label>
-    <label><input id="outline" type="checkbox" checked/> Outline (satin)</label>
-    <label>Hoop
-      <select id="hoop">
-        <option value="4x4">4×4 (100×100mm)</option>
-        <option value="5x7">5×7 (130×180mm)</option>
-      </select>
-    </label>
-    <label>Fill angle° <input id="angle" type="number" value="45"/></label>
-    <label>Density (mm) <input id="density" type="number" step="0.05" value="0.40"/></label>
-    <label>Size (% hoop) <input id="sizePct" type="range" min="20" max="100" value="80"/></label><span id="sizeOut" class="tag">80%</span>
 
-    <button id="process" disabled>Process</button>
-    <a id="download" class="btn disabled" download="design.dst" href="#">Download .DST</a>
-    <a id="downloadPalette" class="btn disabled" download="palette.txt" href="#">Palette (.txt)</a>
-    <span class="tag">Tip: paint the subject below</span>
+  <!-- Tabs -->
+  <div class="tabs">
+    <div class="tab active" id="tabUpload">Upload</div>
+    <div class="tab" id="tabDraw">Draw</div>
+  </div>
+
+  <!-- Upload panel -->
+  <section class="panel" id="panelUpload">
+    <div class="controls">
+      <input id="file" type="file" accept="image/*"/>
+      <label>Colors (≤10) <input id="colors" type="number" min="2" max="10" value="4"/></label>
+      <label class="badge"><input id="autoColors" type="checkbox" checked/> Auto colors</label>
+      <div id="manualColors" class="color-row hidden"></div>
+
+      <span class="sep" style="flex-basis:100%"></span>
+
+      <label class="badge"><input id="autoMode" type="checkbox" checked/> Auto embroider</label>
+      <div id="adv" class="controls">
+        <label><input id="removeBg" type="checkbox" checked/> Remove background</label>
+        <label><input id="outline" type="checkbox" checked/> Outline (satin)</label>
+        <label>Hoop
+          <select id="hoop">
+            <option value="4x4">4×4 (100×100mm)</option>
+            <option value="5x7">5×7 (130×180mm)</option>
+          </select>
+        </label>
+        <label>Fill angle° <input id="angle" type="number" value="45"/></label>
+        <label>Density (mm) <input id="density" type="number" step="0.05" value="0.40"/></label>
+        <label>Size (% hoop) <input id="sizePct" type="range" min="20" max="100" value="80"/></label>
+        <span id="sizeOut" class="tag">80%</span>
+      </div>
+
+      <button id="process" disabled>Process</button>
+      <a id="download" class="btn disabled" download="design.dst" href="#">Download .DST</a>
+      <a id="downloadPalette" class="btn disabled" download="palette.txt" href="#">Palette (.txt)</a>
+    </div>
+
+    <div class="sep"></div>
+    <div class="pbar"><span id="bar"></span></div>
     <p id="status" class="status">Upload a JPG/PNG/HEIC to begin.</p>
+  </section>
+
+  <!-- Draw panel -->
+  <section class="panel hidden" id="panelDraw">
+    <div class="controls">
+      <span class="badge">Handwriting canvas</span>
+      <label>Brush <input id="dBrush" type="range" min="2" max="40" value="10"/></label>
+      <label>Color <input id="dColor" type="color" value="#000000"/></label>
+      <button id="dClear">Clear</button>
+      <button id="dUse">Use for Embroidery</button>
+      <span class="small">Tip: write big, high contrast.</span>
+    </div>
+    <div class="frame">
+      <canvas id="draw" width="900" height="600" style="touch-action:none;background:#fff"></canvas>
+    </div>
   </section>
 
   <section class="grid">
     <div class="panel">
-      <h3>Paint Subject</h3>
+      <h3>Subject (paint to select)</h3>
       <div class="frame"><canvas id="paint"></canvas></div>
       <div class="tools">
         <button id="selectToggle" disabled>✍️ Select subject</button>
         <label>Brush <input id="brush" type="range" min="6" max="60" value="26"/></label>
         <label><input id="eraser" type="checkbox"/> Erase</label>
         <button id="clearMask" disabled>Clear</button>
+        <span class="small">Outside the painted area is ignored.</span>
       </div>
     </div>
 
     <div class="panel">
       <h3>Preview (with hoop)</h3>
       <div class="frame"><canvas id="preview" width="720" height="520"></canvas></div>
-      <p class="status">The rounded rectangle shows your hoop. Stitches scale to “Size %”.</p>
+      <p class="status">Rounded rectangle = hoop bounds.</p>
     </div>
   </section>
-</main>
 
+</main>
 <footer class="foot">© <span id="year"></span> Loomabelle</footer>
 
-<script type="module">
-/* ======= JS (inline so nothing can 404) ======= */
+<!-- All JS inline so nothing can 404 -->
+<script>
+/* ========= Helpers & DOM ========= */
 const $ = s=>document.querySelector(s);
 $('#year').textContent = new Date().getFullYear();
 const setStatus=(m,cls='')=>{const el=$('#status'); el.textContent=m; el.className='status '+cls;};
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+function rgbToHex([r,g,b]){return '#'+[r,g,b].map(x=>x.toString(16).padStart(2,'0')).join('');}
+function hexToRgb(hex){const m=hex.replace('#','');return [parseInt(m.slice(0,2),16),parseInt(m.slice(2,4),16),parseInt(m.slice(4,6),16)];}
 
-// DOM
+/* ========= Tabs ========= */
+const tabUpload=$('#tabUpload'), tabDraw=$('#tabDraw'), panelUpload=$('#panelUpload'), panelDraw=$('#panelDraw');
+tabUpload.onclick=()=>{tabUpload.classList.add('active'); tabDraw.classList.remove('active'); panelUpload.classList.remove('hidden'); panelDraw.classList.add('hidden');};
+tabDraw.onclick=()=>{tabDraw.classList.add('active'); tabUpload.classList.remove('active'); panelDraw.classList.remove('hidden'); panelUpload.classList.add('hidden');};
+
+/* ========= Build manual color pickers ========= */
+function rebuildColorPickers(){
+  const k = clamp(+$('#colors').value||4,2,10);
+  const cont = $('#manualColors'); cont.innerHTML='';
+  for(let i=0;i<k;i++){
+    const inp = document.createElement('input'); inp.type='color'; inp.value = ['#000000','#ffffff','#ff0000','#00ff00','#0000ff','#ffff00','#ff00ff','#00ffff','#888888','#ffaa00'][i] || '#888888';
+    inp.dataset.idx=i; cont.appendChild(inp);
+  }
+}
+$('#colors').addEventListener('input', ()=>{rebuildColorPickers();});
+$('#autoColors').addEventListener('change', ()=>{
+  const on = $('#autoColors').checked;
+  $('#manualColors').classList.toggle('hidden', on);
+});
+rebuildColorPickers();
+
+/* ========= Auto/Manual settings toggle ========= */
+function applyModeVisibility(){
+  const auto = $('#autoMode').checked;
+  $('#adv').style.display = auto ? 'none' : 'flex';
+}
+$('#autoMode').addEventListener('change', applyModeVisibility);
+applyModeVisibility();
+
+/* ========= Elements ========= */
 const fileInput=$('#file'), processBtn=$('#process'), dlDst=$('#download'), dlPal=$('#downloadPalette');
 const sizePctRange=$('#sizePct'), sizeOut=$('#sizeOut');
+sizePctRange.addEventListener('input', ()=> sizeOut.textContent=sizePctRange.value+'%'); sizeOut.textContent=sizePctRange.value+'%';
 const paint=$('#paint'), pctx=paint.getContext('2d',{willReadFrequently:true});
 const brushRange=$('#brush'), eraser=$('#eraser'), selectToggle=$('#selectToggle'), clearMaskBtn=$('#clearMask');
 const preview=$('#preview'), gPrev=preview.getContext('2d');
+const bar=$('#bar');
 
-// work canvas (hidden)
-const work=document.createElement('canvas'), ctx=work.getContext('2d',{willReadFrequently:true});
+/* ========= Draw canvas ========= */
+const drawCv=$('#draw'), dctx=drawCv.getContext('2d',{willReadFrequently:true});
+dctx.lineCap='round'; dctx.lineJoin='round'; dctx.lineWidth=10; dctx.strokeStyle='#000';
+let drawing=false;
+function dXY(e){const r=drawCv.getBoundingClientRect(); const x=(e.touches?e.touches[0].clientX:e.clientX)-r.left; const y=(e.touches?e.touches[0].clientY:e.clientY)-r.top; return [x,y];}
+function dStart(e){drawing=true; const [x,y]=dXY(e); dctx.beginPath(); dctx.moveTo(x,y); e.preventDefault();}
+function dMove(e){ if(!drawing) return; const [x,y]=dXY(e); dctx.lineTo(x,y); dctx.stroke(); e.preventDefault();}
+function dEnd(){ drawing=false; }
+drawCv.addEventListener('mousedown', dStart); drawCv.addEventListener('mousemove', dMove); window.addEventListener('mouseup', dEnd);
+drawCv.addEventListener('touchstart', dStart, {passive:false}); drawCv.addEventListener('touchmove', dMove, {passive:false}); window.addEventListener('touchend', dEnd);
+$('#dBrush').oninput = e=>{ dctx.lineWidth = +e.target.value; };
+$('#dColor').oninput = e=>{ dctx.strokeStyle = e.target.value; };
+$('#dClear').onclick = ()=>{ dctx.fillStyle='#fff'; dctx.fillRect(0,0,drawCv.width,drawCv.height); dctx.fillStyle='#000'; };
+$('#dClear').click(); // white background
+$('#dUse').onclick = ()=>{
+  // Take the drawing and treat as uploaded image
+  work.width=drawCv.width; work.height=drawCv.height; wctx.clearRect(0,0,work.width,work.height); wctx.drawImage(drawCv,0,0);
+  prepareAfterLoad(); setStatus('Drawing ready. You can paint subject or Process.', 'ok');
+};
+
+/* ========= Working canvases ========= */
+const work=document.createElement('canvas'), wctx=work.getContext('2d',{willReadFrequently:true});
 const HOOP_MM={ '4x4':{w:100,h:100,r:12}, '5x7':{w:130,h:180,r:12} };
 let img=null, userMask=null, painting=false;
 
-sizePctRange.addEventListener('input', ()=> sizeOut.textContent=sizePctRange.value+'%');
-sizeOut.textContent=sizePctRange.value+'%';
-
-// HEIC → JPEG (lazy)
+/* ========= HEIC support ========= */
 async function heicToJpeg(file){
-  if(!window.heic2any){ await new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js'; s.onload=res; s.onerror=()=>rej(new Error('heic2any load failed')); document.head.appendChild(s); }); }
+  if(!window.heic2any){
+    await new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js'; s.onload=res; s.onerror=()=>rej(new Error('heic2any load fail')); document.head.appendChild(s); });
+  }
   const out=await window.heic2any({blob:file,toType:'image/jpeg',quality:0.92}); const b=Array.isArray(out)?out[0]:out;
   return new File([b],(file.name||'image').replace(/\.\w+$/,'')+'.jpg',{type:'image/jpeg'});
 }
@@ -106,7 +209,7 @@ function loadImageFromFile(file){
   return new Promise((resolve,reject)=>{ const url=URL.createObjectURL(file); const im=new Image(); im.onload=()=>{URL.revokeObjectURL(url); resolve(im)}; im.onerror=reject; im.src=url; });
 }
 
-// Paint helpers
+/* ========= Subject painting ========= */
 function ensureMask(){ if(!userMask) userMask=new Uint8Array(paint.width*paint.height); }
 function redrawPaint(){
   pctx.clearRect(0,0,paint.width,paint.height);
@@ -136,11 +239,18 @@ function movePaint(e){ if(!painting) return; const [x,y]=toCanvasXY(e); stamp(x,
 function endPaint(){ painting=false; }
 paint.addEventListener('mousedown',startPaint); paint.addEventListener('mousemove',movePaint); window.addEventListener('mouseup',endPaint);
 paint.addEventListener('touchstart',startPaint,{passive:false}); paint.addEventListener('touchmove',movePaint,{passive:false}); window.addEventListener('touchend',endPaint);
+selectToggle.onclick=()=>{ if(selectToggle.dataset.active==='1'){ selectToggle.dataset.active='0'; selectToggle.textContent='✍️ Select subject'; } else { selectToggle.dataset.active='1'; selectToggle.textContent='✅ Painting (drag)'; } };
+clearMaskBtn.onclick=()=>{ if(userMask){ userMask.fill(0); redrawPaint(); } };
 
-selectToggle.addEventListener('click',()=>{ if(selectToggle.dataset.active==='1'){ selectToggle.dataset.active='0'; selectToggle.textContent='✍️ Select subject'; } else { selectToggle.dataset.active='1'; selectToggle.textContent='✅ Painting (drag)'; }});
-clearMaskBtn.addEventListener('click',()=>{ if(userMask){ userMask.fill(0); redrawPaint(); } });
+/* ========= After image/drawing ready ========= */
+function prepareAfterLoad(){
+  // Sync paint canvas to work size (1:1)
+  paint.width=work.width; paint.height=work.height; userMask=new Uint8Array(work.width*work.height); redrawPaint();
+  processBtn.disabled=false; selectToggle.disabled=false; clearMaskBtn.disabled=false;
+  dlDst.classList.add('disabled'); dlPal.classList.add('disabled');
+}
 
-// File load
+/* ========= Upload handling ========= */
 fileInput.addEventListener('change', async ()=>{
   const f=fileInput.files?.[0]; if(!f) return;
   try{
@@ -149,19 +259,16 @@ fileInput.addEventListener('change', async ()=>{
     if(mime.includes('heic')||mime.includes('heif')||name.endsWith('.heic')||name.endsWith('.heif')){
       setStatus('Converting HEIC to JPEG…'); chosen=await heicToJpeg(f);
     }
-    img=await loadImageFromFile(chosen);
-    const maxSide=1200, s=Math.min(1,maxSide/Math.max(img.width,img.height));
-    const W=Math.max(1,Math.round(img.width*s)), H=Math.max(1,Math.round(img.height*s));
-    work.width=W; work.height=H; ctx.clearRect(0,0,W,H); ctx.drawImage(img,0,0,W,H);
-    paint.width=W; paint.height=H; userMask=new Uint8Array(W*H); redrawPaint();
-    processBtn.disabled=false; selectToggle.disabled=false; clearMaskBtn.disabled=false;
-    dlDst.classList.add('disabled'); dlPal.classList.add('disabled');
-    setStatus(`Image ready (${W}×${H}). Optional: paint subject, then Process.`,'ok');
+    const im=await loadImageFromFile(chosen); img=im;
+    const maxSide=1200, s=Math.min(1,maxSide/Math.max(im.width,im.height));
+    work.width=Math.round(im.width*s); work.height=Math.round(im.height*s);
+    wctx.clearRect(0,0,work.width,work.height); wctx.drawImage(im,0,0,work.width,work.height);
+    prepareAfterLoad(); setStatus(`Image ready (${work.width}×${work.height}). Optional: paint subject, then Process.`,'ok');
   }catch(e){ console.error(e); setStatus('Could not read image. Try a JPG/PNG.','error'); }
 });
 
-// Color reduction (k-means). If mask provided, outside = background.
-function reduceColors(ctx,W,H,k,removeBg,mask){
+/* ========= Quantization ========= */
+function reduceColorsKMeans(ctx,W,H,k,removeBg,mask){
   const {data}=ctx.getImageData(0,0,W,H); const N=W*H; const src=new Uint8Array(data.buffer);
   const pts=new Float32Array(N*3);
   for(let i=0;i<N;i++){ pts[i*3]=src[i*4]; pts[i*3+1]=src[i*4+1]; pts[i*3+2]=src[i*4+2]; }
@@ -171,15 +278,14 @@ function reduceColors(ctx,W,H,k,removeBg,mask){
   for(let it=0;it<6;it++){
     for(let i=0;i<N;i++){
       let best=0,bd=1e12,r=pts[i*3],g=pts[i*3+1],b=pts[i*3+2];
-      for(let c=0;c<k;c++){ const cr=centers[c*3],cg=centers[c*3+1],cb=centers[c*3+2];
-        const d=(r-cr)**2+(g-cg)**2+(b-cb)**2; if(d<bd){bd=d;best=c;} }
+      for(let c=0;c<k;c++){ const cr=centers[c*3],cg=centers[c*3+1],cb=centers[c*3+2]; const d=(r-cr)**2+(g-cg)**2+(b-cb)**2; if(d<bd){bd=d;best=c;} }
       assign[i]=best;
     }
     const sum=new Float32Array(k*4);
     for(let i=0;i<N;i++){ const c=assign[i]; sum[c*4]+=pts[i*3]; sum[c*4+1]+=pts[i*3+1]; sum[c*4+2]+=pts[i*3+2]; sum[c*4+3]++; }
     for(let c=0;c<k;c++){ const cnt=sum[c*4+3]||1; centers[c*3]=sum[c*4]/cnt; centers[c*3+1]=sum[c*4+1]/cnt; centers[c*3+2]=sum[c*4+2]/cnt; }
   }
-  // border background
+  // choose background from borders
   let bg=-1;
   if(removeBg){
     const counts=new Uint32Array(k), bump=(x,y)=>counts[assign[y*W+x]]++;
@@ -188,7 +294,7 @@ function reduceColors(ctx,W,H,k,removeBg,mask){
   }
   const used=new Set(); const indexed=new Uint8Array(N);
   for(let i=0;i<N;i++){
-    if(mask && mask[i]===0){ indexed[i]=255; continue; } // outside painted area → background
+    if(mask && mask[i]===0){ indexed[i]=255; continue; } // outside painted area
     const c=assign[i]; if(c===bg){ indexed[i]=255; } else { indexed[i]=c; used.add(c); }
   }
   const list=[...used].sort((a,b)=>a-b), remap=new Map(); list.forEach((c,i)=>remap.set(c,i));
@@ -196,12 +302,48 @@ function reduceColors(ctx,W,H,k,removeBg,mask){
   for(let i=0;i<N;i++) if(indexed[i]!==255) indexed[i]=remap.get(indexed[i]);
   return { indexed, palette };
 }
+function reduceColorsFixedPalette(ctx,W,H,palette,mask){
+  const {data}=ctx.getImageData(0,0,W,H); const N=W*H; const src=new Uint8Array(data.buffer);
+  const indexed=new Uint8Array(N);
+  for(let i=0;i<N;i++){
+    if(mask && mask[i]===0){ indexed[i]=255; continue; }
+    const r=src[i*4],g=src[i*4+1],b=src[i*4+2];
+    let best=0,bd=1e12;
+    for(let c=0;c<palette.length;c++){ const [pr,pg,pb]=palette[c]; const d=(r-pr)**2+(g-pg)**2+(b-pb)**2; if(d<bd){bd=d;best=c;} }
+    indexed[i]=best;
+  }
+  return { indexed, palette: palette.map(([r,g,b])=>[r,g,b]) };
+}
 function expandBbox(b,mask,W,H){
   for(let y=0;y<H;y++){ const row=y*W; for(let x=0;x<W;x++) if(mask[row+x]){ if(x<b.minx)b.minx=x; if(y<b.miny)b.miny=y; if(x>b.maxx)b.maxx=x; if(y>b.maxy)b.maxy=y; } }
   return b;
 }
-
-// Mask morphology + hatch + outlines
+function erodeMask(mask,W,H,rPx){
+  if(rPx<=0) return mask; let cur=mask;
+  for(let t=0;t<rPx;t++){
+    const out=new Uint8Array(W*H);
+    for(let y=1;y<H-1;y++){ const row=y*W;
+      for(let x=1;x<W-1;x++){ if(!cur[row+x]) continue; let keep=true;
+        for(let dy=-1;dy<=1&&keep;dy++) for(let dx=-1;dx<=1;dx++) if(!cur[(y+dy)*W+(x+dx)]){keep=false;break;}
+        if(keep) out[row+x]=1;
+      }
+    }
+    cur=out;
+  }
+  return cur;
+}
+function marchingSquaresOutline(mask,W,H){
+  let sx=-1,sy=-1; for(let y=1;y<H-1&&sy<0;y++){ for(let x=1;x<W-1;x++){ if(mask[y*W+x] && !mask[y*W+(x-1)]){ sx=x; sy=y; break; } } }
+  if(sx<0) return []; const pts=[]; let x=sx,y=sy; const maxSteps=W*H*4;
+  for(let step=0;step<maxSteps;step++){
+    pts.push([x,y]);
+    const a=mask[(y-1)*W+(x-1)]?1:0, b=mask[(y-1)*W+(x)]?1:0, c=mask[(y)*W+(x-1)]?1:0, d=mask[(y)*W+(x)]?1:0;
+    const code=(a<<3)|(b<<2)|(c<<1)|d;
+    if(code===0){x++;} else if(code===1||code===3||code===9||code===11){x++;} else if(code===2||code===6||code===7||code===14){y++;} else if(code===4||code===12||code===13||code===8){x--;} else {y--;}
+    if(x===sx && y===sy && pts.length>12) break; x=Math.max(1,Math.min(W-2,x)); y=Math.max(1,Math.min(H-2,y));
+  }
+  const out=[]; for(let i=0;i<pts.length;i+=2) out.push(pts[i]); return out;
+}
 function hatchSegmentsFromMask(mask,W,H,bbox,angleDeg,spacingPx,stepPx){
   const segs=[]; const dir=[Math.cos(angleDeg*Math.PI/180),Math.sin(angleDeg*Math.PI/180)], nrm=[-dir[1],dir[0]];
   const bw=bbox.maxx-bbox.minx, bh=bbox.maxy-bbox.miny; const cx=(bbox.minx+bbox.maxx)/2, cy=(bbox.miny+bbox.maxy)/2;
@@ -220,32 +362,6 @@ function hatchSegmentsFromMask(mask,W,H,bbox,angleDeg,spacingPx,stepPx){
   }
   return segs;
 }
-function marchingSquaresOutline(mask,W,H){
-  let sx=-1,sy=-1; for(let y=1;y<H-1&&sy<0;y++){ for(let x=1;x<W-1;x++){ if(mask[y*W+x] && !mask[y*W+(x-1)]){ sx=x; sy=y; break; } } }
-  if(sx<0) return []; const pts=[]; let x=sx,y=sy; const maxSteps=W*H*4;
-  for(let step=0;step<maxSteps;step++){
-    pts.push([x,y]);
-    const a=mask[(y-1)*W+(x-1)]?1:0, b=mask[(y-1)*W+(x)]?1:0, c=mask[(y)*W+(x-1)]?1:0, d=mask[(y)*W+(x)]?1:0;
-    const code=(a<<3)|(b<<2)|(c<<1)|d;
-    if(code===0){x++;} else if(code===1||code===3||code===9||code===11){x++;} else if(code===2||code===6||code===7||code===14){y++;} else if(code===4||code===12||code===13||code===8){x--;} else {y--;}
-    if(x===sx && y===sy && pts.length>12) break; x=Math.max(1,Math.min(W-2,x)); y=Math.max(1,Math.min(H-2,y));
-  }
-  const out=[]; for(let i=0;i<pts.length;i+=2) out.push(pts[i]); return out;
-}
-function erodeMask(mask,W,H,rPx){
-  if(rPx<=0) return mask; let cur=mask;
-  for(let t=0;t<rPx;t++){
-    const out=new Uint8Array(W*H);
-    for(let y=1;y<H-1;y++){ const row=y*W;
-      for(let x=1;x<W-1;x++){ if(!cur[row+x]) continue; let keep=true;
-        for(let dy=-1;dy<=1&&keep;dy++) for(let dx=-1;dx<=1;dx++) if(!cur[(y+dy)*W+(x+dx)]){keep=false;break;}
-        if(keep) out[row+x]=1;
-      }
-    }
-    cur=out;
-  }
-  return cur;
-}
 function lineStitch(out,aMM,bMM,maxStepMM){ const len=Math.hypot(bMM[0]-aMM[0],bMM[1]-aMM[1]); const steps=Math.max(1,Math.ceil(len/maxStepMM));
   for(let i=1;i<=steps;i++){ const t=i/steps; out.push({x:aMM[0]+(bMM[0]-aMM[0])*t,y:aMM[1]+(bMM[1]-aMM[1])*t}); } }
 function runningOutline(stitches,ptsMM,maxStepMM=3){ if(!ptsMM.length) return; stitches.push({x:ptsMM[0][0],y:ptsMM[0][1],jump:true});
@@ -255,28 +371,26 @@ function satinOutline(stitches,ptsMM,widthMM=0.8,stepMM=0.6){ if(ptsMM.length<3)
   for(let i=1;i<ptsMM.length;i++){ const a=ptsMM[i-1], b=ptsMM[i]; const dx=b[0]-a[0], dy=b[1]-a[1]; const len=Math.hypot(dx,dy)||1; const nx=-dy/len, ny=dx/len; const seg=Math.max(1,Math.ceil(len/stepMM));
     for(let k=0;k<seg;k++){ const t=k/seg; const cx=a[0]+dx*t, cy=a[1]+dy*t; const off=left?half:-half; stitches.push({x:cx+nx*off,y:cy+ny*off}); left=!left; } } }
 
-// Preview with hoop + colored lines
+/* ========= Preview (colored) ========= */
 function drawPreviewColored(plan, hoop, sizePct){
   const W=preview.width, H=preview.height; gPrev.clearRect(0,0,W,H);
-  // hoop rectangle (scale to canvas)
   const pad=20, hoopAspect=hoop.h/hoop.w;
   let hoopW=W-2*pad, hoopH=hoopW*hoopAspect; if(hoopH>H-2*pad){ hoopH=H-2*pad; hoopW=hoopH/hoopAspect; }
   const hx=(W-hoopW)/2, hy=(H-hoopH)/2, r=12;
   gPrev.fillStyle='#111824'; gPrev.fillRect(0,0,W,H);
   gPrev.strokeStyle='#334'; gPrev.lineWidth=2; gPrev.beginPath();
   const rr=(x,y,w,h,rad)=>{gPrev.moveTo(x+rad,y); gPrev.arcTo(x+w,y,x+w,y+h,rad); gPrev.arcTo(x+w,y+h,x,y+h,rad); gPrev.arcTo(x,y+h,x,y,rad); gPrev.arcTo(x,y,x+w,y,rad);};
-  rr(hx,hy,hoopW,hoopH,hoop.r); gPrev.stroke();
+  rr(hx,hy,hoopW,hoopH,r); gPrev.stroke();
 
-  // stitches bbox
+  // bbox in mm
   let minx=Infinity,miny=Infinity,maxx=-Infinity,maxy=-Infinity;
   for(const s of plan.stitches){ if(s.end||s.colorChange) continue; if(s.x<minx)minx=s.x; if(s.y<miny)miny=s.y; if(s.x>maxx)maxx=s.x; if(s.y>maxy)maxy=s.y; }
-  const bw=Math.max(1,maxx-minx), bh=Math.max(1,maxy-miny);
-  // mm -> pixels scale to hoop rect * sizePct
   const scale = (sizePct/100) * Math.min( hoopW/hoop.w, hoopH/hoop.h );
   const ox = W/2 - (minx+maxx)/2*scale;
   const oy = H/2 - (miny+maxy)/2*scale;
 
-  let last=null, ci=0; const toCss=rgb=>`rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+  let last=null, ci=0;
+  const toCss=rgb=>`rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
   gPrev.lineWidth=1.2; gPrev.strokeStyle=toCss(plan.colors[0]||[220,220,220]);
   for(const s of plan.stitches){
     if(s.colorChange){ last=null; ci=Math.min(ci+1, plan.colors.length-1); gPrev.strokeStyle=toCss(plan.colors[ci]||[200,200,200]); continue; }
@@ -285,7 +399,7 @@ function drawPreviewColored(plan, hoop, sizePct){
   }
 }
 
-// DST writer
+/* ========= DST writer ========= */
 function writeDST(plan){
   const recs=[]; let lx=0,ly=0; const to10th=mm=>Math.round(mm*10), clamp121=v=>Math.max(-121,Math.min(121,v));
   for(const s of plan.stitches){
@@ -307,48 +421,76 @@ function pack(dx,dy,jump){ let b1=0,b2=0,b3=0; const ax=Math.abs(dx), ay=Math.ab
   if(dx<0)b3|=0x20; if(dy<0)b3|=0x40; if(jump)b3|=0x10; return [b1,b2,b3];
 }
 
-// Process click
+/* ========= PROCESS ========= */
 processBtn.addEventListener('click', async ()=>{
-  if(!img) return; processBtn.disabled=true; dlDst.classList.add('disabled'); dlPal.classList.add('disabled'); setStatus('Processing…');
+  if(!work.width) return;
+  processBtn.disabled=true; dlDst.classList.add('disabled'); dlPal.classList.add('disabled');
+  setStatus('Processing…'); bar.style.width='0%';
+
+  const auto = $('#autoMode').checked;
+  const k = clamp(+$('#colors').value||4,2,10);
+  const autoCols = $('#autoColors').checked;
+  const fixedPalette = autoCols ? null : [...$('#manualColors').querySelectorAll('input[type="color"]')].slice(0,k).map(el=>hexToRgb(el.value));
+
+  const removeBg = auto ? true : $('#removeBg').checked;
+  const wantOutline = auto ? true : $('#outline').checked;
+  const hoopKey = auto ? '4x4' : $('#hoop').value;
+  const angleDeg = auto ? 45 : (+$('#angle').value||45);
+  const densityMM = auto ? 0.40 : (+$('#density').value||0.40);
+  const sizePct = auto ? 80 : (+$('#sizePct').value||80);
+
+  const W=work.width, H=work.height;
+
   try{
-    const colors=clamp(Number($('#colors').value)||4,2,10);
-    const removeBg=$('#removeBg').checked, wantOutline=$('#outline').checked, hoopKey=$('#hoop').value;
-    const angleDeg=Number($('#angle').value)||45, densityMM=Number($('#density').value)||0.40, sizePct=Number(sizePctRange.value)||80;
-    const W=work.width,H=work.height;
+    // 0–20%
+    bar.style.width='10%'; await sleep(10);
 
-    const {indexed,palette}=reduceColors(ctx,W,H,colors,removeBg,userMask);
-    if(!palette.length) throw new Error('No non‑background colors detected.');
+    // 1) color reduce
+    const res = fixedPalette ? reduceColorsFixedPalette(wctx,W,H,fixedPalette,userMask)
+                             : reduceColorsKMeans(wctx,W,H,k,removeBg,userMask);
+    const indexed=res.indexed, palette=res.palette;
+    if(!palette.length){ setStatus('No colors detected. Try different options.', 'error'); processBtn.disabled=false; return; }
 
+    bar.style.width='35%'; await sleep(10);
+
+    // 2) masks & bbox
     const masks=palette.map((_,ci)=>{ const m=new Uint8Array(W*H); for(let i=0;i<W*H;i++) if(indexed[i]===ci) m[i]=1; return m; });
     const bbox=masks.reduce((b,m)=>expandBbox(b,m,W,H),{minx:Infinity,miny:Infinity,maxx:-Infinity,maxy:-Infinity});
-    if(!(bbox.maxx>bbox.minx && bbox.maxy>bbox.miny)) throw new Error('No solid areas.');
-    const bw=bbox.maxx-bbox.minx, bh=bbox.maxy-bbox.miny, cx=(bbox.minx+bbox.maxx)/2, cy=(bbox.miny+bbox.maxy)/2;
+    if(!(bbox.maxx>bbox.minx && bbox.maxy>bbox.miny)){ setStatus('No solid areas found.', 'error'); processBtn.disabled=false; return; }
 
+    bar.style.width='50%'; await sleep(10);
+
+    // 3) scale to hoop & generate stitches
     const hoop=HOOP_MM[hoopKey];
+    const bw=bbox.maxx-bbox.minx, bh=bbox.maxy-bbox.miny, cx=(bbox.minx+bbox.maxx)/2, cy=(bbox.miny+bbox.maxy)/2;
     const mmPerPx = Math.min( hoop.w/bw, hoop.h/bh ) * (sizePct/100);
     const pxPerMM = 1/mmPerPx;
     const spacingPx=Math.max(1,Math.round(densityMM*pxPerMM));
-    const sampleStepPx=Math.max(1,Math.round(0.6*pxPerMM));
+    const stepPx=Math.max(1,Math.round(0.6*pxPerMM));
     const insetPx=Math.max(1,Math.round(0.5*pxPerMM));
 
     const plan={stitches:[],colors:palette.slice()};
+
     for(let ci=0; ci<masks.length; ci++){
       if(ci>0) plan.stitches.push({colorChange:true,x:0,y:0});
       const outlinePx=marchingSquaresOutline(masks[ci],W,H);
       const outlineMM=outlinePx.map(([x,y])=>[(x-cx)*mmPerPx,(y-cy)*mmPerPx]);
       runningOutline(plan.stitches,outlineMM,3);
+
       const inset=erodeMask(masks[ci],W,H,insetPx);
-      const segs=hatchSegmentsFromMask(inset,W,H,bbox,angleDeg,spacingPx,sampleStepPx);
+      const segs=hatchSegmentsFromMask(inset,W,H,bbox,angleDeg,spacingPx,stepPx);
       for(const [a,b] of segs){
         const sMM=[(a[0]-cx)*mmPerPx,(a[1]-cy)*mmPerPx], eMM=[(b[0]-cx)*mmPerPx,(b[1]-cy)*mmPerPx];
         plan.stitches.push({x:sMM[0],y:sMM[1],jump:true}); lineStitch(plan.stitches,sMM,eMM,7);
       }
       if(wantOutline && outlineMM.length>4) satinOutline(plan.stitches,outlineMM,0.8,0.6);
+      bar.style.width=(55 + Math.round(40*(ci+1)/masks.length))+'%';
     }
+
     plan.stitches.push({end:true,x:0,y:0});
 
+    // 4) preview + downloads
     drawPreviewColored(plan,hoop,sizePct);
-
     const dstBlob=new Blob([writeDST(plan)],{type:'application/octet-stream'});
     dlDst.href=URL.createObjectURL(dstBlob); dlDst.classList.remove('disabled');
 
@@ -356,9 +498,14 @@ processBtn.addEventListener('click', async ()=>{
     const palBlob=new Blob([palText],{type:'text/plain'});
     dlPal.href=URL.createObjectURL(palBlob); dlPal.classList.remove('disabled');
 
-    setStatus('Done! Download your .DST and palette.txt.','ok');
-  }catch(e){ console.error(e); setStatus(e.message||'Processing failed.','error'); }
-  finally{ processBtn.disabled=false; }
+    bar.style.width='100%';
+    setStatus('Done! Download your .DST and palette.txt.', 'ok');
+  }catch(e){
+    console.error(e); setStatus('Processing failed. Try a simpler image.', 'error');
+  }finally{
+    processBtn.disabled=false;
+    setTimeout(()=>bar.style.width='0%', 1200);
+  }
 });
 </script>
 </body>

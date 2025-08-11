@@ -1,9 +1,7 @@
-/* -------------------------------------------------------
-   Loomabelle Worker — heavy processing off the main thread
-   Steps: bitmap → downscale → (optional bg remove)
-        → quantize (k-means) → hatch fill (+optional outline)
-        → preview → stitches
-   ----------------------------------------------------- */
+/* Heavy processing in a Web Worker:
+   1) downscale → 2) background removal → 3) k-means quantize
+   4) hatch fill (+optional outline) → 5) preview → result
+*/
 self.onmessage = async (e)=>{
   const {cmd, bitmap, options} = e.data;
   if(cmd!=='process') return;
@@ -20,9 +18,7 @@ function log(msg, level='info'){ self.postMessage({type:'log', data:{msg, level}
 async function processBitmap(bitmap, opt){
   const {hoopMM, maxColors, removeBg, fillAngle, densityMM, outline, devicePixelRatio} = opt;
 
-  // 1) Working canvas sized to hoop with safe DPR
-  // Use 10 px per mm internally for preview crispness
-  const SCALE = 10;
+  const SCALE = 10; // px per mm for preview/internal raster
   const hoopPx = {w: Math.round(hoopMM.w*SCALE), h: Math.round(hoopMM.h*SCALE)};
   const maxW = Math.max(48, Math.round(hoopPx.w / Math.max(1,devicePixelRatio)));
   const maxH = Math.max(48, Math.round(hoopPx.h / Math.max(1,devicePixelRatio)));
@@ -30,21 +26,17 @@ async function processBitmap(bitmap, opt){
   const {w,h, img} = await downscaleTo(bitmap, maxW, maxH);
   log(`Working size: ${w}×${h}px`);
 
-  // 2) Remove background
   if(removeBg){ removeBackground(img, w, h); log('Background removed.','ok'); }
 
-  // 3) Quantize to K colors
   const {palette, indexed} = quantizeKMeans(img, w, h, maxColors);
   log(`Quantized to ${palette.length} colors.`, 'ok');
 
-  // 4) Build stitches (hatch fill per color)
   const angle = (fillAngle % 180) * Math.PI/180;
   const spacingPx = Math.max(1, Math.round(densityMM * SCALE)); // hatch spacing in px
   const stitches = [];
   let blocks = 0;
 
   for(let ci=0; ci<palette.length; ci++){
-    // Mask for this color
     const mask = new Uint8Array(w*h);
     for(let i=0;i<indexed.length;i++) if(indexed[i]===ci) mask[i]=1;
 
@@ -67,7 +59,6 @@ async function processBitmap(bitmap, opt){
     }
   }
 
-  // 5) Preview raster
   const prev = new ImageData(w,h);
   for(let i=0;i<w*h;i++){
     const ci = indexed[i];
@@ -92,7 +83,7 @@ async function downscaleTo(bitmap, maxW, maxH){
   return {w,h,img};
 }
 
-// Simple background removal: estimate background from corners and drop near-matches
+// Background removal: estimate corner color, drop near matches or near-transparent pixels
 function removeBackground(img, w, h){
   const d = img.data;
   const pick = (x,y)=>{ const i=(y*w+x)*4; return [d[i],d[i+1],d[i+2]]; };
@@ -106,132 +97,75 @@ function removeBackground(img, w, h){
   }
 }
 
-// Fast k-means quantization with sampling + 8 iterations max
+// Fast k-means quantization with sampling
 function quantizeKMeans(img, w, h, k){
-  const d = img.data;
-  const N = w*h;
-  const sampleStep = Math.max(1, Math.floor(Math.sqrt(N)/64)); // subsample on big images
-  const points = [];
-  for(let i=0;i<N;i+=sampleStep){
-    const a=d[i*4+3]; if(a<10) continue;
-    points.push([d[i*4], d[i*4+1], d[i*4+2]]);
+  const d = img.data, N=w*h;
+  const step = Math.max(1, Math.floor(Math.sqrt(N)/64));
+  const pts=[];
+  for(let i=0;i<N;i+=step){ const a=d[i*4+3]; if(a<10) continue; pts.push([d[i*4],d[i*4+1],d[i*4+2]]); }
+  const centers=[]; const seen=new Set();
+  for(let i=0;i<pts.length && centers.length<k;i+=Math.max(1,Math.floor(pts.length/k))){
+    const key=pts[i].join(','); if(!seen.has(key)){ centers.push(pts[i].slice()); seen.add(key); }
   }
-  // Init centers by picking diverse colors
-  const centers = [];
-  const seen = new Set();
-  for(let i=0;i<points.length && centers.length<k;i+=Math.max(1,Math.floor(points.length/k))){
-    const key = points[i].join(',');
-    if(!seen.has(key)) { centers.push(points[i].slice()); seen.add(key); }
-  }
-  while(centers.length<k && points.length){ centers.push(points[Math.floor(Math.random()*points.length)].slice()); }
+  while(centers.length<k && pts.length) centers.push(pts[Math.floor(Math.random()*pts.length)].slice());
 
-  const assign = new Uint16Array(points.length);
+  const assign=new Uint16Array(pts.length);
   for(let it=0; it<8; it++){
-    // assignment
-    for(let i=0;i<points.length;i++){
-      let best=0, bd=1e9;
-      const p=points[i];
+    for(let i=0;i<pts.length;i++){
+      let best=0,bd=1e9,p=pts[i];
       for(let c=0;c<centers.length;c++){
-        const ce=centers[c];
-        const dd = (p[0]-ce[0])**2+(p[1]-ce[1])**2+(p[2]-ce[2])**2;
-        if(dd<bd){ bd=dd; best=c; }
-      }
-      assign[i]=best;
+        const ce=centers[c]; const dd=(p[0]-ce[0])**2+(p[1]-ce[1])**2+(p[2]-ce[2])**2;
+        if(dd<bd){bd=dd;best=c;}
+      } assign[i]=best;
     }
-    // recompute means
-    const sum = centers.map(()=>[0,0,0,0]);
-    for(let i=0;i<points.length;i++){
-      const a=assign[i]; const p=points[i];
-      sum[a][0]+=p[0]; sum[a][1]+=p[1]; sum[a][2]+=p[2]; sum[a][3]++;
-    }
-    for(let c=0;c<centers.length;c++){
-      const s=sum[c];
-      if(s[3]>0){ centers[c]=[s[0]/s[3]|0, s[1]/s[3]|0, s[2]/s[3]|0]; }
-    }
+    const sum=centers.map(()=>[0,0,0,0]);
+    for(let i=0;i<pts.length;i++){ const a=assign[i],p=pts[i]; sum[a][0]+=p[0]; sum[a][1]+=p[1]; sum[a][2]+=p[2]; sum[a][3]++; }
+    for(let c=0;c<centers.length;c++){ const s=sum[c]; if(s[3]>0) centers[c]=[s[0]/s[3]|0,s[1]/s[3]|0,s[2]/s[3]|0]; }
   }
 
-  // Map every pixel to nearest center
-  const palette = centers;
-  const indexed = new Int16Array(N);
+  const palette=centers, indexed=new Int16Array(N);
   for(let i=0;i<N;i++){
     if(d[i*4+3]<10){ indexed[i]=-1; continue; }
-    let best=0, bd=1e9, r=d[i*4], g=d[i*4+1], b=d[i*4+2];
-    for(let c=0;c<palette.length;c++){
-      const ce=palette[c];
-      const dd=(r-ce[0])**2+(g-ce[1])**2+(b-ce[2])**2;
-      if(dd<bd){bd=dd; best=c;}
-    }
+    let best=0,bd=1e9,r=d[i*4],g=d[i*4+1],b=d[i*4+2];
+    for(let c=0;c<palette.length;c++){ const ce=palette[c]; const dd=(r-ce[0])**2+(g-ce[1])**2+(b-ce[2])**2; if(dd<bd){bd=dd;best=c;} }
     indexed[i]=best;
   }
   return {palette, indexed};
 }
 
-// Hatch fill: draw parallel scanlines at angle, clipping to mask
+// Hatch fill at angle, returning line segments in pixel coords
 function hatchFill(mask, w, h, angle, spacing){
-  const segs = [];
-  const sin = Math.sin(angle), cos = Math.cos(angle);
-  // rotate coordinates by -angle; operate in u/v space where lines are horizontal
+  const segs=[]; const sin=Math.sin(angle), cos=Math.cos(angle);
   const cx=w/2, cy=h/2;
-  function toUV(x,y){
-    const dx=x-cx, dy=y-cy;
-    return {u: dx*cos + dy*sin, v: -dx*sin + dy*cos};
-  }
-  function toXY(u,v){
-    const dx = u*cos - v*sin, dy = u*sin + v*cos;
-    return {x: dx+cx, y: dy+cy};
-  }
-  // Determine v range
-  const corners=[toUV(0,0),toUV(w,0),toUV(0,h),toUV(w,h)];
-  let vMin=1e9, vMax=-1e9;
-  for(const c of corners){ vMin=Math.min(vMin,c.v); vMax=Math.max(vMax,c.v); }
+  function toUV(x,y){ const dx=x-cx, dy=y-cy; return {u: dx*cos + dy*sin, v: -dx*sin + dy*cos}; }
+  function toXY(u,v){ const dx=u*cos - v*sin, dy=u*sin + v*cos; return {x:dx+cx, y:dy+cy}; }
+  const corners=[toUV(0,0),toUV(w,0),toUV(0,h),toUV(w,h)]; let vMin=1e9,vMax=-1e9; for(const c of corners){vMin=Math.min(vMin,c.v); vMax=Math.max(vMax,c.v);}
   for(let v=Math.floor(vMin); v<=vMax; v+=spacing){
-    // sample points along u across the canvas width
-    // we’ll walk pixels along this line and build segments when mask==1
     let inRun=false, start=null;
     for(let u=-Math.max(w,h); u<=Math.max(w,h); u++){
-      const {x,y}=toXY(u,v);
-      const xi=x|0, yi=y|0;
-      if(xi<0||yi<0||xi>=w||yi>=h){ if(inRun){ // close at boundary
-          const p2=toXY(u-1,v); segs.push({x1:start.x, y1:start.y, x2:p2.x, y2:p2.y}); inRun=false; }
-        continue;
-      }
+      const {x,y}=toXY(u,v), xi=x|0, yi=y|0;
+      if(xi<0||yi<0||xi>=w||yi>=h){ if(inRun){ const p2=toXY(u-1,v); segs.push({x1:start.x,y1:start.y,x2:p2.x,y2:p2.y}); inRun=false; } continue; }
       const idx=yi*w+xi;
-      if(mask[idx]){
-        if(!inRun){ inRun=true; const p1=toXY(u,v); start={x:p1.x, y:p1.y}; }
-      }else if(inRun){
-        const p2=toXY(u-1,v);
-        segs.push({x1:start.x, y1:start.y, x2:p2.x, y2:p2.y});
-        inRun=false;
-      }
+      if(mask[idx]){ if(!inRun){ inRun=true; const p1=toXY(u,v); start={x:p1.x,y:p1.y}; } }
+      else if(inRun){ const p2=toXY(u-1,v); segs.push({x1:start.x,y1:start.y,x2:p2.x,y2:p2.y}); inRun=false; }
     }
-    if(inRun){
-      const p2=toXY(Math.max(w,h),v);
-      segs.push({x1:start.x, y1:start.y, x2:p2.x, y2:p2.y});
-    }
+    if(inRun){ const p2=toXY(Math.max(w,h),v); segs.push({x1:start.x,y1:start.y,x2:p2.x,y2:p2.y}); }
   }
   return segs;
 }
 
-// Simple edge outline: horizontal segments where a foreground pixel touches background
+// Simple horizontal edge outline
 function outlineWalk(mask, w, h){
   const segs=[];
   for(let y=0;y<h;y++){
     let run=false, x0=0;
     for(let x=0;x<w;x++){
-      const i=y*w+x;
-      const m=mask[i];
-      const nb = (!m) ||
-                 (y>0 && !mask[i-w]) ||
-                 (y<h-1 && !mask[i+w]) ||
-                 (x>0 && !mask[i-1]) ||
-                 (x<w-1 && !mask[i+1]);
-      if(m && nb){ // on edge
-        if(!run){ run=true; x0=x; }
-      }else{
-        if(run){ segs.push({x1:x0, y1:y, x2:x-1, y2:y}); run=false; }
-      }
+      const i=y*w+x, m=mask[i];
+      const nb = (!m) || (y>0 && !mask[i-w]) || (y<h-1 && !mask[i+w]) || (x>0 && !mask[i-1]) || (x<w-1 && !mask[i+1]);
+      if(m && nb){ if(!run){ run=true; x0=x; } }
+      else if(run){ segs.push({x1:x0,y1:y,x2:x-1,y2:y}); run=false; }
     }
-    if(run) segs.push({x1:x0, y1:y, x2:w-1, y2:y});
+    if(run) segs.push({x1:x0,y1:y,x2:w-1,y2:y});
   }
   return segs;
 }

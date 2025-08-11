@@ -1,3 +1,4 @@
+// js/app.js
 import { $, setStatus, bump, initTabs, initLog, log, logError, cvReady, hexToRgb, rgbToHex, clamp } from './lib/ui.js';
 import { initDrawTab, getDrawCanvas } from './lib/draw.js';
 import { preprocessForQuantize } from './lib/preprocess.js';
@@ -30,7 +31,7 @@ function redrawPaint() {
   pctx.putImageData(imgD, 0, 0);
 }
 
-// ====== File & UI wiring ======
+// ====== Color pickers ======
 function rebuildColorPickers(seed) {
   const k = clamp(+$('#colors').value || 4, 2, 6);
   const cont = $('#manualColors'); cont.innerHTML = '';
@@ -47,9 +48,7 @@ function suggestPaletteToPickers() {
   rebuildColorPickers(seed);
 }
 
-function applyModeVisibility(){ $('#adv').style.display = $('#autoMode').checked ? 'none' : 'flex'; }
-
-// ====== Subject paint events ======
+// ====== Subject painting ======
 function bindPaintEvents() {
   const { paint } = state;
   const brushRange = $('#brush'), eraser = $('#eraser'), selectToggle = $('#selectToggle');
@@ -74,11 +73,11 @@ function bindPaintEvents() {
   const start = (e) => { if (selectToggle.dataset.active !== '1') return; painting = true; const [x, y] = toXY(e); stamp(x, y, +brushRange.value, !eraser.checked); e.preventDefault(); };
   const move  = (e) => { if (!painting) return; const [x, y] = toXY(e); stamp(x, y, +brushRange.value, !eraser.checked); e.preventDefault(); };
   const end   = () => { painting = false; };
-  paint.addEventListener('mousedown', start); paint.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
-  paint.addEventListener('touchstart', start, { passive: false }); paint.addEventListener('touchmove', move, { passive: false }); window.addEventListener('touchend', end);
+  paint.addEventListener('mousedown',start); paint.addEventListener('mousemove',move); window.addEventListener('mouseup',end);
+  paint.addEventListener('touchstart',start,{passive:false}); paint.addEventListener('touchmove',move,{passive:false}); window.addEventListener('touchend',end);
 }
 
-// ====== HEIC support (lazy) ======
+// ====== HEIC support ======
 async function heicToJpeg(file){
   if(!window.heic2any){
     const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';
@@ -99,11 +98,13 @@ async function init() {
   state.wctx = state.work.getContext('2d', { willReadFrequently: true });
   state.paint = $('#paint'); state.pctx = state.paint.getContext('2d', { willReadFrequently: true });
 
-  // Toggle refine panel
+  // Refine panel toggle
   $('#refineToggle').onchange = ()=> $('#refineBox').classList.toggle('hidden', !$('#refineToggle').checked);
 
   // Subject buttons
   const selectToggle = $('#selectToggle');
+  selectToggle.dataset.active = '0';
+  selectToggle.textContent = '✍️ Select subject';
   selectToggle.onclick = ()=> {
     if (selectToggle.dataset.active === '1') { selectToggle.dataset.active = '0'; selectToggle.textContent = '✍️ Select subject'; }
     else { selectToggle.dataset.active = '1'; selectToggle.textContent = '✅ Painting (drag)'; }
@@ -120,9 +121,8 @@ async function init() {
   };
 
   // Mode visibility
-  $('#autoMode').addEventListener('change', ()=>{ applyModeVisibility(); });
-  function applyModeVisibility(){ $('#adv').style.display=$('#autoMode').checked?'none':'flex'; }
-  applyModeVisibility();
+  $('#autoMode').addEventListener('change', ()=>{ $('#adv').style.display=$('#autoMode').checked?'none':'flex'; });
+  $('#adv').style.display = $('#autoMode').checked ? 'none' : 'flex';
 
   // Size label
   const sizePctRange=$('#sizePct'), sizeOut=$('#sizeOut'); sizeOut.textContent=sizePctRange.value+'%';
@@ -172,8 +172,18 @@ async function init() {
       state.wctx.clearRect(0,0,W,H); state.wctx.drawImage(im,0,0,W,H);
 
       state.paint.width=W; state.paint.height=H; state.userMask=new Uint8Array(W*H);
-      redrawPaint(); $('#process').disabled=false; $('#selectToggle').disabled=false; $('#clearMask').disabled=false; $('#autoMask').disabled=false;
-      $('#download').classList.add('disabled'); $('#downloadPalette').classList.add('disabled');
+      redrawPaint();
+
+      // Enable buttons now that we have an image
+      $('#process').disabled=false; 
+      $('#selectToggle').disabled=false; 
+      $('#clearMask').disabled=false; 
+      $('#autoMask').disabled=false;
+
+      // Reset downloads
+      $('#download').classList.add('disabled'); 
+      $('#downloadPalette').classList.add('disabled');
+
       if(!$('#autoColors').checked) suggestPaletteToPickers();
       setStatus(`Image ready (${W}×${H}). Refine subject if needed, then Process.`,'ok'); bump(12);
     }catch(e){logError(e,'FILE LOAD'); setStatus('Could not read image. Try a JPG/PNG.','error');}
@@ -202,13 +212,18 @@ async function init() {
   });
   $('#logClear').addEventListener('click', ()=> { $('#log').textContent=''; });
 
-  // Process
+  // ===== Process button =====
   $('#process').onclick = async ()=>{
     const { work } = state;
     if(!work.width){ setStatus('No image loaded.','error'); log('Aborting: work canvas empty','error'); return; }
 
-    $('#process').disabled=true; $('#download').classList.add('disabled'); $('#downloadPalette').classList.add('disabled'); bump(0);
+    // Disable while running
+    $('#process').disabled=true; 
+    $('#download').classList.add('disabled'); 
+    $('#downloadPalette').classList.add('disabled'); 
+    bump(0);
     log('=== PROCESS START ===');
+
     try{
       const auto = $('#autoMode').checked;
       const k = clamp(+$('#colors').value || 4, 2, 6);
@@ -245,7 +260,7 @@ async function init() {
       const pre = preprocessForQuantize(work);
       log(`Preprocess canvas: ${pre.width}×${pre.height}`);
 
-      // Quantize
+      // Quantize (progress callback keeps UI responsive)
       setStatus('Reducing colors…'); bump(18);
       const imgData = pre.getContext('2d',{willReadFrequently:true}).getImageData(0,0,pre.width,pre.height);
       const {indexed, palette, W, H} = await quantizeSafe(
@@ -278,15 +293,18 @@ async function init() {
       logError(err,'PROCESS');
       setStatus('Processing failed. Check log and try a simpler image.','error');
     }finally{
-      $('#process').disabled=false; setTimeout(()=>bump(0),1200);
+      // Re-enable
+      $('#process').disabled=false; 
+      setTimeout(()=>bump(0),1200);
     }
   };
 
-  // Enable subject painting gestures
+  // Enable painting gestures
   bindPaintEvents();
-}
 
-window.addEventListener('error', (e)=>{ log(`Window error: ${e.message} @ ${e.filename}:${e.lineno}:${e.colno}`, 'error'); if(e.error?.stack) log(e.error.stack,'error'); });
-window.addEventListener('unhandledrejection', (e)=>{ log(`Unhandled rejection: ${e.reason?.message || e.reason}`, 'error'); if(e.reason?.stack) log(e.reason.stack,'error'); });
+  // Global error capture (keeps the log helpful)
+  window.addEventListener('error', (e)=>{ log(`Window error: ${e.message} @ ${e.filename}:${e.lineno}:${e.colno}`, 'error'); if(e.error?.stack) log(e.error.stack,'error'); });
+  window.addEventListener('unhandledrejection', (e)=>{ log(`Unhandled rejection: ${e.reason?.message || e.reason}`, 'error'); if(e.reason?.stack) log(e.reason.stack,'error'); });
+}
 
 init();

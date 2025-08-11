@@ -11,7 +11,7 @@
 
   <main class="wrap">
     <section class="panel controls">
-      <input id="file" type="file" accept="image/*" />
+      <input id="file" type="file" accept="image/*"/>
       <label>Colors (≤5) <input id="colors" type="number" min="2" max="5" value="4"/></label>
       <label><input id="removeBg" type="checkbox" checked/> Remove background</label>
       <label><input id="outline" type="checkbox" checked/> Outline</label>
@@ -25,8 +25,8 @@
       <label>Density (mm) <input id="density" type="number" step="0.05" value="0.40"/></label>
 
       <button id="process" disabled>Process</button>
-      <a id="download" class="btn disabled" download="design.dst">Download .DST</a>
-      <p id="status" class="status">Upload a JPG/PNG to begin.</p>
+      <a id="download" class="btn disabled" download="design.dst" href="#">Download .DST</a>
+      <p id="status" class="status">Upload a JPG/PNG/HEIC to begin.</p>
     </section>
 
     <section class="grid">
@@ -40,14 +40,13 @@
         <ul>
           <li>Best with logo‑style art (3‑5 colors).</li>
           <li>Simple hatch fill + optional outline.</li>
-          <li>Exports Tajima <b>.DST</b>. (.PES export can be added later.)</li>
+          <li>Exports Tajima <b>.DST</b>. (.PES can be added next.)</li>
         </ul>
       </div>
     </section>
   </main>
 
   <footer class="foot">© <span id="year"></span> Loomabelle</footer>
-  <script type="module" src="./app.js?v=5"></script>
-  <script>document.getElementById('status')?.insertAdjacentText('beforeend',' — JS OK');</script>
+  <script type="module" src="./app.js?v=9"></script>
 </body>
 </html>

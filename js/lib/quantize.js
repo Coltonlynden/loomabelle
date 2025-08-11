@@ -1,12 +1,55 @@
 // js/lib/quantize.js
 import { log } from './ui.js';
 
-/**
- * Progressive median-cut quantization in a Web Worker with progress.
- * We transfer raw buffers (ArrayBuffer) instead of ImageData to avoid huge structured clones.
- * Falls back to main-thread if workers are blocked.
- */
+/** ----------------------------------------------------------------
+ * sampleDominant(canvas, maxK)
+ * Simple k-means-ish dominant color sampler for seeding UI pickers.
+ * ---------------------------------------------------------------- */
+export function sampleDominant(canvas, maxK = 6){
+  const W = canvas.width, H = canvas.height, ctx = canvas.getContext('2d');
+  const step = Math.max(1, Math.floor(Math.sqrt((W*H) / 20000)));
+  const data = ctx.getImageData(0,0,W,H).data;
+  const pts = [];
+  for(let y=0;y<H;y+=step){
+    const row = y*W;
+    for(let x=0;x<W;x+=step){
+      const i = (row + x) * 4;
+      pts.push([data[i], data[i+1], data[i+2]]);
+    }
+  }
+  const k = Math.min(maxK, Math.max(1, pts.length));
+  const centers = [ pts[Math.floor(Math.random()*pts.length)] ];
+  while(centers.length < k){
+    let best=null, bd=-1;
+    for(const p of pts){
+      let d=1e9;
+      for(const c of centers){ const dd=(p[0]-c[0])**2+(p[1]-c[1])**2+(p[2]-c[2])**2; if(dd<d) d=dd; }
+      if(d>bd){ bd=d; best=p; }
+    }
+    centers.push(best.slice());
+  }
+  for(let it=0; it<6; it++){
+    const sum = Array.from({length:k}, ()=>[0,0,0,0]);
+    for(const p of pts){
+      let bi=0, bd=1e12;
+      for(let i=0;i<k;i++){
+        const c=centers[i]; const d=(p[0]-c[0])**2+(p[1]-c[1])**2+(p[2]-c[2])**2;
+        if(d<bd){ bd=d; bi=i; }
+      }
+      const s=sum[bi]; s[0]+=p[0]; s[1]+=p[1]; s[2]+=p[2]; s[3]++;
+    }
+    for(let i=0;i<k;i++){ const s=sum[i]; if(s[3]) centers[i]=[ (s[0]/s[3])|0, (s[1]/s[3])|0, (s[2]/s[3])|0 ]; }
+  }
+  const uniq=[];
+  for(const c of centers){ if(!uniq.some(u=>Math.hypot(u[0]-c[0],u[1]-c[1],u[2]-c[2])<18)) uniq.push(c); }
+  return uniq.sort((a,b)=>(0.2126*a[0]+0.7152*a[1]+0.0722*a[2])-(0.2126*b[0]+0.7152*b[1]+0.0722*b[2]));
+}
 
+/** ----------------------------------------------------------------
+ * quantizeSafe(imgData, k, mask, onProgress)
+ * Progressive median-cut in a Worker (transfer raw buffers), with yieldy fallback.
+ * onProgress(p) receives 0..100 updates (we use ~18..99 in app.js).
+ * ---------------------------------------------------------------- */
 let WORKER_URL = null;
 
 function makeWorkerURL(){
@@ -14,7 +57,6 @@ function makeWorkerURL(){
   const src = `
   let data=null, W=0, H=0, mask=null;
 
-  // Utility: split along longest axis
   function splitBox(pts, lo, hi){
     let rmin=255,rmax=0,gmin=255,gmax=0,bmin=255,bmax=0;
     for(let i=lo;i<hi;i++){
@@ -26,7 +68,6 @@ function makeWorkerURL(){
     }
     const dr=rmax-rmin,dg=gmax-gmin,db=bmax-bmin;
     const ch=(dr>=dg&&dr>=db)?0:(dg>=db?1:2);
-    // in-place sort slice by chosen channel (Schwartzian transform to avoid costly lambda)
     const slice = [];
     for(let i=lo;i<hi;i++){ const j=pts[i]; slice.push([data[j+ch], j]); }
     slice.sort((A,B)=>A[0]-B[0]);
@@ -53,9 +94,8 @@ function makeWorkerURL(){
 
   function indexImage(palette, k){
     const indexed = new Uint8Array(W*H).fill(255);
-    // process by rows in chunks to yield back to event loop
     const CHUNK = Math.max(16, Math.floor(H/60));
-    const pal = palette; // Uint8
+    const pal = palette;
     function workRow(y0){
       const yMax = Math.min(H, y0 + CHUNK);
       for(let y=y0; y<yMax; y++){
@@ -89,7 +129,6 @@ function makeWorkerURL(){
   onmessage = (e)=>{
     const { cmd } = e.data;
     if (cmd === 'init'){
-      // receive raw buffers as transferables
       const { width, height, rgbaBuffer, maskBuffer } = e.data;
       W = width; H = height;
       data = new Uint8ClampedArray(rgbaBuffer);
@@ -99,10 +138,8 @@ function makeWorkerURL(){
     }
     if (cmd === 'quantize'){
       const { k } = e.data;
-
-      // Build point index list (skip masked-out pixels) in chunks with progress up to 50
       const pts = new Uint32Array(W*H); let n=0;
-      const STEP = Math.max(1, Math.floor(Math.sqrt((W*H)/100000))); // sample to reduce load on very large images
+      const STEP = Math.max(1, Math.floor(Math.sqrt((W*H)/100000)));
       for(let y=0;y<H;y+=STEP){
         const row=y*W;
         for(let x=0;x<W;x+=STEP){
@@ -115,7 +152,6 @@ function makeWorkerURL(){
       if (n===0){ postMessage({err:'empty'}); return; }
       const ptsView = pts.subarray(0,n);
 
-      // Build ranges
       let ranges = [[0,n]];
       while (ranges.length < k){
         const r = ranges.shift();
@@ -129,7 +165,6 @@ function makeWorkerURL(){
       const palette = buildPalette(ptsView, ranges);
       postMessage({palette, k});
 
-      // Now index whole image progressively
       indexImage(palette, Math.min(k, ranges.length));
     }
   };
@@ -139,18 +174,17 @@ function makeWorkerURL(){
 }
 
 export async function quantizeSafe(imgData, k, mask, onProgress){
-  // Prefer worker
   try{
     const url = makeWorkerURL();
-    const w = new Worker(url);
+    const w = new Worker(url); // classic worker
 
     const W = imgData.width, H = imgData.height;
-    const rgba = imgData.data; // Uint8ClampedArray
-    const rgbaBuf = rgba.buffer.slice(0); // copy to transferable buffer
+    const rgba = imgData.data;
+    const rgbaBuf = rgba.buffer.slice(0); // transferable copy
     const maskBuf = mask ? mask.buffer.slice(0) : null;
 
     const p = new Promise((resolve, reject)=>{
-      let palette=null, indexed=null;
+      let palette=null;
       w.onmessage = (e)=>{
         const d = e.data;
         if (d.progress != null && onProgress) onProgress(d.progress);
@@ -158,14 +192,12 @@ export async function quantizeSafe(imgData, k, mask, onProgress){
         if (d.ready) return;
         if (d.palette){ palette = d.palette; return; }
         if (d.indexed){
-          indexed = d.indexed;
-          resolve({ indexed, palette: paletteToArray(palette), W, H });
+          resolve({ indexed: d.indexed, palette: paletteToArray(palette), W, H });
         }
       };
       w.onerror = reject;
     });
 
-    // init then quantize
     w.postMessage({cmd:'init', width:W, height:H, rgbaBuffer:rgbaBuf, maskBuffer:maskBuf}, maskBuf ? [rgbaBuf, maskBuf] : [rgbaBuf]);
     w.postMessage({cmd:'quantize', k});
     const out = await p;
@@ -174,7 +206,6 @@ export async function quantizeSafe(imgData, k, mask, onProgress){
 
   }catch(err){
     log('Worker blocked or failed; using main thread quantization','warn');
-    // Fallback: main-thread simplified quantize with small sampling
     return medianCutQuantizeMain(imgData, k, mask, onProgress);
   }
 }
@@ -185,10 +216,9 @@ function paletteToArray(palUint){
   return out;
 }
 
-/*** Main-thread fallback with yields ***/
+/** Main-thread fallback with yields */
 function medianCutQuantizeMain(imgData, k, mask, onProgress){
   const W=imgData.width,H=imgData.height,data=imgData.data;
-  // sample points to avoid lock
   const STEP = Math.max(1, Math.floor(Math.sqrt((W*H)/100000)));
   const pts=[];
   for(let y=0;y<H;y+=STEP){
@@ -236,8 +266,8 @@ function medianCutQuantizeMain(imgData, k, mask, onProgress){
   }
   indexChunk(0);
   return new Promise(res=>{
-    // crude poll until filled; in practice completes right after last chunk
     const t=setInterval(()=>{
+      // crude completion check; resolves when last chunk finished
       if (indexed[0]!==255 || indexed.indexOf(255)===-1){ clearInterval(t); res({indexed, palette, W, H}); }
     }, 30);
   });

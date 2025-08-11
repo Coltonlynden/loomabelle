@@ -2,21 +2,19 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Loomabelle — Embroidery Maker</title>
 <style>
-:root{--bg:#0b0c10;--ink:#e9ecf1;--muted:#aab2bf;--line:#1f2330;--brand:#6b4eff;--accent:#28c76f}
+:root{--bg:#0b0c10;--ink:#e9ecf1;--muted:#aab2bf;--line:#1f2330;--brand:#6b4eff;}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
 .hero{padding:28px 16px;text-align:center;font-weight:800;font-size:42px;background:var(--brand)}
 .wrap{max-width:1100px;margin:18px auto;padding:0 16px}
 .panel{background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:14px;padding:14px}
 .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
-.controls input[type="number"], .controls input[type="range"], .controls select{
-  background:#11131a;color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:6px 10px}
+.controls input[type="number"],.controls input[type="range"],.controls select{background:#11131a;color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:6px 10px}
 button,.btn{padding:10px 14px;border-radius:10px;border:1px solid var(--line);background:#1a1f2b;color:var(--ink);text-decoration:none;cursor:pointer;font-weight:600}
 button:disabled,.btn.disabled{opacity:.6;cursor:not-allowed}
-.btn-toggle{background:#121523}
 .grid{display:grid;grid-template-columns:1.1fr .9fr;gap:16px;margin-top:14px}
 @media(max-width:900px){.grid{grid-template-columns:1fr}}
 .frame{border:1px dashed #2b3142;border-radius:12px;background:#0e1320;padding:10px}
@@ -29,12 +27,12 @@ canvas{max-width:100%;display:block}
 .tab{padding:10px 14px;border-radius:10px;border:1px solid var(--line);background:#141a2a;cursor:pointer}
 .tab.active{background:#1f2740;border-color:#3b4360}
 .hidden{display:none}
-.pbar{width:100%;height:10px;background:#111522;border:1px solid #243; border-radius:999px; overflow:hidden}
+.pbar{width:100%;height:10px;background:#111522;border:1px solid #243;border-radius:999px;overflow:hidden}
 .pbar>span{display:block;height:100%;background:linear-gradient(90deg,#5e8bff,#8f67ff);width:0%}
 .color-row{display:flex;gap:6px;flex-wrap:wrap}
 .color-row input[type="color"]{width:38px;height:32px;border:1px solid #333;border-radius:6px;background:#000;padding:0}
 .small{font-size:13px;color:var(--muted)}
-.sep{height:1px;background:#1e2432;margin:10px 0}
+.sep{height:1px;background:#1e2432;margin:10px 0;flex-basis:100%}
 .badge{font-size:12px;padding:4px 8px;border:1px solid #2c3550;border-radius:999px;background:#12172a}
 </style>
 </head>
@@ -49,7 +47,7 @@ canvas{max-width:100%;display:block}
     <div class="tab" id="tabDraw">Draw</div>
   </div>
 
-  <!-- Upload panel -->
+  <!-- Upload -->
   <section class="panel" id="panelUpload">
     <div class="controls">
       <input id="file" type="file" accept="image/*"/>
@@ -57,7 +55,7 @@ canvas{max-width:100%;display:block}
       <label class="badge"><input id="autoColors" type="checkbox" checked/> Auto colors</label>
       <div id="manualColors" class="color-row hidden"></div>
 
-      <span class="sep" style="flex-basis:100%"></span>
+      <div class="sep"></div>
 
       <label class="badge"><input id="autoMode" type="checkbox" checked/> Auto embroider</label>
       <div id="adv" class="controls">
@@ -85,7 +83,7 @@ canvas{max-width:100%;display:block}
     <p id="status" class="status">Upload a JPG/PNG/HEIC to begin.</p>
   </section>
 
-  <!-- Draw panel -->
+  <!-- Draw (handwriting) -->
   <section class="panel hidden" id="panelDraw">
     <div class="controls">
       <span class="badge">Handwriting canvas</span>
@@ -95,9 +93,7 @@ canvas{max-width:100%;display:block}
       <button id="dUse">Use for Embroidery</button>
       <span class="small">Tip: write big, high contrast.</span>
     </div>
-    <div class="frame">
-      <canvas id="draw" width="900" height="600" style="touch-action:none;background:#fff"></canvas>
-    </div>
+    <div class="frame"><canvas id="draw" width="900" height="600" style="touch-action:none;background:#fff"></canvas></div>
   </section>
 
   <section class="grid">
@@ -123,184 +119,142 @@ canvas{max-width:100%;display:block}
 </main>
 <footer class="foot">© <span id="year"></span> Loomabelle</footer>
 
-<!-- All JS inline so nothing can 404 -->
 <script>
-/* ========= Helpers & DOM ========= */
-const $ = s=>document.querySelector(s);
-$('#year').textContent = new Date().getFullYear();
+/* ========== helpers & DOM ========== */
+const $=s=>document.querySelector(s);
+$('#year').textContent=new Date().getFullYear();
 const setStatus=(m,cls='')=>{const el=$('#status'); el.textContent=m; el.className='status '+cls;};
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-const sleep = ms => new Promise(r=>setTimeout(r,ms));
-function rgbToHex([r,g,b]){return '#'+[r,g,b].map(x=>x.toString(16).padStart(2,'0')).join('');}
-function hexToRgb(hex){const m=hex.replace('#','');return [parseInt(m.slice(0,2),16),parseInt(m.slice(2,4),16),parseInt(m.slice(4,6),16)];}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const rgbToHex=([r,g,b])=>'#'+[r,g,b].map(x=>x.toString(16).padStart(2,'0')).join('');
+const hexToRgb=hex=>{const m=hex.replace('#','');return [parseInt(m.slice(0,2),16),parseInt(m.slice(2,4),16),parseInt(m.slice(4,6),16)];};
+function maskActive(mask){ if(!mask) return false; for(let i=0;i<mask.length;i++) if(mask[i]) return true; return false; }
 
-/* ========= Tabs ========= */
+/* ========== tabs ========== */
 const tabUpload=$('#tabUpload'), tabDraw=$('#tabDraw'), panelUpload=$('#panelUpload'), panelDraw=$('#panelDraw');
-tabUpload.onclick=()=>{tabUpload.classList.add('active'); tabDraw.classList.remove('active'); panelUpload.classList.remove('hidden'); panelDraw.classList.add('hidden');};
-tabDraw.onclick=()=>{tabDraw.classList.add('active'); tabUpload.classList.remove('active'); panelDraw.classList.remove('hidden'); panelUpload.classList.add('hidden');};
+tabUpload.onclick=()=>{tabUpload.classList.add('active');tabDraw.classList.remove('active');panelUpload.classList.remove('hidden');panelDraw.classList.add('hidden');};
+tabDraw.onclick=()=>{tabDraw.classList.add('active');tabUpload.classList.remove('active');panelDraw.classList.remove('hidden');panelUpload.classList.add('hidden');};
 
-/* ========= Build manual color pickers ========= */
+/* ========== color pickers ========== */
 function rebuildColorPickers(){
-  const k = clamp(+$('#colors').value||4,2,10);
-  const cont = $('#manualColors'); cont.innerHTML='';
-  for(let i=0;i<k;i++){
-    const inp = document.createElement('input'); inp.type='color'; inp.value = ['#000000','#ffffff','#ff0000','#00ff00','#0000ff','#ffff00','#ff00ff','#00ffff','#888888','#ffaa00'][i] || '#888888';
-    inp.dataset.idx=i; cont.appendChild(inp);
-  }
+  const k=clamp(+$('#colors').value||4,2,10);
+  const cont=$('#manualColors'); cont.innerHTML='';
+  const defaults=['#000000','#ffffff','#ff0000','#00ff00','#0000ff','#ffff00','#ff00ff','#00ffff','#888888','#ffaa00'];
+  for(let i=0;i<k;i++){const inp=document.createElement('input');inp.type='color';inp.value=defaults[i]||'#888888';cont.appendChild(inp);}
 }
-$('#colors').addEventListener('input', ()=>{rebuildColorPickers();});
-$('#autoColors').addEventListener('change', ()=>{
-  const on = $('#autoColors').checked;
-  $('#manualColors').classList.toggle('hidden', on);
-});
+$('#colors').addEventListener('input',rebuildColorPickers);
+$('#autoColors').addEventListener('change',()=>$('#manualColors').classList.toggle('hidden',$('#autoColors').checked));
 rebuildColorPickers();
 
-/* ========= Auto/Manual settings toggle ========= */
-function applyModeVisibility(){
-  const auto = $('#autoMode').checked;
-  $('#adv').style.display = auto ? 'none' : 'flex';
-}
-$('#autoMode').addEventListener('change', applyModeVisibility);
-applyModeVisibility();
+/* ========== auto/manual UI ========== */
+function applyModeVisibility(){ $('#adv').style.display=$('#autoMode').checked?'none':'flex'; }
+$('#autoMode').addEventListener('change',applyModeVisibility); applyModeVisibility();
 
-/* ========= Elements ========= */
+/* ========== elements ========== */
 const fileInput=$('#file'), processBtn=$('#process'), dlDst=$('#download'), dlPal=$('#downloadPalette');
-const sizePctRange=$('#sizePct'), sizeOut=$('#sizeOut');
-sizePctRange.addEventListener('input', ()=> sizeOut.textContent=sizePctRange.value+'%'); sizeOut.textContent=sizePctRange.value+'%';
+const sizePctRange=$('#sizePct'), sizeOut=$('#sizeOut'); sizeOut.textContent=sizePctRange.value+'%';
+sizePctRange.oninput=()=>sizeOut.textContent=sizePctRange.value+'%';
 const paint=$('#paint'), pctx=paint.getContext('2d',{willReadFrequently:true});
 const brushRange=$('#brush'), eraser=$('#eraser'), selectToggle=$('#selectToggle'), clearMaskBtn=$('#clearMask');
 const preview=$('#preview'), gPrev=preview.getContext('2d');
 const bar=$('#bar');
 
-/* ========= Draw canvas ========= */
+/* ========== draw canvas (handwriting) ========== */
 const drawCv=$('#draw'), dctx=drawCv.getContext('2d',{willReadFrequently:true});
 dctx.lineCap='round'; dctx.lineJoin='round'; dctx.lineWidth=10; dctx.strokeStyle='#000';
 let drawing=false;
-function dXY(e){const r=drawCv.getBoundingClientRect(); const x=(e.touches?e.touches[0].clientX:e.clientX)-r.left; const y=(e.touches?e.touches[0].clientY:e.clientY)-r.top; return [x,y];}
-function dStart(e){drawing=true; const [x,y]=dXY(e); dctx.beginPath(); dctx.moveTo(x,y); e.preventDefault();}
-function dMove(e){ if(!drawing) return; const [x,y]=dXY(e); dctx.lineTo(x,y); dctx.stroke(); e.preventDefault();}
-function dEnd(){ drawing=false; }
-drawCv.addEventListener('mousedown', dStart); drawCv.addEventListener('mousemove', dMove); window.addEventListener('mouseup', dEnd);
-drawCv.addEventListener('touchstart', dStart, {passive:false}); drawCv.addEventListener('touchmove', dMove, {passive:false}); window.addEventListener('touchend', dEnd);
-$('#dBrush').oninput = e=>{ dctx.lineWidth = +e.target.value; };
-$('#dColor').oninput = e=>{ dctx.strokeStyle = e.target.value; };
-$('#dClear').onclick = ()=>{ dctx.fillStyle='#fff'; dctx.fillRect(0,0,drawCv.width,drawCv.height); dctx.fillStyle='#000'; };
-$('#dClear').click(); // white background
-$('#dUse').onclick = ()=>{
-  // Take the drawing and treat as uploaded image
-  work.width=drawCv.width; work.height=drawCv.height; wctx.clearRect(0,0,work.width,work.height); wctx.drawImage(drawCv,0,0);
-  prepareAfterLoad(); setStatus('Drawing ready. You can paint subject or Process.', 'ok');
-};
+function dXY(e){const r=drawCv.getBoundingClientRect();const x=(e.touches?e.touches[0].clientX:e.clientX)-r.left;const y=(e.touches?e.touches[0].clientY:e.clientY)-r.top;return [x,y];}
+function dStart(e){drawing=true;const [x,y]=dXY(e);dctx.beginPath();dctx.moveTo(x,y);e.preventDefault();}
+function dMove(e){if(!drawing)return;const [x,y]=dXY(e);dctx.lineTo(x,y);dctx.stroke();e.preventDefault();}
+function dEnd(){drawing=false;}
+drawCv.addEventListener('mousedown',dStart);drawCv.addEventListener('mousemove',dMove);window.addEventListener('mouseup',dEnd);
+drawCv.addEventListener('touchstart',dStart,{passive:false});drawCv.addEventListener('touchmove',dMove,{passive:false});window.addEventListener('touchend',dEnd);
+$('#dBrush').oninput=e=>{dctx.lineWidth=+e.target.value;}; $('#dColor').oninput=e=>{dctx.strokeStyle=e.target.value;};
+$('#dClear').onclick=()=>{dctx.fillStyle='#fff';dctx.fillRect(0,0,drawCv.width,drawCv.height);dctx.fillStyle='#000';}; $('#dClear').click();
+$('#dUse').onclick=()=>{work.width=drawCv.width;work.height=drawCv.height;wctx.clearRect(0,0,work.width,work.height);wctx.drawImage(drawCv,0,0);prepareAfterLoad();setStatus('Drawing ready. You can paint subject or Process.','ok');};
 
-/* ========= Working canvases ========= */
+/* ========== working canvas ========== */
 const work=document.createElement('canvas'), wctx=work.getContext('2d',{willReadFrequently:true});
 const HOOP_MM={ '4x4':{w:100,h:100,r:12}, '5x7':{w:130,h:180,r:12} };
 let img=null, userMask=null, painting=false;
 
-/* ========= HEIC support ========= */
+/* ========== heic support ========== */
 async function heicToJpeg(file){
-  if(!window.heic2any){
-    await new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js'; s.onload=res; s.onerror=()=>rej(new Error('heic2any load fail')); document.head.appendChild(s); });
-  }
-  const out=await window.heic2any({blob:file,toType:'image/jpeg',quality:0.92}); const b=Array.isArray(out)?out[0]:out;
+  if(!window.heic2any){await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';s.onload=res;s.onerror=()=>rej(new Error('heic2any load'));document.head.appendChild(s);});}
+  const out=await window.heic2any({blob:file,toType:'image/jpeg',quality:0.92});const b=Array.isArray(out)?out[0]:out;
   return new File([b],(file.name||'image').replace(/\.\w+$/,'')+'.jpg',{type:'image/jpeg'});
 }
-function loadImageFromFile(file){
-  return new Promise((resolve,reject)=>{ const url=URL.createObjectURL(file); const im=new Image(); im.onload=()=>{URL.revokeObjectURL(url); resolve(im)}; im.onerror=reject; im.src=url; });
-}
+function loadImageFromFile(file){return new Promise((resolve,reject)=>{const url=URL.createObjectURL(file);const im=new Image();im.onload=()=>{URL.revokeObjectURL(url);resolve(im)};im.onerror=reject;im.src=url;});}
 
-/* ========= Subject painting ========= */
+/* ========== subject painting ========== */
 function ensureMask(){ if(!userMask) userMask=new Uint8Array(paint.width*paint.height); }
-function redrawPaint(){
-  pctx.clearRect(0,0,paint.width,paint.height);
-  pctx.drawImage(work,0,0,paint.width,paint.height);
-  if(!userMask) return;
-  const W=paint.width,H=paint.height, imgD=pctx.createImageData(W,H);
-  for(let i=0;i<W*H;i++){ if(userMask[i]){ imgD.data[i*4]=255; imgD.data[i*4+3]=80; } }
-  pctx.putImageData(imgD,0,0);
-}
-function toCanvasXY(e){
-  const r=paint.getBoundingClientRect();
-  const x=(e.touches?e.touches[0].clientX:e.clientX)-r.left;
-  const y=(e.touches?e.touches[0].clientY:e.clientY)-r.top;
-  return [ Math.round(x*(paint.width/r.width)), Math.round(y*(paint.height/r.height)) ];
-}
-function stamp(cx,cy,rad,on){
-  ensureMask(); const W=paint.width,H=paint.height,r2=rad*rad;
-  for(let y=Math.max(0,cy-rad);y<Math.min(H,cy+rad);y++){
-    const dy=y-cy; for(let x=Math.max(0,cx-rad);x<Math.min(W,cx+rad);x++){
-      const dx=x-cx; if(dx*dx+dy*dy<=r2) userMask[y*W+x]=on?1:0;
-    }
-  }
-  redrawPaint();
-}
-function startPaint(e){ if(selectToggle.dataset.active!=='1') return; painting=true; const [x,y]=toCanvasXY(e); stamp(x,y,+brushRange.value,!eraser.checked); e.preventDefault();}
-function movePaint(e){ if(!painting) return; const [x,y]=toCanvasXY(e); stamp(x,y,+brushRange.value,!eraser.checked); e.preventDefault();}
-function endPaint(){ painting=false; }
-paint.addEventListener('mousedown',startPaint); paint.addEventListener('mousemove',movePaint); window.addEventListener('mouseup',endPaint);
-paint.addEventListener('touchstart',startPaint,{passive:false}); paint.addEventListener('touchmove',movePaint,{passive:false}); window.addEventListener('touchend',endPaint);
-selectToggle.onclick=()=>{ if(selectToggle.dataset.active==='1'){ selectToggle.dataset.active='0'; selectToggle.textContent='✍️ Select subject'; } else { selectToggle.dataset.active='1'; selectToggle.textContent='✅ Painting (drag)'; } };
-clearMaskBtn.onclick=()=>{ if(userMask){ userMask.fill(0); redrawPaint(); } };
+function redrawPaint(){ pctx.clearRect(0,0,paint.width,paint.height); pctx.drawImage(work,0,0,paint.width,paint.height);
+  if(!userMask) return; const W=paint.width,H=paint.height,imgD=pctx.createImageData(W,H);
+  for(let i=0;i<W*H;i++){ if(userMask[i]){imgD.data[i*4]=255;imgD.data[i*4+3]=80;} } pctx.putImageData(imgD,0,0); }
+function toCanvasXY(e){const r=paint.getBoundingClientRect();const x=(e.touches?e.touches[0].clientX:e.clientX)-r.left;const y=(e.touches?e.touches[0].clientY:e.clientY)-r.top;return [Math.round(x*(paint.width/r.width)),Math.round(y*(paint.height/r.height))];}
+function stamp(cx,cy,rad,on){ensureMask();const W=paint.width,H=paint.height,r2=rad*rad;
+  for(let y=Math.max(0,cy-rad);y<Math.min(H,cy+rad);y++){const dy=y-cy;for(let x=Math.max(0,cx-rad);x<Math.min(W,cx+rad);x++){const dx=x-cx;if(dx*dx+dy*dy<=r2)userMask[y*W+x]=on?1:0;}}
+  redrawPaint();}
+function startPaint(e){if(selectToggle.dataset.active!=='1')return;painting=true;const [x,y]=toCanvasXY(e);stamp(x,y,+brushRange.value,!eraser.checked);e.preventDefault();}
+function movePaint(e){if(!painting)return;const [x,y]=toCanvasXY(e);stamp(x,y,+brushRange.value,!eraser.checked);e.preventDefault();}
+function endPaint(){painting=false;}
+paint.addEventListener('mousedown',startPaint);paint.addEventListener('mousemove',movePaint);window.addEventListener('mouseup',endPaint);
+paint.addEventListener('touchstart',startPaint,{passive:false});paint.addEventListener('touchmove',movePaint,{passive:false});window.addEventListener('touchend',endPaint);
+selectToggle.onclick=()=>{if(selectToggle.dataset.active==='1'){selectToggle.dataset.active='0';selectToggle.textContent='✍️ Select subject';}else{selectToggle.dataset.active='1';selectToggle.textContent='✅ Painting (drag)';}};
+clearMaskBtn.onclick=()=>{if(userMask){userMask.fill(0);redrawPaint();}};
 
-/* ========= After image/drawing ready ========= */
-function prepareAfterLoad(){
-  // Sync paint canvas to work size (1:1)
-  paint.width=work.width; paint.height=work.height; userMask=new Uint8Array(work.width*work.height); redrawPaint();
-  processBtn.disabled=false; selectToggle.disabled=false; clearMaskBtn.disabled=false;
-  dlDst.classList.add('disabled'); dlPal.classList.add('disabled');
-}
+/* ========== after load ========== */
+function prepareAfterLoad(){paint.width=work.width;paint.height=work.height;userMask=new Uint8Array(work.width*work.height);redrawPaint();
+  processBtn.disabled=false;selectToggle.disabled=false;clearMaskBtn.disabled=false;dlDst.classList.add('disabled');dlPal.classList.add('disabled');}
 
-/* ========= Upload handling ========= */
-fileInput.addEventListener('change', async ()=>{
+/* ========== upload handling ========== */
+fileInput.onchange=async()=>{
   const f=fileInput.files?.[0]; if(!f) return;
   try{
     setStatus('Loading image…');
     let chosen=f; const name=(f.name||'').toLowerCase(), mime=(f.type||'').toLowerCase();
-    if(mime.includes('heic')||mime.includes('heif')||name.endsWith('.heic')||name.endsWith('.heif')){
-      setStatus('Converting HEIC to JPEG…'); chosen=await heicToJpeg(f);
-    }
+    if(mime.includes('heic')||mime.includes('heif')||name.endsWith('.heic')||name.endsWith('.heif')){setStatus('Converting HEIC to JPEG…');chosen=await heicToJpeg(f);}
     const im=await loadImageFromFile(chosen); img=im;
     const maxSide=1200, s=Math.min(1,maxSide/Math.max(im.width,im.height));
     work.width=Math.round(im.width*s); work.height=Math.round(im.height*s);
     wctx.clearRect(0,0,work.width,work.height); wctx.drawImage(im,0,0,work.width,work.height);
     prepareAfterLoad(); setStatus(`Image ready (${work.width}×${work.height}). Optional: paint subject, then Process.`,'ok');
-  }catch(e){ console.error(e); setStatus('Could not read image. Try a JPG/PNG.','error'); }
-});
+  }catch(e){console.error(e);setStatus('Could not read image. Try a JPG/PNG.','error');}
+};
 
-/* ========= Quantization ========= */
+/* ========== quantization & stitch planning ========== */
 function reduceColorsKMeans(ctx,W,H,k,removeBg,mask){
   const {data}=ctx.getImageData(0,0,W,H); const N=W*H; const src=new Uint8Array(data.buffer);
   const pts=new Float32Array(N*3);
-  for(let i=0;i<N;i++){ pts[i*3]=src[i*4]; pts[i*3+1]=src[i*4+1]; pts[i*3+2]=src[i*4+2]; }
+  for(let i=0;i<N;i++){pts[i*3]=src[i*4];pts[i*3+1]=src[i*4+1];pts[i*3+2]=src[i*4+2];}
   const centers=new Float32Array(k*3);
-  for(let c=0;c<k;c++){ const j=Math.floor((c+0.5)*N/k); centers[c*3]=pts[j*3]; centers[c*3+1]=pts[j*3+1]; centers[c*3+2]=pts[j*3+2]; }
+  for(let c=0;c<k;c++){const j=Math.floor((c+0.5)*N/k);centers[c*3]=pts[j*3];centers[c*3+1]=pts[j*3+1];centers[c*3+2]=pts[j*3+2];}
   const assign=new Uint16Array(N);
   for(let it=0;it<6;it++){
     for(let i=0;i<N;i++){
       let best=0,bd=1e12,r=pts[i*3],g=pts[i*3+1],b=pts[i*3+2];
-      for(let c=0;c<k;c++){ const cr=centers[c*3],cg=centers[c*3+1],cb=centers[c*3+2]; const d=(r-cr)**2+(g-cg)**2+(b-cb)**2; if(d<bd){bd=d;best=c;} }
+      for(let c=0;c<k;c++){const cr=centers[c*3],cg=centers[c*3+1],cb=centers[c*3+2];const d=(r-cr)**2+(g-cg)**2+(b-cb)**2;if(d<bd){bd=d;best=c;}}
       assign[i]=best;
     }
     const sum=new Float32Array(k*4);
-    for(let i=0;i<N;i++){ const c=assign[i]; sum[c*4]+=pts[i*3]; sum[c*4+1]+=pts[i*3+1]; sum[c*4+2]+=pts[i*3+2]; sum[c*4+3]++; }
-    for(let c=0;c<k;c++){ const cnt=sum[c*4+3]||1; centers[c*3]=sum[c*4]/cnt; centers[c*3+1]=sum[c*4+1]/cnt; centers[c*3+2]=sum[c*4+2]/cnt; }
+    for(let i=0;i<N;i++){const c=assign[i];sum[c*4]+=pts[i*3];sum[c*4+1]+=pts[i*3+1];sum[c*4+2]+=pts[i*3+2];sum[c*4+3]++;}
+    for(let c=0;c<k;c++){const cnt=sum[c*4+3]||1;centers[c*3]=sum[c*4]/cnt;centers[c*3+1]=sum[c*4+1]/cnt;centers[c*3+2]=sum[c*4+2]/cnt;}
   }
-  // choose background from borders
   let bg=-1;
   if(removeBg){
     const counts=new Uint32Array(k), bump=(x,y)=>counts[assign[y*W+x]]++;
-    for(let x=0;x<W;x++){ bump(x,0); bump(x,H-1); } for(let y=0;y<H;y++){ bump(0,y); bump(W-1,y); }
-    let m=0,mi=0; for(let c=0;c<k;c++) if(counts[c]>m){m=counts[c]; mi=c;} bg=mi;
+    for(let x=0;x<W;x++){bump(x,0);bump(x,H-1);}for(let y=0;y<H;y++){bump(0,y);bump(W-1,y);}
+    let m=0,mi=0;for(let c=0;c<k;c++) if(counts[c]>m){m=counts[c];mi=c;} bg=mi;
   }
   const used=new Set(); const indexed=new Uint8Array(N);
   for(let i=0;i<N;i++){
-    if(mask && mask[i]===0){ indexed[i]=255; continue; } // outside painted area
-    const c=assign[i]; if(c===bg){ indexed[i]=255; } else { indexed[i]=c; used.add(c); }
+    if(mask && mask[i]===0){indexed[i]=255;continue;} // outside selection
+    const c=assign[i]; if(c===bg){indexed[i]=255;} else {indexed[i]=c;used.add(c);}
   }
   const list=[...used].sort((a,b)=>a-b), remap=new Map(); list.forEach((c,i)=>remap.set(c,i));
   const palette=list.map(c=>[centers[c*3]|0,centers[c*3+1]|0,centers[c*3+2]|0]);
   for(let i=0;i<N;i++) if(indexed[i]!==255) indexed[i]=remap.get(indexed[i]);
-  return { indexed, palette };
+  return {indexed,palette};
 }
 function reduceColorsFixedPalette(ctx,W,H,palette,mask){
   const {data}=ctx.getImageData(0,0,W,H); const N=W*H; const src=new Uint8Array(data.buffer);
@@ -309,128 +263,92 @@ function reduceColorsFixedPalette(ctx,W,H,palette,mask){
     if(mask && mask[i]===0){ indexed[i]=255; continue; }
     const r=src[i*4],g=src[i*4+1],b=src[i*4+2];
     let best=0,bd=1e12;
-    for(let c=0;c<palette.length;c++){ const [pr,pg,pb]=palette[c]; const d=(r-pr)**2+(g-pg)**2+(b-pb)**2; if(d<bd){bd=d;best=c;} }
+    for(let c=0;c<palette.length;c++){const [pr,pg,pb]=palette[c];const d=(r-pr)**2+(g-pg)**2+(b-pb)**2;if(d<bd){bd=d;best=c;}}
     indexed[i]=best;
   }
-  return { indexed, palette: palette.map(([r,g,b])=>[r,g,b]) };
+  return {indexed,palette:palette.map(x=>x.slice())};
 }
-function expandBbox(b,mask,W,H){
-  for(let y=0;y<H;y++){ const row=y*W; for(let x=0;x<W;x++) if(mask[row+x]){ if(x<b.minx)b.minx=x; if(y<b.miny)b.miny=y; if(x>b.maxx)b.maxx=x; if(y>b.maxy)b.maxy=y; } }
-  return b;
-}
-function erodeMask(mask,W,H,rPx){
-  if(rPx<=0) return mask; let cur=mask;
-  for(let t=0;t<rPx;t++){
-    const out=new Uint8Array(W*H);
-    for(let y=1;y<H-1;y++){ const row=y*W;
-      for(let x=1;x<W-1;x++){ if(!cur[row+x]) continue; let keep=true;
-        for(let dy=-1;dy<=1&&keep;dy++) for(let dx=-1;dx<=1;dx++) if(!cur[(y+dy)*W+(x+dx)]){keep=false;break;}
-        if(keep) out[row+x]=1;
-      }
-    }
-    cur=out;
-  }
-  return cur;
-}
-function marchingSquaresOutline(mask,W,H){
-  let sx=-1,sy=-1; for(let y=1;y<H-1&&sy<0;y++){ for(let x=1;x<W-1;x++){ if(mask[y*W+x] && !mask[y*W+(x-1)]){ sx=x; sy=y; break; } } }
-  if(sx<0) return []; const pts=[]; let x=sx,y=sy; const maxSteps=W*H*4;
-  for(let step=0;step<maxSteps;step++){
-    pts.push([x,y]);
-    const a=mask[(y-1)*W+(x-1)]?1:0, b=mask[(y-1)*W+(x)]?1:0, c=mask[(y)*W+(x-1)]?1:0, d=mask[(y)*W+(x)]?1:0;
-    const code=(a<<3)|(b<<2)|(c<<1)|d;
-    if(code===0){x++;} else if(code===1||code===3||code===9||code===11){x++;} else if(code===2||code===6||code===7||code===14){y++;} else if(code===4||code===12||code===13||code===8){x--;} else {y--;}
-    if(x===sx && y===sy && pts.length>12) break; x=Math.max(1,Math.min(W-2,x)); y=Math.max(1,Math.min(H-2,y));
-  }
-  const out=[]; for(let i=0;i<pts.length;i+=2) out.push(pts[i]); return out;
-}
+function expandBbox(b,mask,W,H){for(let y=0;y<H;y++){const row=y*W;for(let x=0;x<W;x++) if(mask[row+x]){if(x<b.minx)b.minx=x;if(y<b.miny)b.miny=y;if(x>b.maxx)b.maxx=x;if(y>b.maxy)b.maxy=y;}}return b;}
+function erodeMask(mask,W,H,rPx){if(rPx<=0)return mask;let cur=mask;
+  for(let t=0;t<rPx;t++){const out=new Uint8Array(W*H);
+    for(let y=1;y<H-1;y++){const row=y*W;
+      for(let x=1;x<W-1;x++){if(!cur[row+x])continue;let keep=true;
+        for(let dy=-1;dy<=1&&keep;dy++)for(let dx=-1;dx<=1;dx++)if(!cur[(y+dy)*W+(x+dx)]){keep=false;break;}
+        if(keep)out[row+x]=1;}}
+    cur=out;} return cur;}
+function marchingSquaresOutline(mask,W,H){let sx=-1,sy=-1;for(let y=1;y<H-1&&sy<0;y++){for(let x=1;x<W-1;x++){if(mask[y*W+x]&&!mask[y*W+(x-1)]){sx=x;sy=y;break;}}}
+  if(sx<0)return[];const pts=[];let x=sx,y=sy;const maxSteps=W*H*4;
+  for(let step=0;step<maxSteps;step++){pts.push([x,y]);
+    const a=mask[(y-1)*W+(x-1)]?1:0,b=mask[(y-1)*W+x]?1:0,c=mask[y*W+(x-1)]?1:0,d=mask[y*W+x]?1:0;const code=(a<<3)|(b<<2)|(c<<1)|d;
+    if(code===0){x++;}else if(code===1||code===3||code===9||code===11){x++;}else if(code===2||code===6||code===7||code===14){y++;}else if(code===4||code===12||code===13||code===8){x--;}else{y--;}
+    if(x===sx&&y===sy&&pts.length>12)break;x=Math.max(1,Math.min(W-2,x));y=Math.max(1,Math.min(H-2,y));}
+  const out=[];for(let i=0;i<pts.length;i+=2)out.push(pts[i]);return out;}
 function hatchSegmentsFromMask(mask,W,H,bbox,angleDeg,spacingPx,stepPx){
-  const segs=[]; const dir=[Math.cos(angleDeg*Math.PI/180),Math.sin(angleDeg*Math.PI/180)], nrm=[-dir[1],dir[0]];
-  const bw=bbox.maxx-bbox.minx, bh=bbox.maxy-bbox.miny; const cx=(bbox.minx+bbox.maxx)/2, cy=(bbox.miny+bbox.maxy)/2;
-  const half=Math.hypot(bw,bh)*0.75; const range=Math.ceil(Math.hypot(bw,bh)/spacingPx)+2;
-  for(let k=-range;k<=range;k++){
-    const off=k*spacingPx, px=cx+nrm[0]*off, py=cy+nrm[1]*off; let start=null;
-    for(let s=-half;s<=half;s+=stepPx){
-      const x=Math.round(px+dir[0]*s), y=Math.round(py+dir[1]*s);
+  const segs=[];const dir=[Math.cos(angleDeg*Math.PI/180),Math.sin(angleDeg*Math.PI/180)], nrm=[-dir[1],dir[0]];
+  const bw=bbox.maxx-bbox.minx,bh=bbox.maxy-bbox.miny;const cx=(bbox.minx+bbox.maxx)/2,cy=(bbox.miny+bbox.maxy)/2;
+  const half=Math.hypot(bw,bh)*0.75;const range=Math.ceil(Math.hypot(bw,bh)/spacingPx)+2;
+  for(let k=-range;k<=range;k++){const off=k*spacingPx,px=cx+nrm[0]*off,py=cy+nrm[1]*off;let start=null;
+    for(let s=-half;s<=half;s+=stepPx){const x=Math.round(px+dir[0]*s),y=Math.round(py+dir[1]*s);
       const inside=(x>=0&&y>=0&&x<W&&y<H)?mask[y*W+x]===1:false;
-      if(inside && !start) start=[x,y];
-      if((!inside || s>=half) && start){
-        const end=inside?[x,y]:[Math.round(px+dir[0]*(s-stepPx)),Math.round(py+dir[1]*(s-stepPx))];
-        if(Math.hypot(end[0]-start[0],end[1]-start[1])>=2) segs.push([start,end]); start=null;
-      }
-    }
-  }
-  return segs;
-}
-function lineStitch(out,aMM,bMM,maxStepMM){ const len=Math.hypot(bMM[0]-aMM[0],bMM[1]-aMM[1]); const steps=Math.max(1,Math.ceil(len/maxStepMM));
-  for(let i=1;i<=steps;i++){ const t=i/steps; out.push({x:aMM[0]+(bMM[0]-aMM[0])*t,y:aMM[1]+(bMM[1]-aMM[1])*t}); } }
-function runningOutline(stitches,ptsMM,maxStepMM=3){ if(!ptsMM.length) return; stitches.push({x:ptsMM[0][0],y:ptsMM[0][1],jump:true});
-  for(let i=1;i<=ptsMM.length;i++){ const a=ptsMM[i-1], b=ptsMM[i%ptsMM.length]; lineStitch(stitches,a,b,maxStepMM); } }
-function satinOutline(stitches,ptsMM,widthMM=0.8,stepMM=0.6){ if(ptsMM.length<3) return; const half=widthMM/2; let left=true;
+      if(inside&&!start)start=[x,y];
+      if((!inside||s>=half)&&start){const end=inside?[x,y]:[Math.round(px+dir[0]*(s-stepPx)),Math.round(py+dir[1]*(s-stepPx))];
+        if(Math.hypot(end[0]-start[0],end[1]-start[1])>=2)segs.push([start,end]);start=null;}}}
+  return segs;}
+function lineStitch(out,aMM,bMM,maxStepMM){const len=Math.hypot(bMM[0]-aMM[0],bMM[1]-aMM[1]);const steps=Math.max(1,Math.ceil(len/maxStepMM));
+  for(let i=1;i<=steps;i++){const t=i/steps;out.push({x:aMM[0]+(bMM[0]-aMM[0])*t,y:aMM[1]+(bMM[1]-aMM[1])*t});}}
+function runningOutline(stitches,ptsMM,maxStepMM=3){if(!ptsMM.length)return;stitches.push({x:ptsMM[0][0],y:ptsMM[0][1],jump:true});
+  for(let i=1;i<=ptsMM.length;i++){const a=ptsMM[i-1],b=ptsMM[i%ptsMM.length];lineStitch(stitches,a,b,maxStepMM);}}
+function satinOutline(stitches,ptsMM,widthMM=0.8,stepMM=0.6){if(ptsMM.length<3)return;const half=widthMM/2;let left=true;
   stitches.push({x:ptsMM[0][0],y:ptsMM[0][1],jump:true});
-  for(let i=1;i<ptsMM.length;i++){ const a=ptsMM[i-1], b=ptsMM[i]; const dx=b[0]-a[0], dy=b[1]-a[1]; const len=Math.hypot(dx,dy)||1; const nx=-dy/len, ny=dx/len; const seg=Math.max(1,Math.ceil(len/stepMM));
-    for(let k=0;k<seg;k++){ const t=k/seg; const cx=a[0]+dx*t, cy=a[1]+dy*t; const off=left?half:-half; stitches.push({x:cx+nx*off,y:cy+ny*off}); left=!left; } } }
+  for(let i=1;i<ptsMM.length;i++){const a=ptsMM[i-1],b=ptsMM[i];const dx=b[0]-a[0],dy=b[1]-a[1];const len=Math.hypot(dx,dy)||1;const nx=-dy/len,ny=dx/len;const seg=Math.max(1,Math.ceil(len/stepMM));
+    for(let k=0;k<seg;k++){const t=k/seg;const cx=a[0]+dx*t,cy=a[1]+dy*t;const off=left?half:-half;stitches.push({x:cx+nx*off,y:cy+ny*off});left=!left;}}}
 
-/* ========= Preview (colored) ========= */
-function drawPreviewColored(plan, hoop, sizePct){
-  const W=preview.width, H=preview.height; gPrev.clearRect(0,0,W,H);
-  const pad=20, hoopAspect=hoop.h/hoop.w;
-  let hoopW=W-2*pad, hoopH=hoopW*hoopAspect; if(hoopH>H-2*pad){ hoopH=H-2*pad; hoopW=hoopH/hoopAspect; }
+/* ========== preview (colored) ========== */
+function drawPreviewColored(plan,hoop,sizePct){
+  const W=preview.width,H=preview.height;gPrev.clearRect(0,0,W,H);
+  const pad=20, asp=hoop.h/hoop.w; let hoopW=W-2*pad, hoopH=hoopW*asp; if(hoopH>H-2*pad){hoopH=H-2*pad;hoopW=hoopH/asp;}
   const hx=(W-hoopW)/2, hy=(H-hoopH)/2, r=12;
-  gPrev.fillStyle='#111824'; gPrev.fillRect(0,0,W,H);
-  gPrev.strokeStyle='#334'; gPrev.lineWidth=2; gPrev.beginPath();
-  const rr=(x,y,w,h,rad)=>{gPrev.moveTo(x+rad,y); gPrev.arcTo(x+w,y,x+w,y+h,rad); gPrev.arcTo(x+w,y+h,x,y+h,rad); gPrev.arcTo(x,y+h,x,y,rad); gPrev.arcTo(x,y,x+w,y,rad);};
-  rr(hx,hy,hoopW,hoopH,r); gPrev.stroke();
-
-  // bbox in mm
+  gPrev.fillStyle='#111824';gPrev.fillRect(0,0,W,H);gPrev.strokeStyle='#334';gPrev.lineWidth=2;gPrev.beginPath();
+  const rr=(x,y,w,h,rad)=>{gPrev.moveTo(x+rad,y);gPrev.arcTo(x+w,y,x+w,y+h,rad);gPrev.arcTo(x+w,y+h,x,y+h,rad);gPrev.arcTo(x,y+h,x,y,rad);gPrev.arcTo(x,y,x+w,y,rad);};
+  rr(hx,hy,hoopW,hoopH,r);gPrev.stroke();
   let minx=Infinity,miny=Infinity,maxx=-Infinity,maxy=-Infinity;
-  for(const s of plan.stitches){ if(s.end||s.colorChange) continue; if(s.x<minx)minx=s.x; if(s.y<miny)miny=s.y; if(s.x>maxx)maxx=s.x; if(s.y>maxy)maxy=s.y; }
-  const scale = (sizePct/100) * Math.min( hoopW/hoop.w, hoopH/hoop.h );
-  const ox = W/2 - (minx+maxx)/2*scale;
-  const oy = H/2 - (miny+maxy)/2*scale;
-
-  let last=null, ci=0;
-  const toCss=rgb=>`rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
-  gPrev.lineWidth=1.2; gPrev.strokeStyle=toCss(plan.colors[0]||[220,220,220]);
+  for(const s of plan.stitches){if(s.end||s.colorChange)continue;if(s.x<minx)minx=s.x;if(s.y<miny)miny=s.y;if(s.x>maxx)maxx=s.x;if(s.y>maxy)maxy=s.y;}
+  const scale=(sizePct/100)*Math.min(hoopW/hoop.w,hoopH/hoop.h), ox=W/2-(minx+maxx)/2*scale, oy=H/2-(miny+maxy)/2*scale;
+  let last=null,ci=0; const toCss=rgb=>`rgb(${rgb[0]},${rgb[1]},${rgb[2]})`; gPrev.lineWidth=1.2; gPrev.strokeStyle=toCss(plan.colors[0]||[220,220,220]);
   for(const s of plan.stitches){
-    if(s.colorChange){ last=null; ci=Math.min(ci+1, plan.colors.length-1); gPrev.strokeStyle=toCss(plan.colors[ci]||[200,200,200]); continue; }
-    if(s.end) break; if(s.jump){ last={x:s.x,y:s.y}; continue; } if(!last){ last={x:s.x,y:s.y}; continue; }
-    gPrev.beginPath(); gPrev.moveTo(ox+last.x*scale, oy+last.y*scale); gPrev.lineTo(ox+s.x*scale, oy+s.y*scale); gPrev.stroke(); last={x:s.x,y:s.y};
+    if(s.colorChange){last=null;ci=Math.min(ci+1,plan.colors.length-1);gPrev.strokeStyle=toCss(plan.colors[ci]||[200,200,200]);continue;}
+    if(s.end)break; if(s.jump){last={x:s.x,y:s.y};continue;} if(!last){last={x:s.x,y:s.y};continue;}
+    gPrev.beginPath();gPrev.moveTo(ox+last.x*scale,oy+last.y*scale);gPrev.lineTo(ox+s.x*scale,oy+s.y*scale);gPrev.stroke();last={x:s.x,y:s.y};
   }
 }
 
-/* ========= DST writer ========= */
+/* ========== DST writer ========== */
 function writeDST(plan){
-  const recs=[]; let lx=0,ly=0; const to10th=mm=>Math.round(mm*10), clamp121=v=>Math.max(-121,Math.min(121,v));
+  const recs=[];let lx=0,ly=0;const to10th=mm=>Math.round(mm*10), clamp121=v=>Math.max(-121,Math.min(121,v));
   for(const s of plan.stitches){
-    if(s.end){ recs.push(0x00,0x00,0xF3); break; }
-    if(s.colorChange){ recs.push(0x00,0x00,0xC3); continue; }
+    if(s.end){recs.push(0x00,0x00,0xF3);break;}
+    if(s.colorChange){recs.push(0x00,0x00,0xC3);continue;}
     const dx=clamp121(to10th(s.x-lx)), dy=clamp121(to10th(s.y-ly)); lx=s.x; ly=s.y;
     const [b1,b2,b3]=pack(dx,dy,!!s.jump); recs.push(b1,b2,b3);
   }
-  const header=new Uint8Array(512).fill(0x20);
-  const put=(t,o)=>{ for(let i=0;i<t.length;i++) header[o+i]=t.charCodeAt(i); };
+  const header=new Uint8Array(512).fill(0x20), put=(t,o)=>{for(let i=0;i<t.length;i++)header[o+i]=t.charCodeAt(i);};
   put('LA:LOOMABELLE\n',0); put(`ST:${String(Math.floor(recs.length/3)).padStart(7,' ')}`,11);
   put(`CO:${String(Math.max(1,plan.colors.length)).padStart(7,' ')}`,24); put('+X  100\n-Y  100\n',52);
   put('AX+ 0\nAY+ 0\nMX+ 0\nMY+ 0\n',80); put('PD:******\n',232);
   const out=new Uint8Array(512+recs.length+1); out.set(header,0); out.set(new Uint8Array(recs),512); out[512+recs.length]=0x1A; return out.buffer;
 }
-function pack(dx,dy,jump){ let b1=0,b2=0,b3=0; const ax=Math.abs(dx), ay=Math.abs(dy);
+function pack(dx,dy,jump){let b1=0,b2=0,b3=0;const ax=Math.abs(dx),ay=Math.abs(dy);
   if(ax&1)b1|=1; if(ax&2)b1|=2; if(ax&4)b1|=4; if(ax&8)b2|=1; if(ax&16)b2|=2; if(ax&32)b2|=4; if(ax&64)b3|=1;
   if(ay&1)b1|=8; if(ay&2)b1|=16; if(ay&4)b1|=32; if(ay&8)b2|=8; if(ay&16)b2|=16; if(ay&32)b2|=32; if(ay&64)b3|=2;
-  if(dx<0)b3|=0x20; if(dy<0)b3|=0x40; if(jump)b3|=0x10; return [b1,b2,b3];
-}
+  if(dx<0)b3|=0x20; if(dy<0)b3|=0x40; if(jump)b3|=0x10; return [b1,b2,b3];}
 
-/* ========= PROCESS ========= */
-processBtn.addEventListener('click', async ()=>{
+/* ========== PROCESS ========== */
+processBtn.addEventListener('click',async()=>{
   if(!work.width) return;
-  processBtn.disabled=true; dlDst.classList.add('disabled'); dlPal.classList.add('disabled');
-  setStatus('Processing…'); bar.style.width='0%';
+  processBtn.disabled=true; dlDst.classList.add('disabled'); dlPal.classList.add('disabled'); setStatus('Processing…'); bar.style.width='0%';
 
-  const auto = $('#autoMode').checked;
-  const k = clamp(+$('#colors').value||4,2,10);
-  const autoCols = $('#autoColors').checked;
-  const fixedPalette = autoCols ? null : [...$('#manualColors').querySelectorAll('input[type="color"]')].slice(0,k).map(el=>hexToRgb(el.value));
+  const auto=$('#autoMode').checked, k=clamp(+$('#colors').value||4,2,10);
+  const fixedPalette = $('#autoColors').checked ? null : [...$('#manualColors').querySelectorAll('input[type="color"]')].slice(0,k).map(el=>hexToRgb(el.value));
 
   const removeBg = auto ? true : $('#removeBg').checked;
   const wantOutline = auto ? true : $('#outline').checked;
@@ -438,74 +356,49 @@ processBtn.addEventListener('click', async ()=>{
   const angleDeg = auto ? 45 : (+$('#angle').value||45);
   const densityMM = auto ? 0.40 : (+$('#density').value||0.40);
   const sizePct = auto ? 80 : (+$('#sizePct').value||80);
-
-  const W=work.width, H=work.height;
+  const W=work.width,H=work.height;
 
   try{
-    // 0–20%
     bar.style.width='10%'; await sleep(10);
-
-    // 1) color reduce
-    const res = fixedPalette ? reduceColorsFixedPalette(wctx,W,H,fixedPalette,userMask)
-                             : reduceColorsKMeans(wctx,W,H,k,removeBg,userMask);
-    const indexed=res.indexed, palette=res.palette;
-    if(!palette.length){ setStatus('No colors detected. Try different options.', 'error'); processBtn.disabled=false; return; }
+    const activeMask = maskActive(userMask) ? userMask : null;
+    const res = fixedPalette ? reduceColorsFixedPalette(wctx,W,H,fixedPalette,activeMask)
+                             : reduceColorsKMeans(wctx,W,H,k,removeBg,activeMask);
+    const {indexed,palette}=res;
+    if(!palette.length){ setStatus('No colors detected. Try different options.','error'); processBtn.disabled=false; return; }
 
     bar.style.width='35%'; await sleep(10);
-
-    // 2) masks & bbox
-    const masks=palette.map((_,ci)=>{ const m=new Uint8Array(W*H); for(let i=0;i<W*H;i++) if(indexed[i]===ci) m[i]=1; return m; });
+    const masks=palette.map((_,ci)=>{const m=new Uint8Array(W*H); for(let i=0;i<W*H;i++) if(indexed[i]===ci) m[i]=1; return m;});
     const bbox=masks.reduce((b,m)=>expandBbox(b,m,W,H),{minx:Infinity,miny:Infinity,maxx:-Infinity,maxy:-Infinity});
-    if(!(bbox.maxx>bbox.minx && bbox.maxy>bbox.miny)){ setStatus('No solid areas found.', 'error'); processBtn.disabled=false; return; }
+    if(!(bbox.maxx>bbox.minx && bbox.maxy>bbox.miny)){ setStatus('No solid areas found.','error'); processBtn.disabled=false; return; }
 
     bar.style.width='50%'; await sleep(10);
-
-    // 3) scale to hoop & generate stitches
-    const hoop=HOOP_MM[hoopKey];
-    const bw=bbox.maxx-bbox.minx, bh=bbox.maxy-bbox.miny, cx=(bbox.minx+bbox.maxx)/2, cy=(bbox.miny+bbox.maxy)/2;
-    const mmPerPx = Math.min( hoop.w/bw, hoop.h/bh ) * (sizePct/100);
-    const pxPerMM = 1/mmPerPx;
-    const spacingPx=Math.max(1,Math.round(densityMM*pxPerMM));
-    const stepPx=Math.max(1,Math.round(0.6*pxPerMM));
-    const insetPx=Math.max(1,Math.round(0.5*pxPerMM));
+    const hoop=HOOP_MM[hoopKey]; const bw=bbox.maxx-bbox.minx,bh=bbox.maxy-bbox.miny,cx=(bbox.minx+bbox.maxx)/2,cy=(bbox.miny+bbox.maxy)/2;
+    const mmPerPx=Math.min(hoop.w/bw,hoop.h/bh)*(sizePct/100); const pxPerMM=1/mmPerPx;
+    const spacingPx=Math.max(1,Math.round(densityMM*pxPerMM)); const stepPx=Math.max(1,Math.round(0.6*pxPerMM)); const insetPx=Math.max(1,Math.round(0.5*pxPerMM));
 
     const plan={stitches:[],colors:palette.slice()};
-
-    for(let ci=0; ci<masks.length; ci++){
+    for(let ci=0;ci<masks.length;ci++){
       if(ci>0) plan.stitches.push({colorChange:true,x:0,y:0});
       const outlinePx=marchingSquaresOutline(masks[ci],W,H);
       const outlineMM=outlinePx.map(([x,y])=>[(x-cx)*mmPerPx,(y-cy)*mmPerPx]);
       runningOutline(plan.stitches,outlineMM,3);
-
       const inset=erodeMask(masks[ci],W,H,insetPx);
       const segs=hatchSegmentsFromMask(inset,W,H,bbox,angleDeg,spacingPx,stepPx);
-      for(const [a,b] of segs){
-        const sMM=[(a[0]-cx)*mmPerPx,(a[1]-cy)*mmPerPx], eMM=[(b[0]-cx)*mmPerPx,(b[1]-cy)*mmPerPx];
-        plan.stitches.push({x:sMM[0],y:sMM[1],jump:true}); lineStitch(plan.stitches,sMM,eMM,7);
-      }
+      for(const [a,b] of segs){const sMM=[(a[0]-cx)*mmPerPx,(a[1]-cy)*mmPerPx], eMM=[(b[0]-cx)*mmPerPx,(b[1]-cy)*mmPerPx];
+        plan.stitches.push({x:sMM[0],y:sMM[1],jump:true}); lineStitch(plan.stitches,sMM,eMM,7);}
       if(wantOutline && outlineMM.length>4) satinOutline(plan.stitches,outlineMM,0.8,0.6);
-      bar.style.width=(55 + Math.round(40*(ci+1)/masks.length))+'%';
+      bar.style.width=(55+Math.round(40*(ci+1)/masks.length))+'%';
     }
-
     plan.stitches.push({end:true,x:0,y:0});
 
-    // 4) preview + downloads
     drawPreviewColored(plan,hoop,sizePct);
-    const dstBlob=new Blob([writeDST(plan)],{type:'application/octet-stream'});
-    dlDst.href=URL.createObjectURL(dstBlob); dlDst.classList.remove('disabled');
-
+    const dstBlob=new Blob([writeDST(plan)],{type:'application/octet-stream'}); dlDst.href=URL.createObjectURL(dstBlob); dlDst.classList.remove('disabled');
     const palText=plan.colors.map((rgb,i)=>`Color ${i+1}: rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`).join('\n');
-    const palBlob=new Blob([palText],{type:'text/plain'});
-    dlPal.href=URL.createObjectURL(palBlob); dlPal.classList.remove('disabled');
+    const palBlob=new Blob([palText],{type:'text/plain'}); dlPal.href=URL.createObjectURL(palBlob); dlPal.classList.remove('disabled');
 
-    bar.style.width='100%';
-    setStatus('Done! Download your .DST and palette.txt.', 'ok');
-  }catch(e){
-    console.error(e); setStatus('Processing failed. Try a simpler image.', 'error');
-  }finally{
-    processBtn.disabled=false;
-    setTimeout(()=>bar.style.width='0%', 1200);
-  }
+    bar.style.width='100%'; setStatus('Done! Download your .DST and palette.txt.','ok');
+  }catch(e){console.error(e);setStatus('Processing failed. Try a simpler image.','error');}
+  finally{processBtn.disabled=false; setTimeout(()=>bar.style.width='0%',1200);}
 });
 </script>
 </body>

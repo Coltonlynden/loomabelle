@@ -347,6 +347,65 @@ function drawPreviewColored(plan, W, H){
   return c.toDataURL('image/png');
 }
 
+// --- Binary erosion (shrink mask by r pixels) ---
+function erodeMask(mask, W, H, rPx){
+  if (rPx <= 0) return mask;
+  let cur = mask;
+  for (let t=0; t<rPx; t++){
+    const out = new Uint8Array(W*H);
+    for (let y=1; y<H-1; y++){
+      const row = y*W;
+      for (let x=1; x<W-1; x++){
+        if (!cur[row+x]) continue;
+        // 8-neighborhood must be all 1s to keep pixel
+        let keep = true;
+        for (let dy=-1; dy<=1 && keep; dy++){
+          for (let dx=-1; dx<=1; dx++){
+            if (!cur[(y+dy)*W + (x+dx)]) { keep = false; break; }
+          }
+        }
+        if (keep) out[row+x] = 1;
+      }
+    }
+    cur = out;
+  }
+  return cur;
+}
+
+// --- Running stitch along a polyline (points in mm) ---
+function runningOutline(stitches, ptsMM, maxStepMM=3){
+  if (!ptsMM.length) return;
+  stitches.push({ x: ptsMM[0][0], y: ptsMM[0][1], jump: true });
+  for (let i=1; i<=ptsMM.length; i++){
+    const a = ptsMM[i-1], b = ptsMM[i % ptsMM.length];
+    lineStitch(stitches, a, b, maxStepMM);
+  }
+}
+
+// --- Very simple satin along outline (zig-zag across edge normal) ---
+function satinOutline(stitches, ptsMM, widthMM=0.8, stepMM=0.6){
+  if (ptsMM.length < 3) return;
+  const half = widthMM/2;
+  // one pass, alternating left/right
+  let left = true;
+  stitches.push({ x: ptsMM[0][0], y: ptsMM[0][1], jump: true });
+  for (let i=1; i<ptsMM.length; i++){
+    const a = ptsMM[i-1], b = ptsMM[i];
+    const dx = b[0]-a[0], dy=b[1]-a[1];
+    const len = Math.hypot(dx,dy) || 1;
+    const nx = -dy/len, ny = dx/len; // unit normal
+    // walk along this segment
+    const seg = Math.ceil(len/stepMM);
+    for (let k=0;k<seg;k++){
+      const t = (k/seg);
+      const cx = a[0] + dx*t, cy = a[1] + dy*t;
+      const off = left ? half : -half;
+      stitches.push({ x: cx + nx*off, y: cy + ny*off });
+      left = !left;
+    }
+  }
+}
+
 // ---------- Write minimal DST ----------
 function writeDST(plan){
   const recs=[];

@@ -6,16 +6,18 @@ import { personMask } from './lib/segment_people.js';
 import { planStitches } from './lib/stitcher.js';
 import { writeDST } from './lib/dst.js';
 
+
 /* ------------------------- small helpers ------------------------- */
 const UA = navigator.userAgent || '';
 const IS_IOS = /\b(iPhone|iPad|iPod)\b/i.test(UA);
 
 const $ = (id) => document.getElementById(id);
 const logEl = $('log');
+
 function log(msg, level='info'){
   const ts = new Date().toTimeString().slice(0,8);
   const line = `[${ts}] ${msg}`;
-  console[level==='error'?'error':(level==='warn'?'warn':'log')](line);
+  (level==='error' ? console.error : level==='warn' ? console.warn : console.log)(line);
   if (logEl){
     logEl.value += (logEl.value ? '\n' : '') + line;
     logEl.scrollTop = logEl.scrollHeight;
@@ -25,12 +27,20 @@ function clearLog(){ if (logEl) logEl.value=''; }
 
 const bar = $('bar');
 function prog(v){ if(bar){ bar.style.width = Math.max(0,Math.min(100,v))+'%'; } }
-function bump(to){ prog(Math.max(parseInt(bar?.style.width||'0'), to)); }
+function bump(to){ prog(Math.max(parseInt(bar?.style.width||'0',10), to)); }
+
+/** ✅ Only toggles the Process button. Download buttons are managed on success. */
 function setProcessing(on){
-  const ids = ['process','dlDST','dlPAL'];
-  ids.forEach(id=>{ const el=$(id); if(!el) return; el.disabled = on ? (id!=='process') : (id!=='process'); });
-  const p=$('process'); if(p) p.disabled = !!on;
+  const p = $('process');
+  if (p) p.disabled = !!on;
 }
+
+/** ✅ Ensure sane initial state */
+(function initButtons(){
+  $('process')?.removeAttribute('disabled');
+  $('dlDST')?.setAttribute('disabled','');
+  $('dlPAL')?.setAttribute('disabled','');
+})();
 
 /* ---------------------------- state ----------------------------- */
 const state = {

@@ -6,6 +6,8 @@ import { quantizeSafe, sampleDominant } from './lib/quantize.js';
 import { planStitches, drawPreviewColored, HOOP_MM } from './lib/stitches.js';
 import { writeDST } from './lib/export_dst.js';
 
+const isIOS = /\b(iPhone|iPad|iPod)\b/i.test(navigator.userAgent||'');
+
 const state = {
   work: document.createElement('canvas'),
   wctx: null,

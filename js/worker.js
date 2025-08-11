@@ -1,6 +1,7 @@
-/* Heavy processing in a Web Worker:
-   1) downscale → 2) background removal → 3) k-means quantize
-   4) hatch fill (+optional outline) → 5) preview → result
+/* Loomabelle Worker — heavy processing off the main thread
+   Steps: bitmap → downscale → (optional bg remove)
+        → quantize (k-means or manual palette) → hatch fill (+outline)
+        → preview → stitches
 */
 self.onmessage = async (e)=>{
   const {cmd, bitmap, options} = e.data;
@@ -16,23 +17,33 @@ self.onmessage = async (e)=>{
 function log(msg, level='info'){ self.postMessage({type:'log', data:{msg, level}}); }
 
 async function processBitmap(bitmap, opt){
-  const {hoopMM, maxColors, removeBg, fillAngle, densityMM, outline, devicePixelRatio} = opt;
+  const {hoopMM, maxColors, autoColors, manualPalette, removeBg, bgStrength, fillAngle, densityMM, outline, devicePixelRatio} = opt;
 
-  const SCALE = 10; // px per mm for preview/internal raster
+  // 1) Working size
+  const SCALE = 10; // px per mm
   const hoopPx = {w: Math.round(hoopMM.w*SCALE), h: Math.round(hoopMM.h*SCALE)};
-  const maxW = Math.max(48, Math.round(hoopPx.w / Math.max(1,devicePixelRatio)));
-  const maxH = Math.max(48, Math.round(hoopPx.h / Math.max(1,devicePixelRatio)));
+  const maxW = Math.max(64, Math.round(hoopPx.w / Math.max(1,devicePixelRatio)));
+  const maxH = Math.max(64, Math.round(hoopPx.h / Math.max(1,devicePixelRatio)));
 
   const {w,h, img} = await downscaleTo(bitmap, maxW, maxH);
   log(`Working size: ${w}×${h}px`);
 
-  if(removeBg){ removeBackground(img, w, h); log('Background removed.','ok'); }
+  // 2) Remove background (corner average, configurable strength)
+  if(removeBg){ removeBackground(img, w, h, bgStrength|0); log(`Background removed (strength ${bgStrength}).`,'ok'); }
 
-  const {palette, indexed} = quantizeKMeans(img, w, h, maxColors);
-  log(`Quantized to ${palette.length} colors.`, 'ok');
+  // 3) Quantize
+  let palette, indexed;
+  if(!autoColors && manualPalette && manualPalette.length){
+    ({palette, indexed} = quantizeToManual(img, w, h, manualPalette));
+    log(`Mapped to manual palette (${palette.length} colors).`, 'ok');
+  }else{
+    ({palette, indexed} = quantizeKMeans(img, w, h, Math.min(Math.max(maxColors,2),6)));
+    log(`Quantized to ${palette.length} colors.`, 'ok');
+  }
 
+  // 4) Stitches (hatch fill per color)
   const angle = (fillAngle % 180) * Math.PI/180;
-  const spacingPx = Math.max(1, Math.round(densityMM * SCALE)); // hatch spacing in px
+  const spacingPx = Math.max(1, Math.round(densityMM * SCALE));
   const stitches = [];
   let blocks = 0;
 
@@ -59,6 +70,7 @@ async function processBitmap(bitmap, opt){
     }
   }
 
+  // 5) Preview raster
   const prev = new ImageData(w,h);
   for(let i=0;i<w*h;i++){
     const ci = indexed[i];
@@ -83,13 +95,13 @@ async function downscaleTo(bitmap, maxW, maxH){
   return {w,h,img};
 }
 
-// Background removal: estimate corner color, drop near matches or near-transparent pixels
-function removeBackground(img, w, h){
+// Background removal using average of corners; strength 0..100
+function removeBackground(img, w, h, strength){
   const d = img.data;
   const pick = (x,y)=>{ const i=(y*w+x)*4; return [d[i],d[i+1],d[i+2]]; };
   const corners = [pick(0,0), pick(w-1,0), pick(0,h-1), pick(w-1,h-1)];
   const avg = corners.reduce((a,c)=>[a[0]+c[0],a[1]+c[1],a[2]+c[2]],[0,0,0]).map(v=>v/4);
-  const thr = 30;
+  const thr = 8 + Math.round(strength*1.8); // 8..188
   for(let i=0;i<w*h;i++){
     const r=d[i*4], g=d[i*4+1], b=d[i*4+2], a=d[i*4+3];
     const dist = Math.abs(r-avg[0])+Math.abs(g-avg[1])+Math.abs(b-avg[2]);
@@ -97,37 +109,79 @@ function removeBackground(img, w, h){
   }
 }
 
-// Fast k-means quantization with sampling
-function quantizeKMeans(img, w, h, k){
+// Map to user manual palette (hex) by nearest color
+function quantizeToManual(img, w, h, hexes){
   const d = img.data, N=w*h;
-  const step = Math.max(1, Math.floor(Math.sqrt(N)/64));
-  const pts=[];
-  for(let i=0;i<N;i+=step){ const a=d[i*4+3]; if(a<10) continue; pts.push([d[i*4],d[i*4+1],d[i*4+2]]); }
-  const centers=[]; const seen=new Set();
-  for(let i=0;i<pts.length && centers.length<k;i+=Math.max(1,Math.floor(pts.length/k))){
-    const key=pts[i].join(','); if(!seen.has(key)){ centers.push(pts[i].slice()); seen.add(key); }
-  }
-  while(centers.length<k && pts.length) centers.push(pts[Math.floor(Math.random()*pts.length)].slice());
-
-  const assign=new Uint16Array(pts.length);
-  for(let it=0; it<8; it++){
-    for(let i=0;i<pts.length;i++){
-      let best=0,bd=1e9,p=pts[i];
-      for(let c=0;c<centers.length;c++){
-        const ce=centers[c]; const dd=(p[0]-ce[0])**2+(p[1]-ce[1])**2+(p[2]-ce[2])**2;
-        if(dd<bd){bd=dd;best=c;}
-      } assign[i]=best;
-    }
-    const sum=centers.map(()=>[0,0,0,0]);
-    for(let i=0;i<pts.length;i++){ const a=assign[i],p=pts[i]; sum[a][0]+=p[0]; sum[a][1]+=p[1]; sum[a][2]+=p[2]; sum[a][3]++; }
-    for(let c=0;c<centers.length;c++){ const s=sum[c]; if(s[3]>0) centers[c]=[s[0]/s[3]|0,s[1]/s[3]|0,s[2]/s[3]|0]; }
-  }
-
-  const palette=centers, indexed=new Int16Array(N);
+  const palette = hexes.map(hx => hexToRgb(hx)).filter(Boolean);
+  const indexed = new Int16Array(N);
   for(let i=0;i<N;i++){
     if(d[i*4+3]<10){ indexed[i]=-1; continue; }
-    let best=0,bd=1e9,r=d[i*4],g=d[i*4+1],b=d[i*4+2];
-    for(let c=0;c<palette.length;c++){ const ce=palette[c]; const dd=(r-ce[0])**2+(g-ce[1])**2+(b-ce[2])**2; if(dd<bd){bd=dd;best=c;} }
+    let best=0, bd=1e9, r=d[i*4], g=d[i*4+1], b=d[i*4+2];
+    for(let c=0;c<palette.length;c++){
+      const ce=palette[c];
+      const dd=(r-ce[0])**2+(g-ce[1])**2+(b-ce[2])**2;
+      if(dd<bd){bd=dd; best=c;}
+    }
+    indexed[i]=best;
+  }
+  return {palette, indexed};
+}
+function hexToRgb(hex){
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return m ? [parseInt(m[1],16), parseInt(m[2],16), parseInt(m[3],16)] : null;
+}
+
+// Fast k-means with sampling
+function quantizeKMeans(img, w, h, k){
+  const d = img.data;
+  const N = w*h;
+  const step = Math.max(1, Math.floor(Math.sqrt(N)/64));
+  const points = [];
+  for(let i=0;i<N;i+=step){
+    const a=d[i*4+3]; if(a<10) continue;
+    points.push([d[i*4], d[i*4+1], d[i*4+2]]);
+  }
+  // init centers
+  const centers = [];
+  const seen = new Set();
+  for(let i=0;i<points.length && centers.length<k;i+=Math.max(1,Math.floor(points.length/k))){
+    const key = points[i].join(',');
+    if(!seen.has(key)) { centers.push(points[i].slice()); seen.add(key); }
+  }
+  while(centers.length<k && points.length){ centers.push(points[Math.floor(Math.random()*points.length)].slice()); }
+
+  const assign = new Uint16Array(points.length);
+  for(let it=0; it<8; it++){
+    for(let i=0;i<points.length;i++){
+      let best=0, bd=1e9; const p=points[i];
+      for(let c=0;c<centers.length;c++){
+        const ce=centers[c];
+        const dd = (p[0]-ce[0])**2+(p[1]-ce[1])**2+(p[2]-ce[2])**2;
+        if(dd<bd){ bd=dd; best=c; }
+      }
+      assign[i]=best;
+    }
+    const sum = centers.map(()=>[0,0,0,0]);
+    for(let i=0;i<points.length;i++){
+      const a=assign[i]; const p=points[i];
+      sum[a][0]+=p[0]; sum[a][1]+=p[1]; sum[a][2]+=p[2]; sum[a][3]++;
+    }
+    for(let c=0;c<centers.length;c++){
+      const s=sum[c];
+      if(s[3]>0){ centers[c]=[s[0]/s[3]|0, s[1]/s[3]|0, s[2]/s[3]|0]; }
+    }
+  }
+
+  const palette = centers;
+  const indexed = new Int16Array(N);
+  for(let i=0;i<N;i++){
+    if(d[i*4+3]<10){ indexed[i]=-1; continue; }
+    let best=0, bd=1e9, r=d[i*4], g=d[i*4+1], b=d[i*4+2];
+    for(let c=0;c<palette.length;c++){
+      const ce=palette[c];
+      const dd=(r-ce[0])**2+(g-ce[1])**2+(b-ce[2])**2;
+      if(dd<bd){bd=dd; best=c;}
+    }
     indexed[i]=best;
   }
   return {palette, indexed};
@@ -135,11 +189,12 @@ function quantizeKMeans(img, w, h, k){
 
 // Hatch fill at angle, returning line segments in pixel coords
 function hatchFill(mask, w, h, angle, spacing){
-  const segs=[]; const sin=Math.sin(angle), cos=Math.cos(angle);
+  const segs=[];
+  const sin=Math.sin(angle), cos=Math.cos(angle);
   const cx=w/2, cy=h/2;
   function toUV(x,y){ const dx=x-cx, dy=y-cy; return {u: dx*cos + dy*sin, v: -dx*sin + dy*cos}; }
   function toXY(u,v){ const dx=u*cos - v*sin, dy=u*sin + v*cos; return {x:dx+cx, y:dy+cy}; }
-  const corners=[toUV(0,0),toUV(w,0),toUV(0,h),toUV(w,h)]; let vMin=1e9,vMax=-1e9; for(const c of corners){vMin=Math.min(vMin,c.v); vMax=Math.max(vMax,c.v);}
+  const corners=[toUV(0,0),toUV(w,0),toUV(0,h),toUV(w,h)]; let vMin=1e9, vMax=-1e9; for(const c of corners){vMin=Math.min(vMin,c.v); vMax=Math.max(vMax,c.v);}
   for(let v=Math.floor(vMin); v<=vMax; v+=spacing){
     let inRun=false, start=null;
     for(let u=-Math.max(w,h); u<=Math.max(w,h); u++){
@@ -154,7 +209,7 @@ function hatchFill(mask, w, h, angle, spacing){
   return segs;
 }
 
-// Simple horizontal edge outline
+// Horizontal edge outline
 function outlineWalk(mask, w, h){
   const segs=[];
   for(let y=0;y<h;y++){

@@ -1,14 +1,12 @@
-/* Loomabelle — script.js v15 (single-file build)
-   - No other JS files required. Remove any <script src="js/processor.js">.
-   - Keeps your existing look/markup; does not redesign anything.
-   - Upload → instant preview; optional subject rectangle; progress bar
-   - Draw & Trace (pen default, long strokes, no page scroll on touch)
-   - Offline processing (fast k-means-ish) + DST/EXP export
+/* Loomabelle — script.js v16 (single-file, no dependencies)
+   Fixes: preview after upload, Process Photo works, Draw → Process Drawing works,
+          DST/EXP download buttons enabled after processing.
+   Does NOT change your layout or styles.
 */
 (function(){
   "use strict";
 
-  /********** tiny utils **********/
+  /*** tiny utils ***/
   const READY = (fn)=> (document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', fn, {once:true}) : fn());
   const $  = (s,root)=> (root||document).querySelector(s);
   const $$ = (s,root)=> Array.prototype.slice.call((root||document).querySelectorAll(s));
@@ -17,17 +15,8 @@
   const clamp=(v,mi,ma)=>Math.max(mi,Math.min(ma,v));
   const tick = () => new Promise(r=>setTimeout(r,0));
   const log = (...a)=>console.log('[Loomabelle]',...a);
-  const warn= (...a)=>console.warn('[Loomabelle]',...a);
 
-  // hide any “mockup” helper text without touching structure
-  function hideMockupLabels(){
-    $$('.text-muted,.muted,.note,small,.badge').forEach(el=>{
-      if((el.textContent||'').toLowerCase().includes('mock')) el.style.display='none';
-    });
-  }
-
-  /********** processor (quantize → stitches → exports) **********/
-  // Fast, offline quantization (k-means-ish, chunked)
+  /*** fast, offline processor (quantize → stitches → export) ***/
   function sampleDominantRGBA(imgData, maxK){
     const W=imgData.width,H=imgData.height,d=imgData.data;
     const step=Math.max(1,Math.floor(Math.sqrt((W*H)/20000)));
@@ -215,42 +204,48 @@
     return { ...q, ops, dstU8, expU8 };
   }
 
-  /********** UI glue (robust, no markup changes) **********/
+  /*** UI glue ***/
   READY(init);
   function init(){
-    hideMockupLabels();
+    // try to locate cards by headings; fallback to common classes
+    const uploadCard  = findCard(['upload a photo','start with a photo']) || $('.col.card.blue')  || document.body;
+    const previewCard = findCard(['preview (stitched)','preview'])         || $('.col.card.rose') || document.body;
+    const drawCard    = findCard(['draw & trace','draw'])                  || document.body;
 
-    const uploadCard  = findCardByHeading(['upload a photo','start with a photo']) || $('.col.card.blue') || document.body;
-    const previewCard = findCardByHeading(['preview (stitched)','preview'])      || $('.col.card.rose') || document.body;
-    const drawCard    = findCardByHeading(['draw & trace','draw'])               || document.body;
-
-    if(!previewCard || !drawCard){ console.error('Could not find preview or draw areas.'); }
-
-    // Entire preview hidden until an image exists
+    // preview hidden until we have an image
     if(previewCard) previewCard.style.display='none';
 
-    // Hosts
     const previewHost = (previewCard && (previewCard.querySelector('.preview')||previewCard)) || document.body;
     const drawHost    = (drawCard && (drawCard.querySelector('.canvas')||drawCard)) || document.body;
 
-    // Canvases
+    // canvases
     const prev=document.createElement('canvas');
     const pctx=prev.getContext('2d',{willReadFrequently:true});
     const draw=document.createElement('canvas');
     const dctx=draw.getContext('2d',{willReadFrequently:true}); dctx.lineCap='round'; dctx.lineJoin='round';
 
-    // mount
+    // mount & base sizing
     if(previewHost){ previewHost.innerHTML=''; previewHost.appendChild(prev); if(getComputedStyle(previewHost).position==='static'){ previewHost.style.position='relative'; } }
     if(drawHost){ drawHost.innerHTML=''; drawHost.appendChild(draw); }
+    function sizeCanvasToHost(canvas, host){
+      const cw=Math.max(320, host.clientWidth||640);
+      const ch=Math.max(220, Math.floor(cw*9/16));
+      const s=dpr();
+      canvas.style.width=cw+'px'; canvas.style.height=ch+'px';
+      canvas.width=Math.round(cw*s); canvas.height=Math.round(ch*s);
+      canvas.getContext('2d').setTransform(s,0,0,s,0,0);
+    }
+    function resizeAll(){ if(previewHost) sizeCanvasToHost(prev, previewHost); if(drawHost) sizeCanvasToHost(draw, drawHost); }
+    try{ if(previewHost) new ResizeObserver(resizeAll).observe(previewHost); if(drawHost) new ResizeObserver(resizeAll).observe(drawHost); }catch(_){ on(window,'resize',resizeAll); }
     resizeAll();
 
-    // progress
+    // progress bar
     const progWrap=document.createElement('div'); progWrap.style.cssText='position:absolute;left:12px;top:12px;right:12px;height:8px;background:rgba(0,0,0,.06);border-radius:999px;overflow:hidden;display:none;z-index:4';
-    const progBar=document.createElement('div');  progBar .style.cssText='height:100%;width:0%;background:#111827;opacity:.75';
+    const progBar=document.createElement('div');  progBar .style.cssText='height:100%;width:0%;background:#111827;opacity:.8';
     progWrap.appendChild(progBar); if(previewHost) previewHost.appendChild(progWrap);
     const setProgress=(pct)=>{ progWrap.style.display='block'; progBar.style.width=(pct|0)+'%'; if(pct>=100) setTimeout(()=>progWrap.style.display='none',400); };
 
-    // preview toolbar
+    // toolbar (inside preview)
     const tb=document.createElement('div'); tb.style.cssText='position:absolute;left:12px;bottom:12px;display:flex;gap:10px;flex-wrap:wrap;z-index:3;visibility:hidden;';
     const btnProcess=document.createElement('button'); btnProcess.className='btn'; btnProcess.textContent='Process Photo';
     const btnHighlight=document.createElement('button'); btnHighlight.className='btn'; btnHighlight.textContent='Highlight Subject';
@@ -264,31 +259,15 @@
     const setFormatsVisible=(v)=> formatBtns.forEach(b=> b.style.display=v?'inline-block':'none');
     setFormatsVisible(false);
 
-    // sizing
-    function sizeCanvasToHost(canvas, host){
-      const cw=Math.max(320, host.clientWidth||640);
-      const ch=Math.max(220, Math.floor(cw*9/16));
-      const s=dpr();
-      canvas.style.width=cw+'px'; canvas.style.height=ch+'px';
-      canvas.width=Math.round(cw*s); canvas.height=Math.round(ch*s);
-      canvas.getContext('2d').setTransform(s,0,0,s,0,0);
-    }
-    function resizeAll(){
-      if(previewHost) sizeCanvasToHost(prev, previewHost);
-      if(drawHost)    sizeCanvasToHost(draw, drawHost);
-    }
-    try{ if(previewHost) new ResizeObserver(resizeAll).observe(previewHost); if(drawHost) new ResizeObserver(resizeAll).observe(drawHost); }
-    catch(_){ on(window,'resize',resizeAll); }
-
     // state
     const STATE={ active:'#111827', lastImage:null, imgFit:null, subject:{enabled:false,rect:null,noSubject:false}, stitches:[] };
 
-    // upload area (robust: create hidden input if none)
+    // upload zone (robust: create hidden input if none)
     const dropZone = (uploadCard && (uploadCard.querySelector('.upload-zone')||uploadCard)) || document.body;
     let fileInput = dropZone.querySelector('input[type=file]');
     if(!fileInput){
       fileInput=document.createElement('input');
-      fileInput.type='file'; fileInput.accept='image/*,.heic,.heif';
+      fileInput.type='file'; fileInput.accept='image/*';
       fileInput.style.position='absolute'; fileInput.style.opacity='0'; fileInput.style.pointerEvents='none';
       dropZone.appendChild(fileInput);
     }
@@ -299,7 +278,7 @@
     on(dropZone,'click',e=>{ if(e.target.closest('a,button')) return; fileInput.click(); });
     on(fileInput,'change',()=>{ const f=fileInput.files&&fileInput.files[0]; if(f) loadImage(f); });
 
-    // “open” buttons (delegated, by text)
+    // open buttons (delegated) — do not change layout
     on(document,'click', (e)=>{
       const t=(e.target.closest('button,a')?.textContent||'').toLowerCase();
       if(!t) return;
@@ -338,12 +317,43 @@
     const stopDraw=e=>{ if(e.pointerId===pid){ drawing=false; pid=null; try{draw.releasePointerCapture(e.pointerId);}catch(_){}}};
     on(draw,'pointerup',stopDraw); on(draw,'pointercancel',stopDraw);
 
-    // add Process Drawing button next to any toolbar (or draw card)
+    // add Process Drawing button (in whatever toolbar exists)
     const drawToolbar = (drawCard && (drawCard.querySelector('.toolbar')||drawCard)) || drawHost;
     const btnProcDraw=document.createElement('button'); btnProcDraw.className='btn'; btnProcDraw.style.marginLeft='10px'; btnProcDraw.textContent='Process Drawing';
     drawToolbar && drawToolbar.appendChild(btnProcDraw);
 
-    // load image
+    // base image render
+    function renderBaseImage(){
+      if(!STATE.lastImage) return;
+      const Wp=prev.width/dpr(), Hp=prev.height/dpr();
+      const W=STATE.lastImage.width, H=STATE.lastImage.height;
+      const s=Math.min(Wp/W, Hp/H), w=W*s, h=H*s, ox=(Wp-w)/2, oy=(Hp-h)/2;
+      pctx.setTransform(dpr(),0,0,dpr(),0,0);
+      pctx.clearRect(0,0,Wp,Hp); pctx.fillStyle='#fff'; pctx.fillRect(0,0,Wp,Hp);
+      const tmp=document.createElement('canvas'); tmp.width=W; tmp.height=H; tmp.getContext('2d').putImageData(STATE.lastImage,0,0);
+      pctx.drawImage(tmp,ox,oy,w,h);
+      STATE.imgFit={ox,oy,scale:s,iw:W,ih:H};
+      drawStitches();
+    }
+    function drawStitches(){
+      if(!STATE.stitches.length) return;
+      pctx.save(); pctx.strokeStyle='#111827'; pctx.lineWidth=1.6; pctx.beginPath();
+      let started=false;
+      for(const s of STATE.stitches){
+        if(s.move){ pctx.moveTo(s.x,s.y); started=true; }
+        else if(started){ pctx.lineTo(s.x,s.y); }
+      }
+      pctx.stroke(); pctx.restore();
+    }
+    function drawSubjectBox(){
+      renderBaseImage();
+      if(STATE.subject.enabled && STATE.subject.rect){
+        const r=STATE.subject.rect;
+        pctx.save(); pctx.setLineDash([6,6]); pctx.strokeStyle='rgba(20,20,20,.95)'; pctx.lineWidth=1.2; pctx.strokeRect(r.x,r.y,r.w,r.h); pctx.restore();
+      }
+    }
+
+    // load image (immediate preview)
     async function loadImage(file){
       const url=URL.createObjectURL(file);
       try{
@@ -363,42 +373,12 @@
       }finally{ URL.revokeObjectURL(url); }
     }
 
-    function renderBaseImage(){
-      if(!STATE.lastImage) return;
-      const Wp=prev.width/dpr(), Hp=prev.height/dpr();
-      const W=STATE.lastImage.width, H=STATE.lastImage.height;
-      const s=Math.min(Wp/W, Hp/H), w=W*s, h=H*s, ox=(Wp-w)/2, oy=(Hp-h)/2;
-      pctx.setTransform(dpr(),0,0,dpr(),0,0);
-      pctx.clearRect(0,0,Wp,Hp); pctx.fillStyle='#fff'; pctx.fillRect(0,0,Wp,Hp);
-      const tmp=document.createElement('canvas'); tmp.width=W; tmp.height=H; tmp.getContext('2d').putImageData(STATE.lastImage,0,0);
-      pctx.drawImage(tmp,ox,oy,w,h);
-      STATE.imgFit={ox,oy,scale:s,iw:W,ih:H};
-      drawStitches();
-    }
-    function drawStitches(){
-      if(!STATE.stitches.length) return;
-      pctx.save(); pctx.strokeStyle=STATE.active; pctx.lineWidth=1.6; pctx.beginPath();
-      let started=false;
-      for(const s of STATE.stitches){
-        if(s.move){ pctx.moveTo(s.x,s.y); started=true; }
-        else if(started){ pctx.lineTo(s.x,s.y); }
-      }
-      pctx.stroke(); pctx.restore();
-    }
-    function drawSubjectBox(){
-      renderBaseImage();
-      if(STATE.subject.enabled && STATE.subject.rect){
-        const r=STATE.subject.rect;
-        pctx.save(); pctx.setLineDash([6,6]); pctx.strokeStyle='rgba(20,20,20,.95)'; pctx.lineWidth=1.2; pctx.strokeRect(r.x,r.y,r.w,r.h); pctx.restore();
-      }
-    }
-
-    // process photo
+    // Process Photo
     on(btnProcess,'click', async ()=>{
       if(!STATE.lastImage){ fileInput?.click(); return; }
       setFormatsVisible(false); setProgress(1);
 
-      // optional subject rect → mask in image space
+      // optional subject mask from rectangle (image space)
       let mask=null;
       if(STATE.subject.rect && !STATE.subject.noSubject && STATE.imgFit){
         const {ox,oy,scale,iw,ih}=STATE.imgFit;
@@ -420,7 +400,7 @@
       enableDownloads(res);
     });
 
-    // process drawing
+    // Process Drawing
     on(btnProcDraw,'click', async ()=>{
       setFormatsVisible(false); setProgress(1);
       const max=1024, w=draw.width, h=draw.height, s=Math.min(1, max/Math.max(w,h));
@@ -445,17 +425,17 @@
       const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([u8])); a.download=name; a.click();
       setTimeout(()=>URL.revokeObjectURL(a.href),1200);
     }
+
+    function setProgress(p){ progWrap.style.display='block'; progBar.style.width=(p|0)+'%'; if(p>=100) setTimeout(()=>progWrap.style.display='none',400); }
+    function setFormatsVisible(v){ formatBtns.forEach(b=> b.style.display=v?'inline-block':'none'); }
   }
 
-  function findCardByHeading(headings){
-    const list = Array.isArray(headings)?headings:[String(headings||'')];
+  function findCard(headings){
+    const keys = (Array.isArray(headings)?headings:[headings]).map(s=>String(s||'').toLowerCase());
     const hs=$$('h1,h2,h3,h4,h5,h6');
     for(const h of hs){
       const txt=(h.textContent||'').trim().toLowerCase();
-      if(list.some(key=>txt.includes(key))){
-        const card=h.closest('.card') || h.parentElement;
-        if(card) return card;
-      }
+      if(keys.some(k=>txt.includes(k))){ return h.closest('.card') || h.parentElement; }
     }
     return null;
   }

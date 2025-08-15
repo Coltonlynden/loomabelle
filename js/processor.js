@@ -1,19 +1,16 @@
-/* Loomabelle — processor.js v11
+/* Loomabelle — processor.js v14
    Standalone processing core:
-   - processPhoto(imageBitmap|ImageData, {k, autoColors, outline, angle, density, mask}) -> {indexed, palette, W, H, ops, dstU8, expU8}
-   - processDrawing(alphaImageData, {...}) -> {ops, dstU8, expU8}
-   - writeDST(ops, palette, opts), writeEXP(ops, palette, opts)
-   - Optional: person segmentation via BodyPix (loaded on demand)
-   - Optional: image-q quantization (CDN; falls back to fast k-means-ish)
-   This file has no DOM dependencies.
+   - Looma.processPhoto(imageData, {k, autoColors, outline, angle, density, mask, pxPerMm, outW, outH}, onProgress)
+   - Looma.processDrawing(alphaImageData, {pxPerMm}, onProgress)
+   - Looma.writeDST(ops,...), Looma.writeEXP(ops,...)
+   - Optional helpers: Looma.heicToJpeg(), Looma.personMask() (BodyPix)
+   Loads optional CDN libs on demand; falls back to fast local paths.
 */
 (function initLoomaProcessor(global){
   'use strict';
 
   const Looma = global.Looma || (global.Looma = {});
   const clamp=(v,mi,ma)=>Math.max(mi,Math.min(ma,v));
-
-  /* -------------------- lightweight scheduler -------------------- */
   const tick = () => new Promise(r => setTimeout(r, 0));
 
   /* -------------------- HEIC helper (optional) ------------------- */
@@ -111,7 +108,7 @@
       const palette=[]; for(let i=0;i<Math.min(k, pal.getSize());i++){ const c=pal.getPoint(i).getColor(); palette.push([c.r,c.g,c.b]); }
       return { indexed:result, palette, W, H };
     }catch(err){
-      // Fallback
+      // Fallback (fast k-means-ish)
       const W=imgData.width,H=imgData.height;
       const palette=sampleDominantRGBA(imgData, Math.min(k,6));
       const d=imgData.data;
@@ -182,7 +179,7 @@
     onProgress && onProgress(60);
     const W=canvas.width, H=canvas.height;
     const out=new Uint8Array(W*H); out.set(seg.data);
-    // 3x3 close
+    // 3x3 morphological close
     const tmp=new Uint8Array(W*H);
     for(let y=0;y<H;y++){
       for(let x=0;x<W;x++){
@@ -211,21 +208,15 @@
   };
 
   /* -------------------- stitch planning (simple & fast) ---------- */
-  // Creates a quick outline + simple angle hatch per color block
+  // Very fast preview-oriented planner: outline scan + angled hatch.
   function planStitches(data, opts){
     const {indexed, palette, W, H} = data;
     const angle = (opts && opts.angle!=null) ? (+opts.angle) : 45;
-    const spacingMM = (opts && opts.spacingMM) ? opts.spacingMM : 2.0;
     const outline = !!(opts && opts.outline);
-
-    // Compute coarse hatch step based on image size
-    const step = Math.max(2, Math.floor(Math.min(W,H) / 220)); // speed-friendly
-    const rad = angle * Math.PI/180;
-    const cos = Math.cos(rad), sin = Math.sin(rad);
+    const step = Math.max(2, Math.floor(Math.min(W,H) / 220)); // coarse step for speed
 
     const ops = [];
 
-    // Optional outline per color cluster (very coarse edge walk)
     if (outline){
       const edges = new Uint8Array(W*H);
       for(let y=1;y<H-1;y++){
@@ -235,43 +226,34 @@
           if (indexed[i-1]!==c || indexed[i+1]!==c || indexed[i-W]!==c || indexed[i+W]!==c) edges[i]=1;
         }
       }
-      // Walk edges in scanlines
       for(let y=0;y<H;y+=step){
         let run=null;
         for(let x=0;x<W;x++){
           const i=y*W+x;
-          if(edges[i]){
-            if(!run) run={y:y, x0:x};
-          }else if(run){
-            ops.push({cmd:'jump', x:run.x0, y:run.y});
-            ops.push({cmd:'stitch', x:x, y:run.y});
-            run=null;
-          }
+          if(edges[i]){ if(!run) run={y:y, x0:x}; }
+          else if(run){ ops.push({cmd:'jump', x:run.x0, y:run.y}); ops.push({cmd:'stitch', x:x, y:run.y}); run=null; }
         }
         if(run){ ops.push({cmd:'jump', x:run.x0, y:run.y}); ops.push({cmd:'stitch', x:W-1, y:run.y}); }
       }
     }
 
-    // Angle hatching per color (fast pass)
-    const bands = Math.max(4, Math.floor(Math.min(W,H) / 24)); // density-ish
+    // Simple banded hatch at given angle
+    const rad = angle * Math.PI/180;
+    const sin = Math.sin(rad), cos = Math.cos(rad);
+    const bands = Math.max(4, Math.floor(Math.min(W,H) / 24));
     for(let b=0;b<bands;b++){
       const t = (b / bands) * (W+H);
-      let firstInBand=true;
       for(let y=0;y<H;y+=step){
         const x = Math.floor(t - y * (sin/cos));
-        const x0 = x - 20, x1 = x + 20;
-        let inRun=false, rx=0, ry=0;
-        for(let px=x0; px<=x1; px+=1){
+        let first=true, lastX=null,lastY=null, inRun=false;
+        for(let px=x-20; px<=x+20; px++){
           const xx = px, yy = Math.floor(y + (px - x)* (sin/cos));
           if(xx>=0 && xx<W && yy>=0 && yy<H){
-            // draw a short hatch if within same color block neighborhood
-            const i = yy*W + xx;
             if(!inRun){ ops.push({cmd:'jump', x:xx, y:yy}); inRun=true; }
-            rx=xx; ry=yy;
+            lastX=xx; lastY=yy;
           }
         }
-        if(inRun){ ops.push({cmd:'stitch', x:rx, y:ry}); }
-        if(firstInBand){ firstInBand=false; }
+        if(inRun && lastX!=null){ ops.push({cmd:'stitch', x:lastX, y:lastY}); }
       }
     }
     return ops;
@@ -279,7 +261,7 @@
 
   /* -------------------- writers (DST/EXP) ------------------------ */
   function toUnits(ops, pxPerMm, outW, outH){
-    const s = 1/pxPerMm*10, cx=outW/2, cy=outH/2;
+    const s = 1/pxPerMm*10, cx=outW/2, cy=outH/2; // 10 units per mm (rough DST-ish)
     const out=[]; let prev=null;
     for(const op of ops){
       if(op.cmd==='stop'){ out.push({cmd:'stop'}); prev=null; continue; }
@@ -333,7 +315,6 @@
   /* -------------------- top-level processors --------------------- */
   Looma.processPhoto = async function processPhoto(imgData, controls, onProgress){
     const k = clamp(~~(controls.k||6),2,12);
-    const autoColors = !!controls.autoColors;
     const outline = controls.outline!==false;
     const angle = +controls.angle || 45;
     const density = clamp(+controls.density||0.40,0.2,1.0);
@@ -342,13 +323,9 @@
     const outH = controls.outH || imgData.height;
 
     onProgress && onProgress(5);
-    // quantize (mask optional)
     const q = await quantizeSafe(imgData, k, controls.mask||null, p=>onProgress && onProgress(5+Math.round(p*0.55)));
     onProgress && onProgress(70);
 
-    // palette bias not strictly required; skip for speed (optionally add later)
-
-    // stitches (fast pass)
     const ops = planStitches(q, { outline, angle, spacingMM: 1/Math.max(0.2, Math.min(1.0, density)) });
 
     onProgress && onProgress(88);
@@ -360,11 +337,9 @@
   };
 
   Looma.processDrawing = async function processDrawing(alphaImageData, controls, onProgress){
-    // Very simple: convert alpha to a binary mask and hatch
     const W=alphaImageData.width, H=alphaImageData.height, d=alphaImageData.data;
     const mask=new Uint8Array(W*H);
     for(let i=0;i<W*H;i++){ mask[i]= d[i*4+3]>10?1:0; }
-    // Build fake indexed image where 1 = ink
     const indexed=mask, palette=[[0,0,0],[255,255,255]];
     const q={indexed, palette, W, H};
 
@@ -380,7 +355,7 @@
     return { indexed, palette, W, H, ops, dstU8, expU8 };
   };
 
-  // Expose writers too
+  // expose writers too
   Looma.writeDST = writeDST;
   Looma.writeEXP = writeEXP;
 

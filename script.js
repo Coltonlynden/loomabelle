@@ -1,17 +1,14 @@
-/* Loomabelle — v5 (ES5, no modules)
-   What’s new (no HTML/CSS edits):
-   - Upload works again.
-   - “Start with a photo” switches to the Upload tab.
-   - The Preview shows the uploaded photo BEFORE processing.
-   - Controls (Process Photo · Highlight Subject · No subject) live INSIDE the Preview.
-   - Subject = drag a rectangle on the Preview (optional).
-   - Viewport stays a consistent, responsive size across tab changes (ResizeObserver + MutationObserver).
-   - Export format buttons stay hidden until after processing.
-   - Draw tab still works; “Process Drawing” button only.
-   - DST/EXP exports offline; PES/JEF via optional AI (unchanged UI).
+/* Loomabelle — v6 (ES5, no modules)
+   Focus: Preview reliably updates after processing
+   - "Processing…" overlay while work runs
+   - Always redraws with stitches on top of photo
+   - Fallback edge detector if contours are empty
+   - Formats show only after successful processing
+   - Subject highlight + No subject in Preview (unchanged)
+   - Upload, Draw, responsive canvas, exports as before
 */
 (function(){
-  // ---------- small helpers ----------
+  // ---------- helpers ----------
   function $(s,el){return (el||document).querySelector(s);}
   function $$(s,el){return Array.prototype.slice.call((el||document).querySelectorAll(s));}
   function on(el,ev,fn){ el && el.addEventListener(ev,fn); }
@@ -20,34 +17,27 @@
   function hexToRgb(hex){ hex=String(hex||'').replace('#',''); if(hex.length===3){hex=hex.split('').map(function(c){return c+c;}).join('');} var n=parseInt(hex||'ffffff',16); return [(n>>16)&255,(n>>8)&255,n&255]; }
   function make(tag,cls,txt){ var e=document.createElement(tag); if(cls) e.className=cls; if(txt!=null) e.textContent=txt; return e; }
 
-  // Hide “mockup only” helper text without touching HTML
-  $$('.text-muted,.muted,.note,small,.badge').forEach(function(el){
-    if((el.textContent||'').toLowerCase().indexOf('mockup')>-1){ el.style.display='none'; }
-  });
+  // hide "mockup" helper notes without touching HTML
+  $$('.text-muted,.muted,.note,small,.badge').forEach(function(el){ if((el.textContent||'').toLowerCase().indexOf('mockup')>-1) el.style.display='none'; });
 
   // ---------- state ----------
   var STATE={
-    hoop:{wmm:100,hmm:100},
-    pxPerMm:2,
-    tool:'pen', guides:false, active:'#fb7185',
-    history:[],
-    ai:{},
-    stitches:[],
-    // upload
-    lastImage:null,
-    imgFit:null,          // {ox,oy,scale,iw,ih} for mapping preview<->image
+    hoop:{wmm:100,hmm:100}, pxPerMm:2,
+    tool:'pen', guides:false, active:'#111827',
+    history:[], ai:{}, stitches:[],
+    lastImage:null, imgFit:null,
     subject:{enabled:false,rect:null,noSubject:false},
     opts:{reduce:true,cleanup:true},
-    // canvases/hosts
-    canvases:{}
+    canvases:{},
+    busy:false, processed:false
   };
 
-  // config from url/localStorage
-  (function cfg(){
+  // ---------- config ----------
+  (function(){
     try{ var saved=localStorage.getItem('loomabelle:cfg'); if(saved){ var o=JSON.parse(saved); if(o.hoop) STATE.hoop=o.hoop; if(o.ai) STATE.ai=o.ai; } }catch(e){}
-    var p=(function(){ var out={}; if(location.search.length>1){ location.search.substring(1).split('&').forEach(function(q){var kv=q.split('='); out[decodeURIComponent(kv[0]||'')]=decodeURIComponent(kv[1]||'');}); } return out; })();
-    if(p.hoop){ var sp=p.hoop.split('x'); var w=parseFloat(sp[0]), h=parseFloat(sp[1]); if(w&&h){ STATE.hoop={wmm:w,hmm:h}; } }
-    if(p.aiEndpoint) STATE.ai.endpoint=p.aiEndpoint; if(p.aiKey) STATE.ai.key=p.aiKey;
+    var q=(function(){ var out={}; if(location.search.length>1){ location.search.substring(1).split('&').forEach(function(s){var kv=s.split('='); out[decodeURIComponent(kv[0]||'')]=decodeURIComponent(kv[1]||'');}); } return out; })();
+    if(q.hoop){ var sp=q.hoop.split('x'); var w=parseFloat(sp[0]), h=parseFloat(sp[1]); if(w&&h){ STATE.hoop={wmm:w,hmm:h}; } }
+    if(q.aiEndpoint) STATE.ai.endpoint=q.aiEndpoint; if(q.aiKey) STATE.ai.key=q.aiKey;
     try{ localStorage.setItem('loomabelle:cfg', JSON.stringify({hoop:STATE.hoop, ai:STATE.ai})); }catch(e){}
   })();
 
@@ -61,7 +51,6 @@
         requestAnimationFrame(resizeAll);
       });
     });
-    // “Start with a photo” should switch to Upload
     $$('a,button').forEach(function(el){
       var t=(el.textContent||'').toLowerCase();
       if(t.indexOf('start with a photo')>-1 || t.indexOf('upload photo')>-1){
@@ -74,12 +63,10 @@
     var y=$('#year'); if(y) y.textContent=(new Date()).getFullYear();
   }
 
-  // ---------- canvas setup (responsive & stable across tab switches) ----------
+  // ---------- canvases ----------
   var prevHost=document.querySelector('.col.card.rose .preview') || document.querySelector('.preview');
   var drawHost=document.querySelector('.panel[data-panel="draw"] .canvas') || document.querySelector('.canvas');
   if(!prevHost || !drawHost){ console.error('Missing .preview or .canvas container'); return; }
-
-  // Ensure host can position toolbar overlay without touching CSS
   if(getComputedStyle(prevHost).position==='static'){ prevHost.style.position='relative'; }
 
   var prev=document.createElement('canvas'), pctx=prev.getContext('2d');
@@ -100,13 +87,7 @@
     var m=10, W=prev.width/dpr(), H=prev.height/dpr();
     STATE.pxPerMm=Math.min((W-m*2)/STATE.hoop.wmm, (H-m*2)/STATE.hoop.hmm);
   }
-  function resizeAll(){
-    sizeCanvasToHost(prev, prevHost);
-    sizeCanvasToHost(draw, drawHost);
-    updatePxPerMm();
-    render(); // keep viewport stable when switching tabs
-  }
-  // observe size + panel activation
+  function resizeAll(){ sizeCanvasToHost(prev,prevHost); sizeCanvasToHost(draw,drawHost); updatePxPerMm(); render(); }
   try{
     new ResizeObserver(resizeAll).observe(prevHost);
     new ResizeObserver(resizeAll).observe(drawHost);
@@ -114,17 +95,17 @@
   }catch(e){ window.addEventListener('resize', resizeAll); }
   resizeAll();
 
-  // ---------- Thread palette (unchanged visuals) ----------
+  // ---------- thread palette ----------
   var sw=document.querySelector('.swatches');
   if(sw){
     sw.style.display='flex'; sw.style.flexWrap='wrap'; sw.style.gap='12px'; sw.style.alignItems='center';
     if(sw.children.length===0){
-      ['#fb7185','#f472b6','#d8b4fe','#a78bfa','#93c5fd','#38bdf8','#99f6e4','#5eead4','#fde68a','#facc15','#fca5a5','#86efac']
-      .forEach(function(c){ var d=make('div'); d.style.cssText='height:40px;width:40px;border-radius:999px;border:1px solid #fff;box-shadow:0 1px 2px rgba(0,0,0,.06);background:'+c+';cursor:pointer'; d.title=c; on(d,'click',function(){STATE.active=c;}); sw.appendChild(d); });
+      ['#1f2937','#fb7185','#f472b6','#d8b4fe','#a78bfa','#93c5fd','#38bdf8','#99f6e4','#5eead4','#fde68a','#facc15','#fca5a5','#86efac']
+      .forEach(function(c){ var d=make('div'); d.style.cssText='height:40px;width:40px;border-radius:999px;border:1px solid #fff;box-shadow:0 1px 2px rgba(0,0,0,.06);background:'+c+';cursor:pointer'; d.title=c; on(d,'click',function(){STATE.active=c; render();}); sw.appendChild(d); });
     }
   }
 
-  // ---------- UPLOAD ----------
+  // ---------- upload ----------
   var uploadZone=$('.upload-zone');
   var fileInput=uploadZone && uploadZone.querySelector('input[type="file"]');
   if(fileInput){ fileInput.removeAttribute('disabled'); on(fileInput,'change',function(){ var f=fileInput.files[0]; if(f) loadImage(f); }); }
@@ -134,7 +115,7 @@
     on(uploadZone,'click',function(e){ if(e.target===uploadZone && fileInput) fileInput.click(); });
   }
 
-  // put toolbar inside PREVIEW
+  // toolbar inside PREVIEW
   var toolbar = make('div');
   toolbar.style.cssText='position:absolute;left:12px;bottom:12px;display:flex;gap:10px;flex-wrap:wrap;z-index:3';
   var btnProcess   = make('button','btn','Process Photo');
@@ -147,47 +128,35 @@
     STATE.subject.enabled=!STATE.subject.enabled;
     if(!STATE.subject.enabled) STATE.subject.rect=null;
     btnHighlight.classList.toggle('active', STATE.subject.enabled);
-    render(); // draw/remove overlay
+    render(); // overlay
   });
   on(chkNoSub,'change',function(){ STATE.subject.noSubject=chkNoSub.checked; });
 
-  // Hide export formats until processed
-  var formatBtns = $$('.col.card.rose .formats .btn');
-  function setFormatsVisible(v){
-    formatBtns.forEach(function(b){ b.style.display = v ? 'inline-block' : 'none'; });
-  }
+  // formats hidden until processed
+  var formatBtns=$$('.col.card.rose .formats .btn');
+  function setFormatsVisible(v){ formatBtns.forEach(function(b){ b.style.display=v?'inline-block':'none'; }); }
   setFormatsVisible(false);
 
-  on(btnProcess,'click',function(){
-    if(!STATE.lastImage) return alert('Choose a photo first.');
-    processPhoto(STATE.lastImage);
-  });
+  on(btnProcess,'click',function(){ if(!STATE.lastImage) return alert('Choose a photo first.'); processPhoto(STATE.lastImage); });
 
   function loadImage(file){
     var img=new Image();
-    img.onload=function(){
-      STATE.lastImage=img;
-      // show photo in preview BEFORE processing (so user can highlight)
-      showImageInPreview(img, 1);
-      setFormatsVisible(false);
-    };
+    img.onload=function(){ STATE.lastImage=img; STATE.processed=false; setFormatsVisible(false); showImageInPreview(img,1); };
     img.onerror=function(){ alert('Could not load image'); };
-    img.crossOrigin='anonymous';
-    img.src=URL.createObjectURL(file);
+    img.crossOrigin='anonymous'; img.src=URL.createObjectURL(file);
   }
 
-  // preview: image + overlay + stitches
   function showImageInPreview(img, alpha){
     var W=prev.width/dpr(), H=prev.height/dpr();
     var iw=img.width, ih=img.height, s=Math.min(W/iw,H/ih), w=iw*s, h=ih*s, ox=(W-w)/2, oy=(H-h)/2;
     STATE.imgFit={ox:ox,oy:oy,scale:s,iw:iw,ih:ih};
+    // draw photo and clear stitches
+    STATE.stitches = [];
     pctx.setTransform(dpr(),0,0,dpr(),0,0);
     pctx.clearRect(0,0,W,H);
     pctx.fillStyle='#fff'; pctx.fillRect(0,0,W,H);
-    pctx.globalAlpha=alpha||1;
-    pctx.drawImage(img,ox,oy,w,h);
-    pctx.globalAlpha=1;
-    renderOverlay(); // overlay rect if on
+    pctx.globalAlpha=alpha||1; pctx.drawImage(img,ox,oy,w,h); pctx.globalAlpha=1;
+    render(); // ensures overlays/guides show consistently
   }
 
   // subject drag on preview
@@ -195,35 +164,17 @@
   on(prev,'pointerdown',function(e){
     if(!STATE.subject.enabled) return;
     var r=prev.getBoundingClientRect(); start=[e.clientX-r.left, e.clientY-r.top]; dragging=true;
-    STATE.subject.rect={x:start[0],y:start[1],w:0,h:0}; renderOverlay();
+    STATE.subject.rect={x:start[0],y:start[1],w:0,h:0}; render();
   });
   on(prev,'pointermove',function(e){
     if(!dragging || !STATE.subject.enabled) return;
     var r=prev.getBoundingClientRect(), x=e.clientX-r.left, y=e.clientY-r.top;
     STATE.subject.rect={x:Math.min(start[0],x), y:Math.min(start[1],y), w:Math.abs(x-start[0]), h:Math.abs(y-start[1])};
-    renderOverlay();
+    render();
   });
   on(window,'pointerup',function(){ dragging=false; });
 
-  function renderOverlay(){
-    render(); // draws stitches/background/grid
-    var W=prev.width/dpr(), H=prev.height/dpr();
-    // redraw image faintly beneath stitches if available
-    if(STATE.lastImage && STATE.imgFit){
-      pctx.save(); pctx.globalAlpha=0.9;
-      var f=STATE.imgFit; pctx.drawImage(STATE.lastImage,f.ox,f.oy,f.iw*f.scale,f.ih*f.scale);
-      pctx.restore();
-    }
-    if(STATE.subject.enabled && STATE.subject.rect){
-      var r=STATE.subject.rect;
-      pctx.save();
-      pctx.strokeStyle='rgba(20,20,20,.95)'; pctx.setLineDash([6,6]); pctx.lineWidth=1;
-      pctx.strokeRect(r.x,r.y,r.w,r.h);
-      pctx.restore();
-    }
-  }
-
-  // ---------- DRAW ----------
+  // ---------- draw tools ----------
   function wireDrawTools(){
     var toolBtns=$$('.panel[data-panel="draw"] .toolbar .btn');
     var map=['pen','eraser','fill','fabric','guides','undo'];
@@ -236,10 +187,8 @@
         STATE.tool=tool;
       });
     });
-    // add a minimal Process button
     var tb=(toolBtns[0]&&toolBtns[0].parentNode)||drawHost.parentNode;
-    var proc=make('button','btn','Process Drawing'); proc.style.marginLeft='10px';
-    tb && tb.appendChild(proc);
+    var proc=make('button','btn','Process Drawing'); proc.style.marginLeft='10px'; tb&&tb.appendChild(proc);
     on(proc,'click',processDrawing);
   }
   wireDrawTools();
@@ -278,16 +227,24 @@
   function snapshot(){ STATE.history.push(draw.toDataURL()); if(STATE.history.length>50) STATE.history.shift(); }
   function undo(){ if(STATE.history.length<2) return; STATE.history.pop(); var img=new Image(); img.onload=function(){ dctx.clearRect(0,0,draw.width,draw.height); dctx.drawImage(img,0,0); render(); }; img.src=STATE.history[STATE.history.length-1]; }
 
-  // ---------- processing core ----------
+  // ---------- processing ----------
+  function processingOverlay(show, text){
+    var W=prev.width/dpr(), H=prev.height/dpr(); render(); // base
+    if(!show) return;
+    pctx.save(); pctx.fillStyle='rgba(255,255,255,.65)'; pctx.fillRect(0,0,W,H);
+    pctx.fillStyle='#111827'; pctx.font='600 14px system-ui, sans-serif'; pctx.fillText(text||'Processing…', 12, 22);
+    pctx.restore();
+  }
+
   function processPhoto(img){
-    setFormatsVisible(false);
-    // prepare raster
-    var max=1024;
-    var s=Math.min(1, max/Math.max(img.width,img.height));
-    var w=(img.width*s)|0, h=(img.height*s)|0;
+    STATE.busy=true; STATE.processed=false; setFormatsVisible(false); processingOverlay(true,'Processing photo…');
+
+    // 1) prep raster
+    var max=1024, s=Math.min(1, max/Math.max(img.width,img.height)), w=(img.width*s)|0, h=(img.height*s)|0;
     var c=document.createElement('canvas'); c.width=w; c.height=h; var x=c.getContext('2d'); x.drawImage(img,0,0,w,h);
     var id=x.getImageData(0,0,w,h), d=id.data;
 
+    // 2) cleanup
     if(STATE.opts.cleanup){
       var out=new Uint8ClampedArray(d.length), rad=1;
       for(var yy=0; yy<h; yy++){ for(var xx=0; xx<w; xx++){
@@ -299,52 +256,71 @@
       id.data.set(out); x.putImageData(id,0,0);
     }
 
+    // 3) mask
     var mask=new Uint8Array(w*h), i;
     if(STATE.opts.reduce){
-      var lab=kmeansLabels(x,6), sums=[], cnt=[], j;
-      for(j=0;j<6;j++){ sums.push(0); cnt.push(0); }
+      var labels=kmeansLabels(x,6), sums=[], cnt=[];
+      for(i=0;i<6;i++){ sums.push(0); cnt.push(0); }
       var d2=x.getImageData(0,0,w,h).data;
-      for(i=0;i<w*h;i++){ var cix=lab[i], p=i*4; var lum=0.2126*d2[p]+0.7152*d2[p+1]+0.0722*d2[p+2]; sums[cix]+=lum; cnt[cix]++; }
-      var darkest=0,best=1e9; for(j=0;j<6;j++){ if(cnt[j]){ var m=sums[j]/cnt[j]; if(m<best){best=m; darkest=j;} } }
-      for(i=0;i<w*h;i++){ mask[i]=(lab[i]===darkest)?1:0; }
+      for(i=0;i<w*h;i++){ var cix=labels[i], p=i*4; var lum=0.2126*d2[p]+0.7152*d2[p+1]+0.0722*d2[p+2]; sums[cix]+=lum; cnt[cix]++; }
+      var darkest=0,best=1e9; for(i=0;i<6;i++){ if(cnt[i]){ var m=sums[i]/cnt[i]; if(m<best){best=m; darkest=i;} } }
+      for(i=0;i<w*h;i++){ mask[i]=(labels[i]===darkest)?1:0; }
     }else{
       for(i=0;i<w*h;i++){ var p2=i*4; var g=(d[p2]*0.3+d[p2+1]*0.59+d[p2+2]*0.11)|0; mask[i]=(g<128)?1:0; }
     }
 
-    // apply subject rectangle (if enabled & not No subject)
+    // 4) subject crop
     if(STATE.subject.rect && !STATE.subject.noSubject && STATE.imgFit){
-      var fit=STATE.imgFit;
-      var sx=Math.max(0, Math.floor((STATE.subject.rect.x - fit.ox)/fit.scale));
-      var sy=Math.max(0, Math.floor((STATE.subject.rect.y - fit.oy)/fit.scale));
-      var ex=Math.min(w-1, Math.floor((STATE.subject.rect.x+STATE.subject.rect.w - fit.ox)/fit.scale));
-      var ey=Math.min(h-1, Math.floor((STATE.subject.rect.y+STATE.subject.rect.h - fit.oy)/fit.scale));
+      var f=STATE.imgFit, sx=Math.max(0, Math.floor((STATE.subject.rect.x - f.ox)/f.scale)),
+          sy=Math.max(0, Math.floor((STATE.subject.rect.y - f.oy)/f.scale)),
+          ex=Math.min(w-1, Math.floor((STATE.subject.rect.x+STATE.subject.rect.w - f.ox)/f.scale)),
+          ey=Math.min(h-1, Math.floor((STATE.subject.rect.y+STATE.subject.rect.h - f.oy)/f.scale));
       for(var y=0;y<h;y++){ for(var x0=0;x0<w;x0++){ if(!(x0>=sx && x0<=ex && y>=sy && y<=ey)) mask[y*w+x0]=0; } }
     }
 
+    // 5) contours -> stitches
     var paths=marchingSquares(mask,w,h);
+    if(!paths || !paths.length){
+      // Fallback: simple Sobel -> threshold -> contours
+      var sob = sobelEdges(x,w,h);
+      var th=autoOtsu(sob,w,h);
+      var mask2=new Uint8Array(w*h);
+      for(i=0;i<w*h;i++) mask2[i]= (sob[i]>th)?1:0;
+      paths = marchingSquares(mask2,w,h);
+    }
+
+    if(!paths || !paths.length){
+      STATE.busy=false; STATE.processed=false; STATE.stitches=[];
+      render(); // clears overlay
+      alert('No clear edges found. Try highlighting the subject or toggling Reduce/Edge cleanup.');
+      return;
+    }
+
     STATE.stitches = pathsToStitches(paths, prev.width/dpr(), prev.height/dpr());
     STATE.subject.enabled=false; STATE.subject.rect=null;
+    STATE.busy=false; STATE.processed=true;
     setFormatsVisible(true);
-    render();
+    render(); // shows stitches on top of image
   }
 
+  // drawing -> stitches
   function processDrawing(){
-    setFormatsVisible(false);
-    var w=draw.width, h=draw.height, x=draw.getContext('2d'), id=x.getImageData(0,0,w,h), d=id.data;
+    STATE.busy=true; STATE.processed=false; setFormatsVisible(false); processingOverlay(true,'Processing drawing…');
+    var w=draw.width, h=draw.height, ctx=draw.getContext('2d'), id=ctx.getImageData(0,0,w,h), d=id.data;
     var max=1024, s=Math.min(1, max/Math.max(w,h)), sw=Math.max(2,(w*s)|0), sh=Math.max(2,(h*s)|0);
     var tmp=document.createElement('canvas'); tmp.width=sw; tmp.height=sh; var t=tmp.getContext('2d');
     var g=document.createImageData(w,h); for(var i=0;i<w*h;i++){ var a=d[i*4+3]; g.data[i*4]=a; g.data[i*4+1]=a; g.data[i*4+2]=a; g.data[i*4+3]=255; }
-    x.putImageData(g,0,0);
+    ctx.putImageData(g,0,0);
     t.drawImage(draw,0,0,sw,sh);
     var id2=t.getImageData(0,0,sw,sh), mask=new Uint8Array(sw*sh);
     for(i=0;i<sw*sh;i++){ mask[i]=id2.data[i*4]>0?1:0; }
     var paths=marchingSquares(mask,sw,sh);
+    if(!paths || !paths.length){ STATE.stitches=[]; STATE.busy=false; render(); alert('No strokes detected.'); return; }
     STATE.stitches = pathsToStitches(paths, prev.width/dpr(), prev.height/dpr());
-    setFormatsVisible(true);
-    render();
+    STATE.busy=false; STATE.processed=true; setFormatsVisible(true); render();
   }
 
-  // kmeans (labels only)
+  // ---------- vision primitives ----------
   function kmeansLabels(ctx,k){
     var w=ctx.canvas.width, h=ctx.canvas.height, id=ctx.getImageData(0,0,w,h), d=id.data;
     var centers=[], labels=new Uint8Array(w*h);
@@ -355,25 +331,52 @@
         for(var c=0;c<k;c++){ var cc=centers[c], dist=(r-cc[0])*(r-cc[0])+(g-cc[1])*(g-cc[1])+(b-cc[2])*(b-cc[2]); if(dist<bd){bd=dist; best=c;} }
         labels[i2]=best;
       }
-      var sums=[], counts=[], cix;
-      for(cix=0;cix<k;cix++){ sums.push([0,0,0]); counts.push(0); }
+      var sums=[], counts=[];
+      for(var c2=0;c2<k;c2++){ sums.push([0,0,0]); counts.push(0); }
       for(i2=0;i2<w*h;i2++){ var ci=labels[i2], p2=i2*4; sums[ci][0]+=d[p2]; sums[ci][1]+=d[p2+1]; sums[ci][2]+=d[p2+2]; counts[ci]++; }
-      for(cix=0;cix<k;cix++){ if(counts[cix]) centers[cix]=[sums[cix][0]/counts[cix], sums[cix][1]/counts[cix], sums[cix][2]/counts[cix]]; }
+      for(c2=0;c2<k;c2++){ if(counts[c2]) centers[c2]=[sums[c2][0]/counts[c2], sums[c2][1]/counts[c2], sums[c2][2]/counts[c2]]; }
     }
     return labels;
   }
 
-  // marching squares (guarded)
+  function sobelEdges(ctx,w,h){
+    var id=ctx.getImageData(0,0,w,h), d=id.data, g=new Float32Array(w*h);
+    function gray(i){ return 0.299*d[i]+0.587*d[i+1]+0.114*d[i+2]; }
+    for(var y=1;y<h-1;y++){
+      for(var x=1;x<w-1;x++){
+        var i=(y*w+x)*4, xm=i-4, xp=i+4, ym=i-w*4, yp=i+w*4;
+        var gx = -gray(ym+xm) -2*gray(i+xm) -gray(yp+xm) + gray(ym+xp) + 2*gray(i+xp) + gray(yp+xp);
+        var gy =  gray(ym+xm) +2*gray(ym+i) +gray(ym+xp) - gray(yp+xm) - 2*gray(yp+i) - gray(yp+xp);
+        g[y*w+x]=Math.sqrt(gx*gx+gy*gy);
+      }
+    }
+    // normalize to 0..255 Uint8
+    var out=new Uint8Array(w*h), maxv=1; for(var k=0;k<g.length;k++) if(g[k]>maxv) maxv=g[k];
+    for(k=0;k<g.length;k++) out[k]=(g[k]/maxv*255)|0;
+    return out;
+  }
+  function autoOtsu(img,w,h){
+    var hist=new Uint32Array(256); for(var i=0;i<w*h;i++) hist[img[i]]++;
+    var sum=0,total=w*h; for(i=0;i<256;i++) sum+=i*hist[i];
+    var sumB=0,wB=0,maxVar=0,thr=127;
+    for(i=0;i<256;i++){
+      wB+=hist[i]; if(!wB) continue;
+      var wF=total-wB; if(!wF) break;
+      sumB+=i*hist[i];
+      var mB=sumB/wB, mF=(sum-sumB)/wF;
+      var v=wB*wF*(mB-mF)*(mB-mF);
+      if(v>maxVar){ maxVar=v; thr=i; }
+    }
+    return thr;
+  }
+
   function marchingSquares(mask,w,h){
     var paths=[], visited=new Uint8Array(w*h);
     function idx(x,y){ return y*w+x; }
     function trace(sx,sy){
       var x=sx, y=sy, dir=0, path=[], iter=0, maxIter=w*h*8;
       while(iter++<maxIter){
-        var a=mask[idx(x  ,y  )]?1:0,
-            b=mask[idx(x+1,y  )]?1:0,
-            c=mask[idx(x+1,y+1)]?1:0,
-            d=mask[idx(x  ,y+1)]?1:0;
+        var a=mask[idx(x  ,y  )]?1:0, b=mask[idx(x+1,y  )]?1:0, c=mask[idx(x+1,y+1)]?1:0, d=mask[idx(x  ,y+1)]?1:0;
         var code=a + b*2 + c*4 + d*8;
         if(code===0||code===15){ if(dir===0)x++; else if(dir===1)y++; else if(dir===2)x--; else y--; }
         else{
@@ -414,13 +417,18 @@
     return stitches;
   }
 
-  // ---------- preview render ----------
+  // ---------- render ----------
   function render(){
-    var W=prev.width/dpr(), H=prev.height/dpr();
-    var ctx=STATE.canvases.prevCtx;
+    var W=prev.width/dpr(), H=prev.height/dpr(), ctx=STATE.canvases.prevCtx;
     ctx.setTransform(dpr(),0,0,dpr(),0,0);
     ctx.clearRect(0,0,W,H);
     ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,W,H);
+
+    // background photo (if any), slightly dim so stitches pop
+    if(STATE.lastImage && STATE.imgFit){
+      var f=STATE.imgFit; ctx.save(); ctx.globalAlpha=STATE.processed?0.75:0.95;
+      ctx.drawImage(STATE.lastImage, f.ox, f.oy, f.iw*f.scale, f.ih*f.scale); ctx.restore();
+    }
 
     // grid / guides
     if(STATE.guides){
@@ -429,27 +437,19 @@
       ctx.restore();
     }
 
-    // image (if any) lightly in background so stitching is visible
-    if(STATE.lastImage && STATE.imgFit){
-      var f=STATE.imgFit;
-      ctx.save(); ctx.globalAlpha=0.9;
-      ctx.drawImage(STATE.lastImage, f.ox, f.oy, f.iw*f.scale, f.ih*f.scale);
-      ctx.restore();
-    }
-
-    // stitches
-    ctx.strokeStyle='#111827'; ctx.lineWidth=1; ctx.beginPath();
-    for(var i=0;i<STATE.stitches.length;i++){
-      var s=STATE.stitches[i];
-      if(s.cmd==='jump') ctx.moveTo(s.x,s.y); else ctx.lineTo(s.x,s.y);
-    }
+    // stitches on top (thicker, high contrast so they "show change")
+    ctx.strokeStyle=STATE.active||'#111827'; ctx.lineWidth=1.6; ctx.beginPath();
+    for(var i=0;i<STATE.stitches.length;i++){ var s=STATE.stitches[i]; if(s.cmd==='jump') ctx.moveTo(s.x,s.y); else ctx.lineTo(s.x,s.y); }
     ctx.stroke();
 
-    if(STATE.guides){
-      var hoopW=STATE.hoop.wmm*STATE.pxPerMm, hoopH=STATE.hoop.hmm*STATE.pxPerMm;
-      ctx.save(); ctx.strokeStyle='rgba(0,0,0,.22)'; ctx.setLineDash([6,6]);
-      ctx.strokeRect((W-hoopW)/2,(H-hoopH)/2, hoopW, hoopH); ctx.restore();
+    // subject rectangle overlay
+    if(STATE.subject.enabled && STATE.subject.rect){
+      var r=STATE.subject.rect; ctx.save(); ctx.strokeStyle='rgba(20,20,20,.95)'; ctx.setLineDash([6,6]); ctx.lineWidth=1;
+      ctx.strokeRect(r.x,r.y,r.w,r.h); ctx.restore();
     }
+
+    // busy overlay
+    if(STATE.busy) processingOverlay(true);
   }
 
   // ---------- exports ----------
@@ -467,30 +467,17 @@
     } return out;
   }
   function encDST(){
-    var u=toUnits(), bytes=[];
-    function enc(dx,dy,flag){ if(flag==null) flag=0; dx=clamp(Math.round(dx),-121,121); dy=clamp(Math.round(dy),-121,121);
-      var b1=(dx&3)|((dx&12)<<2)|((dy&3)<<4)|((dy&12)<<6);
-      var b2=((dx&48)>>4)|((dx&192)>>2)|((dy&48))|((dy&192)<<2);
-      var b3=(flag|3)&255; bytes.push(b1&255,b2&255,b3); }
-    var colors=0;
-    for(var i=0;i<u.length;i++){ var s=u[i]; if(s.cmd==='stop'){ enc(0,0,0xC0); colors++; continue; } if(s.cmd==='jump'){ enc(s.dx,s.dy,0x80); continue; } enc(s.dx,s.dy,0); }
-    bytes.push(0,0,0xF3);
-    var header=("LA:LOOMABELLE.ST\n"+"ST:"+String((bytes.length/3)|0).padStart(7,' ')+"\n"+"CO:"+String(colors+1).padStart(3,' ')+"\n"+"  "+(Array(513).join(' '))).slice(0,512);
-    var hb=new TextEncoder().encode(header);
-    var u8=new Uint8Array(hb.length+bytes.length); u8.set(hb,0); u8.set(new Uint8Array(bytes),hb.length); return u8;
+    var u=toUnits(), bytes=[]; function enc(dx,dy,flag){ if(flag==null) flag=0; dx=clamp(Math.round(dx),-121,121); dy=clamp(Math.round(dy),-121,121);
+      var b1=(dx&3)|((dx&12)<<2)|((dy&3)<<4)|((dy&12)<<6); var b2=((dx&48)>>4)|((dx&192)>>2)|((dy&48))|((dy&192)<<2); var b3=(flag|3)&255; bytes.push(b1&255,b2&255,b3); }
+    var colors=0; for(var i=0;i<u.length;i++){ var s=u[i]; if(s.cmd==='stop'){ enc(0,0,0xC0); colors++; continue; } if(s.cmd==='jump'){ enc(s.dx,s.dy,0x80); continue; } enc(s.dx,s.dy,0); }
+    bytes.push(0,0,0xF3); var header=("LA:LOOMABELLE.ST\n"+"ST:"+String((bytes.length/3)|0).padStart(7,' ')+"\n"+"CO:"+String(colors+1).padStart(3,' ')+"\n"+"  "+(Array(513).join(' '))).slice(0,512);
+    var hb=new TextEncoder().encode(header); var u8=new Uint8Array(hb.length+bytes.length); u8.set(hb,0); u8.set(new Uint8Array(bytes),hb.length); return u8;
   }
   function encEXP(){
-    var u=toUnits(), bytes=[];
-    function put(dx,dy,cmd){
-      dx=clamp(Math.round(dx),-127,127); dy=clamp(Math.round(dy),-127,127);
-      if(cmd==='jump') bytes.push(0x80,0x04);
-      if(cmd==='stop') bytes.push(0x80,0x01);
-      if(cmd==='end') bytes.push(0x80,0x00);
-      if(cmd==='stitch'||cmd==='jump'){ bytes.push(dx&255,dy&255); }
-    }
+    var u=toUnits(), bytes=[]; function put(dx,dy,cmd){ dx=clamp(Math.round(dx),-127,127); dy=clamp(Math.round(dy),-127,127);
+      if(cmd==='jump') bytes.push(0x80,0x04); if(cmd==='stop') bytes.push(0x80,0x01); if(cmd==='end') bytes.push(0x80,0x00); if(cmd==='stitch'||cmd==='jump'){ bytes.push(dx&255,dy&255); } }
     for(var i=0;i<u.length;i++){ var s=u[i]; if(s.cmd==='stop'){ put(0,0,'stop'); continue; } if(s.cmd==='jump'){ put(s.dx,s.dy,'jump'); continue; } put(s.dx,s.dy,'stitch'); }
-    bytes.push(0x80,0x00);
-    return new Uint8Array(bytes);
+    bytes.push(0x80,0x00); return new Uint8Array(bytes);
   }
   function encViaAI(fmt, cb){
     if(!STATE.ai || !STATE.ai.endpoint || !STATE.ai.key){ cb(new Error('Set ?aiEndpoint=...&aiKey=... or localStorage "loomabelle:cfg".')); return; }
@@ -499,17 +486,14 @@
       .then(function(buf){ cb(null, new Uint8Array(buf)); })
       .catch(function(err){ cb(err); });
   }
-  function download(name, bytes){
-    var a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([bytes])); a.download=name; a.click();
-    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1500);
-  }
+  function download(name, bytes){ var a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([bytes])); a.download=name; a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1500); }
   $$('.col.card.rose .formats .btn').forEach(function(btn){
     var fmt=btn.textContent.replace(/\s+/g,'').toUpperCase();
     if(['DST','EXP','PES','JEF'].indexOf(fmt)===-1) return;
     on(btn,'click',function(){
       try{
-        if(fmt==='DST'){ download('loomabelle.dst', encDST()); return; }
-        if(fmt==='EXP'){ download('loomabelle.exp', encEXP()); return; }
+        if(fmt==='DST') return download('loomabelle.dst', encDST());
+        if(fmt==='EXP') return download('loomabelle.exp', encEXP());
         encViaAI(fmt, function(err, bytes){ if(err) return alert(fmt+': '+err.message); download('loomabelle.'+fmt.toLowerCase(), bytes); });
       }catch(e){ alert(fmt+': '+e.message); }
     });

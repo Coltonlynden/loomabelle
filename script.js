@@ -1,35 +1,30 @@
-/* Loomabelle — v8 (ES5, no modules)
-   iOS fixes + touch locking:
-   - Prevents Safari crash loops (throttled resize; removed MutationObserver churn)
-   - Canvas interactions use `touch-action:none` and actively `preventDefault`
-   - While drawing or highlighting, page scroll/zoom is temporarily locked
-   - Upload → preview → (optional) subject → Process works; formats appear after success
-   - Draw tab still processes to stitches; DST/EXP export offline; PES/JEF via optional AI
+/* Loomabelle — v9 (ES5, no modules)
+   Fixes:
+   - Correct touch/click coordinate mapping on all DPR/zoom levels (iOS).
+   - Preview toolbar pinned to bottom of the preview viewport (full-width row).
+   - Keeps all previous features from v8 (iOS stability, touch locking, processing).
 */
 (function(){
   // ===== helpers =====
   function $(s,el){return (el||document).querySelector(s);}
   function $$(s,el){return Array.prototype.slice.call((el||document).querySelectorAll(s));}
   function on(el,ev,fn,opt){ el&&el.addEventListener(ev,fn,opt||false); }
-  function off(el,ev,fn,opt){ el&&el.removeEventListener(ev,fn,opt||false); }
   function dpr(){ return window.devicePixelRatio||1; }
   function clamp(v,mi,ma){ return Math.max(mi,Math.min(ma,v)); }
   function make(tag,cls,txt){ var e=document.createElement(tag); if(cls) e.className=cls; if(txt!=null) e.textContent=txt; return e; }
   function hexToRgb(hex){ hex=String(hex||'').replace('#',''); if(hex.length===3){hex=hex.split('').map(function(c){return c+c;}).join('');} var n=parseInt(hex||'ffffff',16); return [(n>>16)&255,(n>>8)&255,n&255]; }
-  function raf(fn){ return (window.requestAnimationFrame||function(f){return setTimeout(f,16)})(fn); }
-  function debounce(fn,ms){ var t; return function(){ var args=arguments; clearTimeout(t); t=setTimeout(function(){ fn.apply(null,args); },ms); }; }
+  function debounce(fn,ms){ var t; return function(){ var a=arguments; clearTimeout(t); t=setTimeout(function(){ fn.apply(null,a); },ms); }; }
 
-  // Hide “mockup” helper notes (no DOM change to layout)
+  // Hide any “mockup” hints
   $$('.text-muted,.muted,.note,small,.badge').forEach(function(el){
     if((el.textContent||'').toLowerCase().indexOf('mockup')>-1) el.style.display='none';
   });
 
-  // Inject minimal CSS for touch locking w/o changing theme
+  // Touch/scroll lock CSS (no theme changes)
   (function addTouchCSS(){
     var css = ".loomabelle-interactive{touch-action:none;-ms-touch-action:none}"+
               "canvas.loomabelle-interactive{touch-action:none!important}"+
-              "body._lb_lock{overscroll-behavior:contain}"+
-              "html._lb_lock{overscroll-behavior:contain}";
+              "body._lb_lock,html._lb_lock{overscroll-behavior:contain}";
     var s=document.createElement('style'); s.textContent=css; document.head.appendChild(s);
   })();
 
@@ -61,10 +56,10 @@
       on(btn,'click',function(){
         tabs.forEach(function(b){ b.classList.toggle('active', b===btn); });
         panels.forEach(function(p){ p.classList.toggle('active', p.getAttribute('data-panel')===btn.getAttribute('data-tab')); });
-        raf(resizeAll);
+        resizeAll();
       });
     });
-    // Switch helpers
+    // quick links
     $$('a,button').forEach(function(el){
       var t=(el.textContent||'').toLowerCase();
       if(t.indexOf('start with a photo')>-1 || t.indexOf('upload photo')>-1){
@@ -77,7 +72,7 @@
     var y=$('#year'); if(y) y.textContent=(new Date()).getFullYear();
   }
 
-  // ===== canvases & sizing (iOS-safe) =====
+  // ===== canvases & sizing (iOS safe) =====
   var prevHost=document.querySelector('.col.card.rose .preview') || document.querySelector('.preview');
   var drawHost=document.querySelector('.panel[data-panel="draw"] .canvas') || document.querySelector('.canvas');
   if(!prevHost || !drawHost){ console.error('Loomabelle: Missing .preview or .canvas host'); return; }
@@ -94,32 +89,26 @@
   function sizeCanvasToHost(canvas, host){
     var cw=Math.max(320, host.clientWidth||640);
     var ch=Math.max(220, Math.floor(cw*9/16));
-    var scale=dpr();
-    // cap backing store on iOS to avoid memory spikes
-    var cap=2; if(/iPad|iPhone|iPod/.test(navigator.userAgent)) cap=1.5;
-    scale=Math.min(scale, cap);
+    var scale=Math.min(dpr(), /iPad|iPhone|iPod/.test(navigator.userAgent)?1.5:2.5);
     canvas.style.width=cw+'px'; canvas.style.height=ch+'px';
     canvas.width=Math.round(cw*scale); canvas.height=Math.round(ch*scale);
-    var ctx=canvas.getContext('2d');
-    ctx.setTransform(scale,0,0,scale,0,0);
+    var ctx=canvas.getContext('2d'); ctx.setTransform(scale,0,0,scale,0,0);
   }
   function updatePxPerMm(){
     var m=10, W=prev.width/dpr(), H=prev.height/dpr();
     STATE.pxPerMm=Math.min((W-m*2)/STATE.hoop.wmm, (H-m*2)/STATE.hoop.hmm);
   }
   var resizeAll = debounce(function(){ sizeCanvasToHost(prev,prevHost); sizeCanvasToHost(draw,drawHost); updatePxPerMm(); render(); }, 60);
-  // iOS: avoid MutationObserver churn — rely on ResizeObserver + window resize (throttled)
   try{ new ResizeObserver(resizeAll).observe(prevHost); new ResizeObserver(resizeAll).observe(drawHost); }catch(e){}
   on(window,'resize',resizeAll);
+  resizeAll();
 
-  // ===== thread palette (unchanged visuals) =====
+  // ===== thread palette =====
   var sw=document.querySelector('.swatches');
-  if(sw){
+  if(sw && !sw.children.length){
     sw.style.display='flex'; sw.style.flexWrap='wrap'; sw.style.gap='12px'; sw.style.alignItems='center';
-    if(sw.children.length===0){
-      ['#111827','#fb7185','#f472b6','#d8b4fe','#a78bfa','#93c5fd','#38bdf8','#99f6e4','#5eead4','#fde68a','#facc15','#fca5a5','#86efac']
+    ['#111827','#fb7185','#f472b6','#d8b4fe','#a78bfa','#93c5fd','#38bdf8','#99f6e4','#5eead4','#fde68a','#facc15','#fca5a5','#86efac']
       .forEach(function(c){ var d=make('div'); d.style.cssText='height:40px;width:40px;border-radius:999px;border:1px solid #fff;box-shadow:0 1px 2px rgba(0,0,0,.06);background:'+c+';cursor:pointer'; d.title=c; on(d,'click',function(){STATE.active=c; render();}); sw.appendChild(d); });
-    }
   }
 
   // ===== upload zone =====
@@ -132,8 +121,9 @@
     on(uploadZone,'click',function(e){ if(e.target===uploadZone && fileInput) fileInput.click(); });
   }
 
-  // ===== toolbar in preview =====
-  var toolbar=make('div'); toolbar.style.cssText='position:absolute;left:12px;bottom:12px;display:flex;gap:10px;flex-wrap:wrap;z-index:3';
+  // ===== toolbar (BOTTOM aligned, full width) =====
+  var toolbar=make('div');
+  toolbar.style.cssText='position:absolute;left:8px;right:8px;bottom:8px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;justify-content:flex-start;z-index:3;pointer-events:auto';
   var btnProcess=make('button','btn','Process Photo');
   var btnHighlight=make('button','btn','Highlight Subject');
   var lblNoSub=make('label',null,''); var chkNoSub=make('input'); chkNoSub.type='checkbox'; lblNoSub.appendChild(chkNoSub); lblNoSub.appendChild(document.createTextNode(' No subject'));
@@ -157,8 +147,8 @@
     if(STATE.busy) return;
     if(!STATE.lastImage){
       if(fileInput && fileInput.files && fileInput.files[0]) return loadImage(fileInput.files[0]);
-      alert('Choose a photo first.'); return;
     }
+    if(!STATE.lastImage){ alert('Choose a photo first.'); return; }
     processPhoto(STATE.lastImage);
   });
 
@@ -170,7 +160,7 @@
     img.crossOrigin='anonymous'; img.src=URL.createObjectURL(file);
   }
   function showImageInPreview(img, alpha){
-    sizeCanvasToHost(prev,prevHost); // ensure fresh dimensions on mobile
+    sizeCanvasToHost(prev,prevHost); // ensure fresh dims on mobile
     var W=prev.width/dpr(), H=prev.height/dpr();
     var iw=img.width, ih=img.height, s=Math.min(W/iw,H/ih), w=iw*s, h=ih*s, ox=(W-w)/2, oy=(H-h)/2;
     STATE.imgFit={ox:ox,oy:oy,scale:s,iw:iw,ih:ih};
@@ -182,29 +172,40 @@
     render();
   }
 
-  // ===== lock page scroll during canvas interactions (iOS) =====
+  // ===== lock page scroll during canvas interactions =====
   function lockScroll(){ document.documentElement.classList.add('_lb_lock'); document.body.classList.add('_lb_lock'); }
   function unlockScroll(){ document.documentElement.classList.remove('_lb_lock'); document.body.classList.remove('_lb_lock'); }
 
-  // ===== subject rectangle on preview =====
-  var dragging=false, start=null;
+  // --- coordinate mapper: returns canvas space (CSS-pixel units) ---
+  function canvasPoint(e, canvas){
+    // Use clientX/Y vs canvas rect, then multiply by CSS->canvas scaling factor
+    var rect = canvas.getBoundingClientRect();
+    var cssX = (e.clientX!=null?e.clientX:(e.touches&&e.touches[0].clientX)) - rect.left;
+    var cssY = (e.clientY!=null?e.clientY:(e.touches&&e.touches[0].clientY)) - rect.top;
+    // The context operates in CSS pixels (we setTransform(dpr)).
+    // If backing store differs from CSS, scale accordingly:
+    var scaleX = (canvas.width / (dpr())) / rect.width;
+    var scaleY = (canvas.height / (dpr())) / rect.height;
+    return { x: cssX*scaleX, y: cssY*scaleY };
+  }
+
+  // ===== subject rectangle on preview (now exact under finger) =====
+  var highlighting=false, start=null;
   function preventTouch(e){ e.preventDefault(); }
   on(prev,'pointerdown',function(e){
     if(!STATE.subject.enabled) return;
     lockScroll();
-    prev.setPointerCapture && prev.setPointerCapture(e.pointerId);
-    var r=prev.getBoundingClientRect(); start=[e.clientX-r.left, e.clientY-r.top]; dragging=true;
+    if(prev.setPointerCapture) try{ prev.setPointerCapture(e.pointerId); }catch(_){}
+    var pt=canvasPoint(e,prev); start=[pt.x,pt.y]; highlighting=true;
     STATE.subject.rect={x:start[0],y:start[1],w:0,h:0}; render();
-  });
+  }, {passive:false});
   on(prev,'pointermove',function(e){
-    if(!dragging || !STATE.subject.enabled) return;
-    var r=prev.getBoundingClientRect(), x=e.clientX-r.left, y=e.clientY-r.top;
-    STATE.subject.rect={x:Math.min(start[0],x), y:Math.min(start[1],y), w:Math.abs(x-start[0]), h:Math.abs(y-start[1])}; render();
-  });
-  on(window,'pointerup',function(e){ if(dragging){ dragging=false; unlockScroll(); } });
-  // iOS Safari: also block touch scrolling while interacting
-  on(prev,'touchmove',preventTouch,{passive:false});
-  on(draw,'touchmove',preventTouch,{passive:false});
+    if(!highlighting || !STATE.subject.enabled) return;
+    var pt=canvasPoint(e,prev);
+    STATE.subject.rect={x:Math.min(start[0],pt.x), y:Math.min(start[1],pt.y), w:Math.abs(pt.x-start[0]), h:Math.abs(pt.y-start[1])}; render();
+  }, {passive:false});
+  on(window,'pointerup',function(){ if(highlighting){ highlighting=false; unlockScroll(); } }, {passive:false});
+  on(prev,'touchmove',preventTouch,{passive:false}); // iOS
 
   // ===== draw tools =====
   function wireDrawTools(){
@@ -228,18 +229,19 @@
   var drawingActive=false;
   on(draw,'pointerdown',function(e){
     lockScroll();
-    draw.setPointerCapture && draw.setPointerCapture(e.pointerId);
-    var r=draw.getBoundingClientRect(), x=e.clientX-r.left, y=e.clientY-r.top;
-    if(STATE.tool==='fill'){ floodFill(dctx,x|0,y|0,STATE.active); snapshot(); unlockScroll(); return; }
-    drawingActive=true; dctx.strokeStyle=STATE.active; dctx.lineWidth=3; dctx.beginPath(); dctx.moveTo(x,y);
-  });
+    if(draw.setPointerCapture) try{ draw.setPointerCapture(e.pointerId); }catch(_){}
+    var pt=canvasPoint(e,draw);
+    if(STATE.tool==='fill'){ floodFill(dctx,pt.x|0,pt.y|0,STATE.active); snapshot(); unlockScroll(); return; }
+    drawingActive=true; dctx.strokeStyle=STATE.active; dctx.lineWidth=3; dctx.beginPath(); dctx.moveTo(pt.x,pt.y);
+  }, {passive:false});
   on(draw,'pointermove',function(e){
     if(!drawingActive) return;
-    var r=draw.getBoundingClientRect(), x=e.clientX-r.left, y=e.clientY-r.top;
-    if(STATE.tool==='pen'){ dctx.lineTo(x,y); dctx.stroke(); }
-    else if(STATE.tool==='eraser'){ dctx.clearRect(x-6,y-6,12,12); }
-  });
-  on(window,'pointerup',function(){ if(drawingActive){ drawingActive=false; snapshot(); unlockScroll(); } });
+    var pt=canvasPoint(e,draw);
+    if(STATE.tool==='pen'){ dctx.lineTo(pt.x,pt.y); dctx.stroke(); }
+    else if(STATE.tool==='eraser'){ dctx.clearRect(pt.x-6,pt.y-6,12,12); }
+  }, {passive:false});
+  on(window,'pointerup',function(){ if(drawingActive){ drawingActive=false; snapshot(); unlockScroll(); } }, {passive:false});
+  on(draw,'touchmove',preventTouch,{passive:false});
 
   function floodFill(ctx,x,y,hex){
     var rgb=hexToRgb(hex), r=rgb[0], g=rgb[1], b=rgb[2];
@@ -261,7 +263,7 @@
   function snapshot(){ STATE.history.push(draw.toDataURL()); if(STATE.history.length>40) STATE.history.shift(); }
   function undo(){ if(STATE.history.length<2) return; STATE.history.pop(); var img=new Image(); img.onload=function(){ dctx.clearRect(0,0,draw.width,draw.height); dctx.drawImage(img,0,0); render(); }; img.src=STATE.history[STATE.history.length-1]; }
 
-  // ===== processing UI =====
+  // ===== processing overlay =====
   function processingOverlay(text){
     var W=prev.width/dpr(), H=prev.height/dpr(); render();
     pctx.save(); pctx.fillStyle='rgba(255,255,255,.65)'; pctx.fillRect(0,0,W,H);
@@ -269,13 +271,13 @@
     pctx.restore();
   }
 
-  // ===== PHOTO -> stitches (iOS-safe sizes) =====
+  // ===== PHOTO -> stitches =====
   function processPhoto(img){
     if(STATE.busy) return;
     STATE.busy=true; STATE.processed=false; setFormatsVisible(false); processingOverlay('Processing photo…');
     try{
       if(!STATE.imgFit) showImageInPreview(img,1);
-      var base=rasterize(img, 896); // a bit lower than 1024 to avoid iOS memory spikes
+      var base=rasterize(img, 896);
       var gray=toGray(base.ctx,base.w,base.h);
       var thr=autoOtsu(gray,base.w,base.h);
       var mask=binarize(gray,base.w,base.h,thr);
@@ -283,7 +285,6 @@
 
       var paths=marchingSquares(mask,base.w,base.h);
 
-      // refine (optional)
       if((STATE.opts.reduce||STATE.opts.cleanup)){
         try{
           var ref=rasterize(img,896);
@@ -333,7 +334,7 @@
     }
   }
 
-  // ===== image ops =====
+  // ===== image ops & geometry =====
   function rasterize(img,maxSide){ var s=Math.min(1, maxSide/Math.max(img.width,img.height)), w=(img.width*s)|0, h=(img.height*s)|0; var c=document.createElement('canvas'); c.width=w; c.height=h; var x=c.getContext('2d'); x.drawImage(img,0,0,w,h); return {ctx:x,w:w,h:h}; }
   function toGray(ctx,w,h){ var id=ctx.getImageData(0,0,w,h), d=id.data, g=new Uint8Array(w*h); for(var i=0;i<w*h;i++){ var p=i*4; g[i]=(0.299*d[p]+0.587*d[p+1]+0.114*d[p+2])|0; } return g; }
   function autoOtsu(img,w,h){ var hist=new Uint32Array(256), i; for(i=0;i<w*h;i++) hist[img[i]]++; var sum=0,total=w*h; for(i=0;i<256;i++) sum+=i*hist[i]; var sumB=0,wB=0,maxVar=0,thr=127; for(i=0;i<256;i++){ wB+=hist[i]; if(!wB) continue; var wF=total-wB; if(!wF) break; sumB+=i*hist[i]; var mB=sumB/wB, mF=(sum-sumB)/wF, v=wB*wF*(mB-mF)*(mB-mF); if(v>maxVar){ maxVar=v; thr=i; } } return thr; }
@@ -366,6 +367,6 @@
   $$('.col.card.rose .formats .btn').forEach(function(btn){ var fmt=btn.textContent.replace(/\s+/g,'').toUpperCase(); if(['DST','EXP','PES','JEF'].indexOf(fmt)===-1) return; on(btn,'click',function(){ try{ if(fmt==='DST') return download('loomabelle.dst', encDST()); if(fmt==='EXP') return download('loomabelle.exp', encEXP()); encViaAI(fmt,function(err,bytes){ if(err) return alert(fmt+': '+err.message); download('loomabelle.'+fmt.toLowerCase(), bytes); }); }catch(e){ alert(fmt+': '+e.message); } }); });
 
   // ===== init =====
-  function init(){ wireTabs(); resizeAll(); STATE.history=[draw.toDataURL('image/png')]; render(); }
+  function init(){ wireTabs(); STATE.history=[draw.toDataURL('image/png')]; render(); }
   init();
 })();

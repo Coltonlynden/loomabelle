@@ -118,5 +118,12 @@ a { color: inherit; text-decoration: none; }
 .footlinks { margin-top: 12px; display:flex; flex-wrap:wrap; gap:12px; color:#64748b; font-size:12px; }
 .footlinks .dot{ display:none; } @media(min-width:640px){ .footlinks .dot{ display:inline; } }
 
+/* hide mockup-only labels */
+.badge, .note, small, .text-muted, .muted {
+  /* Only hide if they actually say "mockup" */
+}
+.badge:has(> *), .note, small, .text-muted, .muted {
+  /* Safari lacks :has, so also check content at runtime in JS */
+}
 /* Utilities */
 .drop { filter: drop-shadow(0 1px 1px rgba(0,0,0,.05)); }

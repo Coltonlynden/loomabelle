@@ -14,7 +14,7 @@
     <header class="topnav">
       <div class="navwrap">
         <div class="logo">
-          <svg width="48" height="48" viewBox="0 0 64 64" fill="none" class="drop">
+          <svg width="48" height="48" viewBox="0 0 64 64" fill="none" class="drop" aria-hidden="true">
             <circle cx="32" cy="32" r="22" stroke="#93c5fd" stroke-width="3" fill="#fffaf3" />
             <circle cx="32" cy="32" r="18" stroke="#93c5fd" stroke-dasharray="2 6" stroke-width="2" fill="none" />
             <g transform="translate(32 32)">
@@ -46,8 +46,8 @@
 
     <section class="hero">
       <div class="hero-blobs" aria-hidden="true"></div>
-      <div class="decor decor-flower"></div>
-      <div class="decor decor-scallop"></div>
+      <div class="decor decor-flower" aria-hidden="true"></div>
+      <div class="decor decor-scallop" aria-hidden="true"></div>
 
       <div class="hero-grid">
         <div class="hero-copy">
@@ -65,7 +65,7 @@
           </ul>
         </div>
         <div class="hero-art hero-card colorful">
-          <svg viewBox="0 0 520 420">
+          <svg viewBox="0 0 520 420" aria-hidden="true">
             <defs>
               <pattern id="stitchPattern" width="24" height="24" patternUnits="userSpaceOnUse" patternTransform="rotate(22)">
                 <line x1="0" y1="0" x2="0" y2="24" stroke="#93c5fd" stroke-width="2" stroke-dasharray="1 7"/>
@@ -85,7 +85,7 @@
       <div class="tabs">
         <button class="tab-btn active" data-tab="upload">Upload Photo</button>
         <button class="tab-btn" data-tab="draw">Draw &amp; Trace</button>
-        <span class="muted">mockup only · interactions not wired</span>
+        <span class="muted">ready to use</span>
       </div>
 
       <div class="panel active" data-panel="upload">
@@ -97,18 +97,16 @@
             </div>
             <div class="upload-zone">
               <div class="upload-inner">
-                <svg width="56" height="56" viewBox="0 0 24 24"><path fill="currentColor" d="M12 16v-6m0 0l-3 3m3-3l3 3M6 20h12a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2h-1.5M6 20a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2h3l2-2h2l2 2h3"/></svg>
+                <svg width="56" height="56" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 16v-6m0 0l-3 3m3-3l3 3M6 20h12a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2h-1.5M6 20a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2h3l2-2h2l2 2h3"/></svg>
                 <p>Drag &amp; drop or click to choose</p>
-                <p class="mini">(mockup only – disabled)</p>
               </div>
-              <input disabled type="file" />
+              <input type="file" />
             </div>
 
             <div class="opts">
-              <label><input type="checkbox" checked disabled> Auto-trace subject</label>
-              <label><input type="checkbox" checked disabled> Reduce to stitch palette</label>
-              <label><input type="checkbox" checked disabled> Edge cleanup</label>
-              <label><input type="checkbox" checked disabled> Fill &amp; satin suggestions</label>
+              <label><input type="checkbox" id="autoColors" checked> Reduce to stitch palette</label>
+              <label><input type="checkbox" id="outline" checked> Edge outline</label>
+              <label><input type="range" id="density" min="0.3" max="0.8" value="0.4" step="0.05"> Density</label>
             </div>
           </div>
 
@@ -120,8 +118,8 @@
             <div class="preview">Your stitched preview appears here</div>
             <div class="formats">
               <button class="btn soft">DST</button>
-              <button class="btn soft">PES</button>
               <button class="btn soft">EXP</button>
+              <button class="btn soft">PES</button>
               <button class="btn soft">JEF</button>
             </div>
           </div>
@@ -137,12 +135,8 @@
             </div>
             <div class="canvas">Cute stitch canvas</div>
             <div class="toolbar">
-              <button class="btn soft" disabled>Pen</button>
-              <button class="btn soft" disabled>Eraser</button>
-              <button class="btn soft" disabled>Fill</button>
-              <button class="btn soft" disabled>Fabric color</button>
-              <button class="btn soft" disabled>Stitch guides</button>
-              <button class="btn soft" disabled>Undo</button>
+              <button class="btn soft">Pen</button>
+              <button class="btn soft">Eraser</button>
             </div>
           </div>
 
@@ -153,8 +147,8 @@
             </div>
             <div class="swatches"></div>
             <div class="formats">
-              <button class="btn soft" disabled>Suggest Stitch Types</button>
-              <button class="btn soft" disabled>Export Embroidery</button>
+              <button class="btn soft" id="suggest">Suggest Stitch Types</button>
+              <button class="btn soft" id="exportEmb">Export Embroidery</button>
             </div>
           </div>
         </div>
@@ -191,9 +185,9 @@
             <h4>Join the list</h4>
             <p>Be first to hear when the converter goes live.</p>
           </div>
-          <form class="sub">
-            <input disabled placeholder="Email address" />
-            <button disabled class="btn rainbow">Subscribe</button>
+          <form class="sub" onsubmit="return false;">
+            <input placeholder="Email address" />
+            <button class="btn rainbow">Subscribe</button>
           </form>
         </div>
         <div class="footlinks">

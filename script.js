@@ -1,80 +1,148 @@
-/* Loomabelle — script.js v20 (single-file, mobile-first, no deps)
-   - Wires the existing mockup without changing your layout
-   - Upload photo → shows in Preview instantly
-   - Preview tools: Process Photo, Highlight Subject, No subject
-   - Draw & Trace canvas + Process Drawing
-   - DST / EXP downloads enabled AFTER processing
+/* Loomabelle — script.js v21 (for your posted index.html)
+   - No layout changes; wires the existing DOM as-is
+   - Tabs: switches panels; hero CTAs scroll and activate correct tab
+   - Upload zone: click/drag&drop → loads image (enables file input)
+   - Preview: shows image immediately; tools inside preview:
+       Process Photo, Highlight Subject, No subject, progress bar
+   - Draw & Trace: freehand canvas + Process Drawing
+   - Exports: DST / EXP appear only after processing
 */
+
 (function(){
   "use strict";
 
-  const READY=(fn)=>document.readyState==='loading'
-      ? document.addEventListener('DOMContentLoaded',fn,{once:true})
-      : fn();
+  const READY = (fn)=> (document.readyState === "loading")
+    ? document.addEventListener("DOMContentLoaded", fn, {once:true})
+    : fn();
+
   const $  = (s,root)=> (root||document).querySelector(s);
   const $$ = (s,root)=> Array.from((root||document).querySelectorAll(s));
   const on = (el,ev,fn,opt)=> el && el.addEventListener(ev,fn,opt||{passive:false});
-  const DPR= ()=> window.devicePixelRatio||1;
-  const clamp=(v,mi,ma)=>Math.max(mi,Math.min(ma,v));
-  const defer = () => new Promise(r=>setTimeout(r,0));
+  const DPR = ()=> window.devicePixelRatio||1;
+  const clamp = (v,mi,ma)=>Math.max(mi,Math.min(ma,v));
+  const defer = ()=> new Promise(r=>setTimeout(r,0));
 
   READY(init);
 
   function init(){
-    $('#year') && ($('#year').textContent = new Date().getFullYear());
+    // year
+    const y=$('#year'); if(y) y.textContent = new Date().getFullYear();
 
-    // Hide any “mockup only” hint text
-    $$('.badge,.muted,small').forEach(el=>{
+    // hide "mockup" mini note only (keep the rest of your copy)
+    $$('.mini,.muted,.badge,small').forEach(el=>{
       if((el.textContent||'').toLowerCase().includes('mockup')) el.style.display='none';
     });
 
-    const uploadCard  = $('#upload-card')  || findCardByHead(['upload a photo','start with a photo']);
-    const previewCard = $('#preview-card') || findCardByHead(['preview (stitched)','preview']);
-    const drawCard    = $('#draw-card')    || findCardByHead(['draw & trace','draw']);
-
-    // In-case headings differ in your theme the findCardByHead fallback will still work.
-    function findCardByHead(keys){
-      const want=(Array.isArray(keys)?keys:[keys]).map(s=>String(s||'').toLowerCase());
-      for(const h of document.querySelectorAll('h1,h2,h3,h4,h5,h6')){
-        const t=(h.textContent||'').trim().toLowerCase();
-        if(want.some(k=>t.includes(k))) return h.closest('.card') || h.parentElement;
-      } return null;
+    // ----- tabs wiring -----
+    const tabBtns = $$('.tabs .tab-btn');
+    const panels  = $$('.panel');
+    function activate(tab){
+      tabBtns.forEach(b=> b.classList.toggle('active', b.dataset.tab===tab));
+      panels.forEach(p=> p.classList.toggle('active', p.dataset.panel===tab));
     }
+    tabBtns.forEach(b=> on(b,'click',()=> activate(b.dataset.tab)));
 
-    // ----- canvases in-place -----
-    const previewCanvas = makeCanvas(previewCard);
-    const pctx = previewCanvas.getContext('2d',{willReadFrequently:true});
-    previewCard && (previewCard.style.display='none'); // hide until image selected
-
-    const drawCanvas = makeCanvas(drawCard);
-    const dctx = drawCanvas.getContext('2d',{willReadFrequently:true});
-    dctx.lineCap='round'; dctx.lineJoin='round';
-
-    sizeToHost(previewCanvas, previewCard);
-    sizeToHost(drawCanvas, drawCard);
-    const ro = new ResizeObserver(()=>{ sizeToHost(previewCanvas, previewCard); sizeToHost(drawCanvas, drawCard); redraw(); });
-    previewCard && ro.observe(previewCard);
-    drawCard && ro.observe(drawCard);
-
-    // ----- upload zone -----
-    const dropZone = $('#upload-drop') || uploadCard || document.body;
-    let fileInput = dropZone.querySelector('input[type=file]');
-    if(!fileInput){
-      fileInput=document.createElement('input');
-      fileInput.type='file';
-      fileInput.accept='image/*,.heic,.heif';
-      fileInput.style.position='absolute';
-      fileInput.style.opacity='0';
-      fileInput.style.pointerEvents='none';
-      (uploadCard||document.body).appendChild(fileInput);
-    }
-
-    on(dropZone,'click', (e)=> {
-      if(e.target.closest('button,a,input,label')) return;
-      fileInput.click();
+    // hero CTAs scroll + activate proper tab
+    $$('[data-scroll="#tabs"]').forEach(btn=>{
+      on(btn,'click', (e)=>{
+        e.preventDefault();
+        const t=(btn.textContent||'').toLowerCase();
+        document.querySelector('#tabs')?.scrollIntoView({behavior:'smooth',block:'start'});
+        if(t.includes('drawing')) activate('draw'); else activate('upload');
+      });
     });
-    on(dropZone,'dragover', e=>e.preventDefault());
-    on(dropZone,'drop', async e=>{
+
+    // quick refs to sections
+    const uploadPanel  = $('.panel[data-panel="upload"]');
+    const drawPanel    = $('.panel[data-panel="draw"]');
+    const uploadZone   = uploadPanel?.querySelector('.upload-zone');
+    const uploadInner  = uploadPanel?.querySelector('.upload-inner');
+    const fileInput    = uploadPanel?.querySelector('.upload-zone input[type=file]');
+    const previewCard  = uploadPanel?.querySelector('.card.rose');
+    const previewArea  = previewCard?.querySelector('.preview');
+    const formatsRow   = previewCard?.querySelector('.formats');
+    const drawCanvasHost = drawPanel?.querySelector('.canvas');
+    const drawToolbar  = drawPanel?.querySelector('.toolbar');
+
+    // ensure preview/draw canvases exist (without changing structure)
+    const previewCanvas = ensureCanvas(previewArea);
+    const pctx = previewCanvas.getContext('2d', {willReadFrequently:true});
+    const drawCanvas = ensureCanvas(drawCanvasHost);
+    const dctx = drawCanvas.getContext('2d', {willReadFrequently:true}); dctx.lineCap='round'; dctx.lineJoin='round';
+
+    // keep canvases sized to their host
+    function fit(cnv, host){
+      const w = Math.max(320, host.clientWidth || 640);
+      const h = Math.max(220, Math.round(w*9/16));
+      const s = DPR();
+      cnv.style.width = w+'px';
+      cnv.style.height = h+'px';
+      cnv.width  = Math.round(w*s);
+      cnv.height = Math.round(h*s);
+      cnv.getContext('2d').setTransform(s,0,0,s,0,0);
+    }
+    const ro = new ResizeObserver(()=>{ fit(previewCanvas, previewArea); fit(drawCanvas, drawCanvasHost); redraw(); });
+    if (previewArea) ro.observe(previewArea);
+    if (drawCanvasHost) ro.observe(drawCanvasHost);
+
+    // show hint until we load the first image
+    let previewHasImage = false;
+    function setPreviewHint(on){
+      if(!previewArea) return;
+      previewArea.style.position='relative';
+      let hint = previewArea.querySelector('.lb-hint');
+      if(on){
+        if(!hint){
+          hint=document.createElement('div');
+          hint.className='lb-hint';
+          hint.textContent='Your stitched preview appears here';
+          hint.style.cssText='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#64748b';
+          previewArea.appendChild(hint);
+        }
+      } else if(hint){ hint.remove(); }
+    }
+    setPreviewHint(true);
+
+    // progress bar in preview
+    const progWrap = document.createElement('div');
+    progWrap.style.cssText='position:absolute;left:12px;top:12px;right:12px;height:8px;background:rgba(0,0,0,.06);border-radius:999px;overflow:hidden;display:none;z-index:4';
+    const progBar = document.createElement('div'); progBar.style.cssText='height:100%;width:0%;background:#111827;opacity:.9';
+    progWrap.appendChild(progBar);
+    ensurePosition(previewCard).appendChild(progWrap);
+    const setProgress = (p)=>{ progWrap.style.display='block'; progBar.style.width=(p|0)+'%'; if(p>=100) setTimeout(()=>progWrap.style.display='none',300); };
+
+    // preview tools bar
+    const tools = document.createElement('div');
+    tools.style.cssText='position:absolute;left:12px;bottom:12px;display:flex;gap:10px;flex-wrap:wrap;z-index:3;visibility:hidden;';
+    const btnProcess   = makeBtn('Process Photo');
+    const btnHighlight = makeBtn('Highlight Subject');
+    const lblNo = document.createElement('label'); const chkNo=document.createElement('input'); chkNo.type='checkbox';
+    lblNo.appendChild(chkNo); lblNo.appendChild(document.createTextNode(' No subject'));
+    tools.append(btnProcess, btnHighlight, lblNo);
+    ensurePosition(previewCard).appendChild(tools);
+
+    // format buttons → hidden until processing finishes
+    const fmtBtns = Array.from(formatsRow?.querySelectorAll('button,a')||[])
+      .filter(b=>['DST','EXP','PES','JEF'].includes((b.textContent||'').trim().toUpperCase()));
+    const setFormatsVisible = (v)=> fmtBtns.forEach(b=> b.style.display = v ? 'inline-block' : 'none');
+    setFormatsVisible(false);
+
+    // state
+    const STATE = {
+      image: null,               // ImageData (source)
+      imgFit: null,              // mapping into preview canvas
+      stitches: [],              // preview path after processing
+      subject: { enabled:false, rect:null, noSubject:false }
+    };
+
+    // upload zone behavior — enable input and wire events
+    if (fileInput) fileInput.removeAttribute('disabled');
+    on(uploadZone,'click', (e)=>{
+      if(e.target.closest('button,a,input,label')) return;
+      fileInput?.click();
+    });
+    on(uploadZone,'dragover', e=>e.preventDefault());
+    on(uploadZone,'drop', async (e)=>{
       e.preventDefault();
       const f=e.dataTransfer.files && e.dataTransfer.files[0];
       if(f) await loadImageFile(f);
@@ -84,115 +152,78 @@
       if(f) await loadImageFile(f);
     });
 
-    // Top CTAs → smooth scroll
-    on($('#go-upload'),'click', ()=> uploadCard.scrollIntoView({behavior:'smooth',block:'center'}));
-    on($('#go-draw'),  'click', ()=> drawCard.scrollIntoView({behavior:'smooth',block:'center'}));
-    // Hero buttons (text-based)
-    on(document,'click',(e)=>{
-      const t=(e.target.closest('button,a')?.textContent||'').toLowerCase();
-      if(!t) return;
-      if(t.includes('start with a photo') || t.includes('upload photo')){
-        e.preventDefault(); uploadCard.scrollIntoView({behavior:'smooth',block:'center'});
-      }
-      if(t.includes('open the drawing tab') || t.includes('draw & trace')){
-        e.preventDefault(); drawCard.scrollIntoView({behavior:'smooth',block:'center'});
-      }
-    });
+    // allow hero/upper buttons to scroll to tabs (already wired above)
 
-    // ----- preview toolbar inside the preview card -----
-    const tools = document.createElement('div');
-    tools.style.cssText='position:absolute;left:12px;bottom:12px;display:flex;gap:10px;flex-wrap:wrap;z-index:3;visibility:hidden;';
-    const btnProcess   = uiBtn('Process Photo');
-    const btnHighlight = uiBtn('Highlight Subject');
-    const lblNo = document.createElement('label'); const chkNo=document.createElement('input'); chkNo.type='checkbox';
-    lblNo.appendChild(chkNo); lblNo.appendChild(document.createTextNode(' No subject'));
-    tools.append(btnProcess, btnHighlight, lblNo);
-    ensurePosition(previewCard).appendChild(tools);
-
-    // progress bar
-    const barWrap=document.createElement('div'); barWrap.style.cssText='position:absolute;left:12px;top:12px;right:12px;height:8px;background:rgba(0,0,0,.06);border-radius:999px;overflow:hidden;display:none;z-index:4';
-    const bar=document.createElement('div'); bar.style.cssText='height:100%;width:0%;background:#111827;opacity:.9'; barWrap.appendChild(bar);
-    ensurePosition(previewCard).appendChild(barWrap);
-    const setProgress=(pct)=>{ barWrap.style.display='block'; bar.style.width=(pct|0)+'%'; if(pct>=100) setTimeout(()=>barWrap.style.display='none',300); };
-
-    // format buttons present in your card
-    const formatsRow = $('#format-row') || previewCard;
-    const formatBtns = Array.from(formatsRow.querySelectorAll('button,a')).filter(b=>{
-      const t=(b.textContent||'').trim().toUpperCase(); return t==='DST'||t==='EXP'||t==='PES'||t==='JEF';
-    });
-    const setFormatsVisible = (v)=> formatBtns.forEach(b=> b.style.display = v?'inline-block':'none');
-    setFormatsVisible(false);
-
-    // ----- Draw & Trace tools -----
-    const drawToolbar = $('#draw-toolbar') || drawCard;
-    const btnProcDraw = uiBtn('Process Drawing'); btnProcDraw.style.marginTop='8px';
-    drawToolbar.appendChild(btnProcDraw);
+    // draw & trace basics
     drawCanvas.style.touchAction='none';
     let drawing=false, pid=null;
     on(drawCanvas,'pointerdown',e=>{
-      const r=drawCanvas.getBoundingClientRect(); const x=e.clientX-r.left, y=e.clientY-r.top;
+      const r=drawCanvas.getBoundingClientRect(), x=e.clientX-r.left, y=e.clientY-r.top;
       drawCanvas.setPointerCapture(e.pointerId); pid=e.pointerId; e.preventDefault();
       dctx.strokeStyle='#111827'; dctx.lineWidth=3; dctx.beginPath(); dctx.moveTo(x,y); drawing=true;
     });
     on(drawCanvas,'pointermove',e=>{
       if(!drawing || e.pointerId!==pid) return; e.preventDefault();
-      const r=drawCanvas.getBoundingClientRect(); const x=e.clientX-r.left, y=e.clientY-r.top;
+      const r=drawCanvas.getBoundingClientRect(), x=e.clientX-r.left, y=e.clientY-r.top;
       dctx.lineTo(x,y); dctx.stroke();
     });
     const stopDraw=(e)=>{ if(e.pointerId===pid){ drawing=false; pid=null; try{drawCanvas.releasePointerCapture(e.pointerId);}catch(_){}} };
     on(drawCanvas,'pointerup',stopDraw); on(drawCanvas,'pointercancel',stopDraw);
 
-    // ----- state -----
-    const STATE = {
-      image: null,               // ImageData at source resolution
-      imgFit: null,              // mapping into preview canvas
-      stitches: [],              // preview path (after processing)
-      subject: { enabled:false, rect:null, noSubject:false }
-    };
+    // Add "Process Drawing" button into your existing toolbar (keeps style)
+    if (drawToolbar) {
+      const btnPD = document.createElement('button');
+      btnPD.className='btn soft';
+      btnPD.textContent='Process Drawing';
+      // Enable toolbar buttons look/feel (don’t change others)
+      Array.from(drawToolbar.children).forEach(b=> b.removeAttribute('disabled'));
+      drawToolbar.appendChild(btnPD);
+      on(btnPD,'click', processDrawingFlow);
+    }
 
+    // Highlight Subject toggle
     on(btnHighlight,'click',()=>{
-      STATE.subject.enabled=!STATE.subject.enabled;
-      if(!STATE.subject.enabled) STATE.subject.rect=null;
+      STATE.subject.enabled = !STATE.subject.enabled;
+      if(!STATE.subject.enabled) STATE.subject.rect = null;
       btnHighlight.classList.toggle('active', STATE.subject.enabled);
       drawSubjectBox();
     });
     on(chkNo,'change',()=>{ STATE.subject.noSubject = chkNo.checked; });
 
-    // subject rectangle on preview
+    // subject rectangle drawing over preview
     let dragging=false, start=null;
     on(previewCanvas,'pointerdown',e=>{
       if(!STATE.subject.enabled) return;
-      const r=previewCanvas.getBoundingClientRect(); start=[e.clientX-r.left, e.clientY-r.top];
+      const r=previewCanvas.getBoundingClientRect(); start=[e.clientX-r.left,e.clientY-r.top];
       dragging=true; STATE.subject.rect={x:start[0],y:start[1],w:0,h:0}; drawSubjectBox();
     });
     on(previewCanvas,'pointermove',e=>{
       if(!dragging||!STATE.subject.enabled) return;
       const r=previewCanvas.getBoundingClientRect(); const x=e.clientX-r.left, y=e.clientY-r.top;
-      STATE.subject.rect={x:Math.min(start[0],x),y:Math.min(start[1],y),w:Math.abs(x-start[0]),h:Math.abs(y-start[1])}; drawSubjectBox();
+      STATE.subject.rect={x:Math.min(start[0],x),y:Math.min(start[1],y),w:Math.abs(x-start[0]),h:Math.abs(y-start[1])};
+      drawSubjectBox();
     });
     on(window,'pointerup',()=>{ dragging=false; });
 
-    // process actions
+    // process buttons
     on(btnProcess,'click', processPhotoFlow);
-    on(btnProcDraw,'click', processDrawingFlow);
 
-    // ============================================================
-    // helpers
+    // fit canvases once
+    fit(previewCanvas, previewArea); fit(drawCanvas, drawCanvasHost);
+
+    // ===== helpers =====
+    function ensureCanvas(host){
+      const c=document.createElement('canvas');
+      c.style.display='block';
+      host.appendChild(c);
+      return c;
+    }
     function ensurePosition(host){
       const cs=getComputedStyle(host); if(cs.position==='static') host.style.position='relative'; return host;
     }
-    function uiBtn(t){ const b=document.createElement('button'); b.className='btn'; b.textContent=t; return b; }
-    function makeCanvas(host){
-      const c=document.createElement('canvas'); c.style.display='block'; host.appendChild(c); return c;
-    }
-    function sizeToHost(cnv, host){
-      const w=Math.max(320, (host.clientWidth||640)); const h=Math.max(220, Math.round(w*9/16));
-      const s=DPR(); cnv.style.width=w+'px'; cnv.style.height=h+'px'; cnv.width=Math.round(w*s); cnv.height=Math.round(h*s);
-      cnv.getContext('2d').setTransform(s,0,0,s,0,0);
-    }
 
     async function loadImageFile(file){
-      const url=URL.createObjectURL(file);
+      const url = URL.createObjectURL(file);
       try{
         const img = await new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=url; });
         const isIOS=/\b(iPhone|iPad|iPod)\b/i.test(navigator.userAgent||'');
@@ -202,12 +233,19 @@
         const c=document.createElement('canvas'); c.width=W; c.height=H; c.getContext('2d').drawImage(img,0,0,W,H);
         STATE.image=c.getContext('2d').getImageData(0,0,W,H);
 
-        previewCard.style.display='';
-        tools.style.visibility='visible';
-        sizeToHost(previewCanvas, previewCard);
+        // show image in preview immediately
+        previewHasImage = true;
+        setPreviewHint(false);
+        fit(previewCanvas, previewArea);
         redraw();
+        // reveal tools
+        tools.style.visibility='visible';
+        // hide export buttons until processed
         setFormatsVisible(false);
-        previewCard.scrollIntoView({behavior:'smooth',block:'center'});
+        // ensure Upload tab is active (if user used hero)
+        activate('upload');
+        // scroll into view
+        previewCard?.scrollIntoView({behavior:'smooth',block:'center'});
       }finally{ URL.revokeObjectURL(url); }
     }
 
@@ -221,9 +259,11 @@
       const W=img.width, H=img.height;
       const Wp=previewCanvas.width/DPR(), Hp=previewCanvas.height/DPR();
       const s=Math.min(Wp/W, Hp/H), w=W*s, h=H*s, ox=(Wp-w)/2, oy=(Hp-h)/2;
-      const tmp=document.createElement('canvas'); tmp.width=W; tmp.height=H; tmp.getContext('2d').putImageData(img,0,0);
+      const tmp=document.createElement('canvas'); tmp.width=W; tmp.height=H;
+      tmp.getContext('2d').putImageData(img,0,0);
       const ctx=previewCanvas.getContext('2d'); ctx.setTransform(DPR(),0,0,DPR(),0,0);
-      ctx.clearRect(0,0,Wp,Hp); ctx.fillStyle='#fff'; ctx.fillRect(0,0,Wp,Hp); ctx.drawImage(tmp,ox,oy,w,h);
+      ctx.clearRect(0,0,Wp,Hp); ctx.fillStyle='#fff'; ctx.fillRect(0,0,Wp,Hp);
+      ctx.drawImage(tmp,ox,oy,w,h);
       STATE.imgFit={ox,oy,scale:s,iw:W,ih:H};
     }
     function renderStitches(){
@@ -244,7 +284,7 @@
       }
     }
 
-    // ===== processing core (fast, offline) =====
+    // ===== very fast offline processing =====
     function kmeansPalette(imgData,k,mask,onProgress){
       const W=imgData.width,H=imgData.height,d=imgData.data;
       const step=Math.max(1,Math.floor(Math.sqrt((W*H)/20000)));
@@ -252,7 +292,7 @@
       for(let y=0;y<H;y+=step){
         const row=y*W;
         for(let x=0;x<W;x+=step){
-          const i=row+x; if(mask&& !mask[i]) continue;
+          const i=row+x; if(mask && !mask[i]) continue;
           const j=i*4; pts.push([d[j],d[j+1],d[j+2]]);
         }
       }
@@ -262,7 +302,7 @@
         let best=null,bd=-1;
         for(const p of pts){
           let dd=1e9; for(const c of centers){ const t=(p[0]-c[0])**2+(p[1]-c[1])**2+(p[2]-c[2])**2; if(t<dd) dd=t; }
-          if(dd>bd){ bd=dd; best=p;}
+          if(dd>bd){bd=dd;best=p;}
         } centers.push(best.slice());
       }
       for(let it=0;it<5;it++){
@@ -310,6 +350,7 @@
       const outline=!!(opts?.outline);
       const step=Math.max(2,Math.floor(Math.min(W,H)/220));
       const ops=[];
+
       if(outline){
         const edges=new Uint8Array(W*H);
         for(let y=1;y<H-1;y++){
@@ -329,6 +370,7 @@
           if(run){ ops.push({cmd:'jump',x:run.x0,y:run.y}); ops.push({cmd:'stitch',x:W-1,y:run.y}); }
         }
       }
+
       const rad=angle*Math.PI/180, sin=Math.sin(rad), cos=Math.cos(rad);
       const bands=Math.max(4,Math.floor(Math.min(W,H)/24));
       for(let b=0;b<bands;b++){
@@ -347,6 +389,15 @@
         }
       }
       return ops;
+    }
+
+    function toPreviewPath(ops){
+      const fit=STATE.imgFit || {ox:0,oy:0,scale:1};
+      return ops.map(op=>{
+        const x = op.x*fit.scale + fit.ox;
+        const y = op.y*fit.scale + fit.oy;
+        return (op.cmd==='jump') ? {move:true,x,y} : {move:false,x,y};
+      });
     }
 
     function toUnits(ops, pxPerMm, outW, outH){
@@ -375,7 +426,8 @@
         enc(s.dx,s.dy,0);
       }
       bytes.push(0,0,0xF3);
-      const header=("LA:LOOMABELLE.ST\n"+"ST:"+String((bytes.length/3)|0).padStart(7,' ')+"\n"+"CO:"+String(colors+1).padStart(3,' ')+"\n"+"  "+(Array(513).join(' '))).slice(0,512);
+      const header=("LA:LOOMABELLE.ST\n"+"ST:"+String((bytes.length/3)|0).padStart(7,' ')+"\n"
+        +"CO:"+String(colors+1).padStart(3,' ')+"\n"+"  "+(Array(513).join(' '))).slice(0,512);
       const hb=new TextEncoder().encode(header);
       const u8=new Uint8Array(hb.length+bytes.length); u8.set(hb,0); u8.set(new Uint8Array(bytes),hb.length); return u8;
     }
@@ -398,12 +450,22 @@
       return new Uint8Array(bytes);
     }
 
+    function hookDownloads(res){
+      fmtBtns.forEach(btn=>{
+        const fmt=(btn.textContent||'').trim().toUpperCase();
+        if(fmt==='DST'){ btn.onclick=()=>saveU8(res.dstU8,'loomabelle.dst'); }
+        else if(fmt==='EXP'){ btn.onclick=()=>saveU8(res.expU8,'loomabelle.exp'); }
+        else { btn.onclick=()=>alert('Coming soon'); }
+      });
+    }
+    function saveU8(u8,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([u8])); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1200); }
+
     // ===== flows =====
     async function processPhotoFlow(){
-      if(!STATE.image){ (dropZone.querySelector('input[type=file]')||fileInput).click(); return; }
+      if(!STATE.image){ fileInput?.click(); return; }
       setFormatsVisible(false); setProgress(1);
 
-      // optional subject mask from rectangle
+      // optional subject rect → mask in image space
       let mask=null;
       if(STATE.subject.rect && !STATE.subject.noSubject && STATE.imgFit){
         const {ox,oy,scale,iw,ih}=STATE.imgFit;
@@ -421,8 +483,8 @@
       STATE.stitches = toPreviewPath(ops);
       redraw(); setProgress(100);
 
-      const dstU8 = writeDST(ops, {pxPerMm:2, outW:previewCanvas.width/DPR(), outH:previewCanvas.height/DPR()});
-      const expU8 = writeEXP(ops, {pxPerMm:2, outW:previewCanvas.width/DPR(), outH:previewCanvas.height/DPR()});
+      const dstU8=writeDST(ops,{pxPerMm:2,outW:previewCanvas.width/DPR(),outH:previewCanvas.height/DPR()});
+      const expU8=writeEXP(ops,{pxPerMm:2,outW:previewCanvas.width/DPR(),outH:previewCanvas.height/DPR()});
       hookDownloads({dstU8,expU8});
       setFormatsVisible(true);
     }
@@ -431,45 +493,23 @@
       setFormatsVisible(false); setProgress(1);
       const w=drawCanvas.width, h=drawCanvas.height, sctx=drawCanvas.getContext('2d');
       const id=sctx.getImageData(0,0,w,h);
-      previewCard.style.display='';
-      STATE.image=id; sizeToHost(previewCanvas, previewCard); redraw();
+      // show drawing in preview then process as mask
+      STATE.image=id; fit(previewCanvas, previewArea); setPreviewHint(false); redraw();
 
-      // treat alpha as mask → plan quick stitches
       const mask=new Uint8Array(w*h);
-      for(let i=0;i<w*h;i++){ mask[i] = id.data[i*4+3] > 10 ? 1 : 0; }
+      for(let i=0;i<w*h;i++){ mask[i]= id.data[i*4+3] > 10 ? 1 : 0; }
       const q={indexed:mask, palette:[[0,0,0],[255,255,255]], W:w, H:h};
-      const ops=planStitches(q, {outline:true, angle:45});
-      STATE.stitches = toPreviewPath(ops);
-      redraw(); setProgress(100);
+      const ops=planStitches(q,{outline:true, angle:45});
+      STATE.stitches=toPreviewPath(ops); redraw(); setProgress(100);
 
       const dstU8=writeDST(ops,{pxPerMm:2,outW:previewCanvas.width/DPR(),outH:previewCanvas.height/DPR()});
       const expU8=writeEXP(ops,{pxPerMm:2,outW:previewCanvas.width/DPR(),outH:previewCanvas.height/DPR()});
       hookDownloads({dstU8,expU8}); setFormatsVisible(true);
-      previewCard.scrollIntoView({behavior:'smooth',block:'center'});
+      previewCard?.scrollIntoView({behavior:'smooth',block:'center'});
+      activate('upload'); // jump to preview after drawing process
     }
 
-    function toPreviewPath(ops){
-      const fit=STATE.imgFit || {ox:0,oy:0,scale:1};
-      return ops.map(op=>{
-        const x = op.x*fit.scale + fit.ox;
-        const y = op.y*fit.scale + fit.oy;
-        return (op.cmd==='jump') ? {move:true,x,y} : {move:false,x,y};
-      });
-    }
-    function hookDownloads(res){
-      formatBtns.forEach(btn=>{
-        const fmt=(btn.textContent||'').trim().toUpperCase();
-        if(fmt==='DST'){ btn.onclick=()=>saveU8(res.dstU8,'loomabelle.dst'); btn.style.display='inline-block'; }
-        else if(fmt==='EXP'){ btn.onclick=()=>saveU8(res.expU8,'loomabelle.exp'); btn.style.display='inline-block'; }
-        else { btn.onclick=()=>alert('Coming soon'); } // PES/JEF
-      });
-    }
-    function saveU8(u8,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([u8])); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1200); }
-
-    // keep formats hidden until ready
-    function setFormatsVisible(v){ formatBtns.forEach(b=> b.style.display=v?'inline-block':'none'); }
-
-    // expose for debugging
-    window.__loomabelle = { processPhotoFlow, processDrawingFlow };
+    function setFormatsVisible(v){ fmtBtns.forEach(b=> b.style.display = v ? 'inline-block' : 'none'); }
   }
+
 })();

@@ -1,7 +1,8 @@
-/* Loomabelle — script.js v32
-   - Subject-only: background suppressed even with dark bg.
-   - Smooth outline via marching squares (preview + exports).
-   - Preview tools moved to top-right (no overlap with export buttons).
+/* Loomabelle — script.js v33
+   - Memory-safe pipeline: capped working resolution + buffer reuse.
+   - createImageBitmap() downscale path when available.
+   - Highlight Subject locks page scroll (mobile + desktop).
+   - Keeps v32 features: subject-only outlines, marching squares, fills-inside-only.
 */
 (function(){
   'use strict';
@@ -11,6 +12,10 @@
   const on=(el,ev,fn,opt)=> el&&el.addEventListener(ev,fn,opt||{passive:false});
   const DPR=()=>window.devicePixelRatio||1;
   const clamp=(v,mi,ma)=>Math.max(mi,Math.min(ma,v));
+
+  // hard caps for memory (about ~1.4MP)
+  const MAX_PIX = 1_400_000; // total pixels for working image
+  const PREV_MIN_W = 320;
 
   READY(init);
 
@@ -36,7 +41,6 @@
     const formats=upPanel?.querySelector('.formats');
     const drawHost=drawPanel?.querySelector('.canvas');
     const drawToolbar=drawPanel?.querySelector('.toolbar');
-    const swatchesBox=drawPanel?.querySelector('.swatches');
 
     if(prevCard) prevCard.classList.add('hidden');
     if(prevArea) prevArea.innerHTML='';
@@ -48,9 +52,9 @@
     const pctx=prevCanvas.getContext('2d',{willReadFrequently:true});
     const dctx=drawCanvas.getContext('2d',{willReadFrequently:true}); dctx.lineCap='round'; dctx.lineJoin='round';
 
-    // Sizing (no ResizeObserver loop)
+    // Sizing (no loops)
     function sizeCanvasToHost(cnv,host){
-      const s=DPR(); const w=Math.max(320,host.clientWidth||640);
+      const s=DPR(); const w=Math.max(PREV_MIN_W,host.clientWidth||640);
       const h=Math.max(180,host.clientHeight||Math.round(w*9/16));
       cnv.style.width='100%'; cnv.style.height='100%';
       cnv.width=Math.round(w*s); cnv.height=Math.round(h*s);
@@ -59,14 +63,14 @@
     let rafID=null; const scheduleResize=()=>{ if(rafID) return; rafID=requestAnimationFrame(()=>{ rafID=null; sizeCanvasToHost(drawCanvas,drawHost); if(STATE.image) sizeCanvasToHost(prevCanvas,prevArea); redraw(); }); };
     on(window,'resize',scheduleResize); scheduleResize();
 
-    // Progress
+    // Progress bar
     const progWrap=document.createElement('div');
     progWrap.style.cssText='position:absolute;left:12px;top:12px;right:12px;height:8px;background:rgba(0,0,0,.06);border-radius:999px;overflow:hidden;display:none;z-index:4';
     const progBar=document.createElement('div'); progBar.style.cssText='height:100%;width:0%;background:#111827;opacity:.9';
     progWrap.appendChild(progBar);
     const setProgress=p=>{ if(prevCard?.classList.contains('hidden')) return; progWrap.style.display='block'; progBar.style.width=(p|0)+'%'; if(p>=100) setTimeout(()=>progWrap.style.display='none',400); };
 
-    // Preview tools (top-right so they don’t cover export buttons)
+    // Preview tools (top-right)
     const tools=document.createElement('div');
     tools.style.cssText='position:absolute;right:12px;top:12px;display:flex;gap:10px;flex-wrap:wrap;z-index:3;visibility:hidden;';
     const btnProcess=btn('Process Photo');
@@ -75,7 +79,7 @@
     const lblFill=document.createElement('label'); const chkFill=document.createElement('input'); chkFill.type='checkbox'; chkFill.checked=false; lblFill.append(chkFill,' Add fills');
     tools.append(btnProcess,btnHighlight,lblNo,lblFill);
 
-    // Export buttons in UI
+    // Export buttons
     const fmtBtns=Array.from(formats?.querySelectorAll('button,a')||[])
       .filter(b=>['DST','EXP','PES','JEF'].includes((b.textContent||'').trim().toUpperCase()));
     const setFormatsVisible=v=>fmtBtns.forEach(b=> b.style.display=v?'inline-block':'none'); setFormatsVisible(false);
@@ -114,23 +118,65 @@
     }
 
     // State
-    const STATE={ image:null,imgFit:null,stitches:[], subject:{enabled:false,rect:null,noSubject:false} };
+    const STATE={
+      // Working image (downscaled) as ImageData
+      image:null, // ImageData
+      imgFit:null, // mapping for preview
+      stitches:[],
+      subject:{enabled:false,rect:null,noSubject:false},
+      // scratch buffers (reused)
+      mask:null
+    };
+
+    // Scroll lock helpers for highlight
+    let scrollY=0;
+    function lockScroll(){
+      scrollY = window.scrollY || 0;
+      document.body.style.position='fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.left='0';
+      document.body.style.right='0';
+      document.body.style.width='100%';
+      document.body.classList.add('loom-lock');
+      // stop touch scroll on preview while highlighting
+      on(prevCanvas,'touchmove',cancelTouch,{passive:false});
+      on(prevCanvas,'wheel',cancelTouch,{passive:false});
+    }
+    function unlockScroll(){
+      document.body.style.position='';
+      document.body.style.top='';
+      document.body.style.left='';
+      document.body.style.right='';
+      document.body.style.width='';
+      document.body.classList.remove('loom-lock');
+      window.scrollTo(0, scrollY||0);
+      prevCanvas.removeEventListener('touchmove',cancelTouch);
+      prevCanvas.removeEventListener('wheel',cancelTouch);
+    }
+    function cancelTouch(e){ e.preventDefault(); }
 
     // Subject UI
-    on(btnHighlight,'click',()=>{ STATE.subject.enabled=!STATE.subject.enabled; if(!STATE.subject.enabled) STATE.subject.rect=null; btnHighlight.classList.toggle('active',STATE.subject.enabled); drawSubjectBox(); });
+    on(btnHighlight,'click',()=>{
+      STATE.subject.enabled=!STATE.subject.enabled;
+      if(!STATE.subject.enabled){ STATE.subject.rect=null; unlockScroll(); }
+      else { lockScroll(); }
+      btnHighlight.classList.toggle('active',STATE.subject.enabled); drawSubjectBox();
+    });
     on(chkNo,'change',()=>{ STATE.subject.noSubject=chkNo.checked; });
 
     // Drag subject rectangle
     let dragging=false,start=null;
     on(prevCanvas,'pointerdown',e=>{ if(!STATE.subject.enabled) return;
       const r=prevCanvas.getBoundingClientRect(); start=[e.clientX-r.left,e.clientY-r.top];
-      dragging=true; STATE.subject.rect={x:start[0],y:start[1],w:0,h:0}; drawSubjectBox();
+      prevCanvas.setPointerCapture(e.pointerId);
+      dragging=true; e.preventDefault();
+      STATE.subject.rect={x:start[0],y:start[1],w:0,h:0}; drawSubjectBox();
     });
     on(prevCanvas,'pointermove',e=>{ if(!dragging||!STATE.subject.enabled) return;
       const r=prevCanvas.getBoundingClientRect(); const x=e.clientX-r.left, y=e.clientY-r.top;
       STATE.subject.rect={x:Math.min(start[0],x),y:Math.min(start[1],y),w:Math.abs(x-start[0]),h:Math.abs(y-start[1])}; drawSubjectBox();
     });
-    on(window,'pointerup',()=>{ dragging=false; });
+    on(prevCanvas,'pointerup',()=>{ dragging=false; try{prevCanvas.releasePointerCapture?.();}catch(_){} });
 
     on(btnProcess,'click',processPhotoFlow);
 
@@ -144,21 +190,51 @@
     }
 
     async function loadImageFile(file){
-      if(!/\.(jpg|jpeg|png|gif|heic|heif)$/i.test((file.name||''))){ alert('Please choose a JPG, PNG, GIF, or HEIC/HEIF image.'); return; }
-      const url=URL.createObjectURL(file);
+      const ok=/\.(jpg|jpeg|png|gif|heic|heif)$/i.test((file.name||'')); if(!ok){ alert('Please choose a JPG, PNG, GIF, or HEIC/HEIF image.'); return; }
+      const blobURL=URL.createObjectURL(file);
       try{
-        const img=await new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=url; });
-        const isIOS=/\b(iPhone|iPad|iPod)\b/i.test(navigator.userAgent||''); const maxSide=isIOS?1024:1600;
-        let W=img.naturalWidth,H=img.naturalHeight; if(Math.max(W,H)>maxSide){ const r=maxSide/Math.max(W,H); W=(W*r)|0; H=(H*r)|0; }
-        const tmp=document.createElement('canvas'); tmp.width=W; tmp.height=H; tmp.getContext('2d').drawImage(img,0,0,W,H);
-        STATE.image=tmp.getContext('2d').getImageData(0,0,W,H);
+        // Load + smart downscale with createImageBitmap if possible
+        let bmp=null;
+        try{
+          const meta=await getImageSize(blobURL);
+          const scale = Math.min(1, Math.sqrt(MAX_PIX/(meta.w*meta.h)) || 1);
+          const rw = Math.max(1,Math.round(meta.w*scale));
+          const rh = Math.max(1,Math.round(meta.h*scale));
+          if('createImageBitmap' in window && typeof createImageBitmap==='function'){
+            bmp = await createImageBitmap(await (await fetch(blobURL)).blob(), {resizeWidth:rw, resizeHeight:rh, resizeQuality:'high'});
+          }
+        }catch(_){}
+        let W,H, id;
+        if(bmp){
+          W=bmp.width; H=bmp.height;
+          const off=document.createElement('canvas'); off.width=W; off.height=H;
+          off.getContext('2d').drawImage(bmp,0,0,W,H);
+          id = off.getContext('2d').getImageData(0,0,W,H);
+          bmp.close?.();
+        }else{
+          const img=await loadImage(blobURL);
+          const scale = Math.min(1, Math.sqrt(MAX_PIX/(img.naturalWidth*img.naturalHeight)) || 1);
+          W=Math.max(1,Math.round(img.naturalWidth*scale));
+          H=Math.max(1,Math.round(img.naturalHeight*scale));
+          const off=document.createElement('canvas'); off.width=W; off.height=H;
+          off.getContext('2d').drawImage(img,0,0,W,H);
+          id = off.getContext('2d').getImageData(0,0,W,H);
+        }
+
+        // Save working image
+        STATE.image=id;
+        // prepare reusable mask buffer
+        STATE.mask = (STATE.mask && STATE.mask.length===W*H) ? STATE.mask : new Uint8Array(W*H);
 
         mountPreviewUI(); sizeCanvasToHost(prevCanvas,prevArea);
         renderBaseImage(); STATE.stitches.length=0; renderStitches();
         setFormatsVisible(false); scheduleResize(); prevCard?.scrollIntoView({behavior:'smooth',block:'center'});
       }catch(err){ console.error(err); alert('Could not load that image.'); }
-      finally{ URL.revokeObjectURL(url); }
+      finally{ URL.revokeObjectURL(blobURL); }
     }
+
+    function getImageSize(url){ return new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res({w:i.naturalWidth,h:i.naturalHeight}); i.onerror=rej; i.src=url; }); }
+    function loadImage(url){ return new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=url; }); }
 
     function redraw(){ if(!STATE.image) return; renderBaseImage(); renderStitches(); }
 
@@ -167,9 +243,11 @@
       const W=img.width,H=img.height;
       const Wp=prevCanvas.width/DPR(), Hp=prevCanvas.height/DPR();
       const s=Math.min(Wp/W,Hp/H), w=W*s, h=H*s, ox=(Wp-w)/2, oy=(Hp-h)/2;
-      const tmp=document.createElement('canvas'); tmp.width=W; tmp.height=H; tmp.getContext('2d').putImageData(img,0,0);
       const ctx=prevCanvas.getContext('2d'); ctx.setTransform(DPR(),0,0,DPR(),0,0);
-      ctx.clearRect(0,0,Wp,Hp); ctx.fillStyle='#fff'; ctx.fillRect(0,0,Wp,Hp); ctx.drawImage(tmp,ox,oy,w,h);
+      // draw from ImageData without allocating new ImageData
+      const off=document.createElement('canvas'); off.width=W; off.height=H;
+      off.getContext('2d').putImageData(img,0,0);
+      ctx.clearRect(0,0,Wp,Hp); ctx.fillStyle='#fff'; ctx.fillRect(0,0,Wp,Hp); ctx.drawImage(off,ox,oy,w,h);
       ctx.strokeStyle='rgba(0,0,0,.06)'; ctx.lineWidth=1; ctx.strokeRect(0.5,0.5,Wp-1,Hp-1);
       STATE.imgFit={ox,oy,scale:s,iw:W,ih:H};
     }
@@ -177,12 +255,7 @@
     function renderStitches(){
       if(!STATE.stitches.length) return;
       const ctx=prevCanvas.getContext('2d'); ctx.save(); ctx.strokeStyle='#111827'; ctx.lineWidth=1.6; ctx.beginPath();
-      let first=true;
-      for(const p of STATE.stitches){
-        const x=p.x, y=p.y;
-        if(p.move){ ctx.moveTo(x,y); first=false; }
-        else { ctx.lineTo(x,y); }
-      }
+      for(const p of STATE.stitches){ if(p.move) ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y); }
       ctx.stroke(); ctx.restore();
     }
 
@@ -194,10 +267,11 @@
       }
     }
 
-    /* ---------- Subject masking with bg-aware threshold ---------- */
+    /* ---------- Subject masking (bg-aware) with buffer reuse ---------- */
     function makeSubjectMask(img, userRect, noSubject){
       const W=img.width,H=img.height,d=img.data;
-      const mask=new Uint8Array(W*H);
+      const mask = STATE.mask && STATE.mask.length===W*H ? STATE.mask : (STATE.mask=new Uint8Array(W*H));
+      mask.fill(0);
 
       if(userRect){
         const {ox,oy,scale}=STATE.imgFit||{ox:0,oy:0,scale:1};
@@ -209,51 +283,57 @@
         return smoothMask(mask,W,H);
       }
 
-      // Estimate bg luminance from borders
+      // background luminance from borders
       let sum=0,cnt=0;
-      for(let x=0;x<W;x++){ const j1=(x)*4, j2=((H-1)*W + x)*4; sum+=0.2126*d[j1]+0.7152*d[j1+1]+0.0722*d[j1+2]; sum+=0.2126*d[j2]+0.7152*d[j2+1]+0.0722*d[j2+2]; cnt+=2; }
-      for(let y=0;y<H;y++){ const j1=(y*W)*4, j2=(y*W + (W-1))*4; sum+=0.2126*d[j1]+0.7152*d[j1+1]+0.0722*d[j1+2]; sum+=0.2126*d[j2]+0.7152*d[j2+1]+0.0722*d[j2+2]; cnt+=2; }
+      for(let x=0;x<W;x++){ const j1=(x)*4, j2=((H-1)*W + x)*4; sum+=luma(d,j1)+luma(d,j2); cnt+=2; }
+      for(let y=0;y<H;y++){ const j1=(y*W)*4, j2=(y*W + (W-1))*4; sum+=luma(d,j1)+luma(d,j2); cnt+=2; }
       const bgY=sum/cnt; const delta=25;
+      const keepLight = bgY<128;
 
       for(let i=0;i<W*H;i++){
-        const j=i*4; const y=0.2126*d[j]+0.7152*d[j+1]+0.0722*d[j+2];
-        // If bg is dark, keep light pixels; if bg is light, keep dark pixels.
-        if(bgY<128) mask[i] = (y>bgY+delta) ? 1 : 0;
-        else        mask[i] = (y<bgY-delta) ? 1 : 0;
+        const j=i*4; const y=luma(d,j);
+        if(noSubject){
+          // handwriting: keep dark strokes if bg light, or light strokes if bg dark
+          mask[i] = keepLight ? (y<bgY-delta?1:0) : (y>bgY+delta?1:0);
+        }else{
+          // auto-subject
+          mask[i] = keepLight ? (y>bgY+delta?1:0) : (y<bgY-delta?1:0);
+        }
       }
       return smoothMask(mask,W,H);
     }
+    function luma(d,idx){ return 0.2126*d[idx]+0.7152*d[idx+1]+0.0722*d[idx+2]; }
 
     function smoothMask(mask,W,H){
-      // 3x3 majority filter (denoise edges)
-      const out=new Uint8Array(W*H);
+      const out=STATE.mask2 && STATE.mask2.length===W*H ? STATE.mask2 : (STATE.mask2=new Uint8Array(W*H));
       for(let y=1;y<H-1;y++){
         for(let x=1;x<W-1;x++){
           let s=0; for(let yy=-1;yy<=1;yy++) for(let xx=-1;xx<=1;xx++) s+=mask[(y+yy)*W+(x+xx)];
           out[y*W+x] = s>=5 ? 1 : 0;
         }
       }
-      return out;
+      // copy back to mask to continue reusing same reference
+      mask.set(out);
+      return mask;
     }
 
-    /* -------- Marching Squares contours (for smooth outlines) ---- */
+    /* -------- Marching Squares contours (smooth outlines) ---- */
     function contoursFromMask(mask,W,H){
       const grid=(x,y)=> (x<0||x>=W||y<0||y>=H) ? 0 : mask[y*W+x];
       const paths=[];
       const visited=new Uint8Array(W*H);
 
       function trace(x0,y0){
-        let x=x0,y=y0, dir=0; // 0=right,1=down,2=left,3=up
+        let x=x0,y=y0;
         const pts=[];
         for(let safe=0; safe< W*H*4; safe++){
           const a=grid(x,y), b=grid(x+1,y), c=grid(x+1,y+1), d=grid(x,y+1);
           const idx=(a?1:0) | (b?2:0) | (c?4:0) | (d?8:0);
-          // move along edge of the cell
           if(idx===0 || idx===15) break;
-          if(idx===1||idx===5||idx===13){ pts.push([x,y+0.5]); y--; dir=3; }
-          else if(idx===8||idx===10||idx===11){ pts.push([x+0.5,y+1]); x--; dir=2; }
-          else if(idx===4||idx===12||idx===14){ pts.push([x+1,y+0.5]); y++; dir=1; }
-          else { pts.push([x+0.5,y]); x++; dir=0; }
+          if(idx===1||idx===5||idx===13){ pts.push([x,y+0.5]); y--; }
+          else if(idx===8||idx===10||idx===11){ pts.push([x+0.5,y+1]); x--; }
+          else if(idx===4||idx===12||idx===14){ pts.push([x+1,y+0.5]); y++; }
+          else { pts.push([x+0.5,y]); x++; }
           if(x===x0 && y===y0) break;
         }
         return pts;
@@ -263,7 +343,6 @@
         for(let x=0;x<W-1;x++){
           const i=y*W+x; if(mask[i] && !visited[i]){
             const pts=trace(x,y); if(pts.length>4){ paths.push(pts); }
-            // mark a small area as visited (lightweight)
             for(let yy=y; yy<Math.min(H,y+2); yy++)
               for(let xx=x; xx<Math.min(W,x+2); xx++)
                 visited[yy*W+xx]=1;
@@ -273,13 +352,13 @@
       return paths;
     }
 
-    function pathToOps(paths, scale=1){
+    function pathToOps(paths){
       const ops=[];
       for(const poly of paths){
         if(poly.length<2) continue;
-        ops.push({cmd:'jump',x:poly[0][0]*scale,y:poly[0][1]*scale});
+        ops.push({cmd:'jump',x:poly[0][0],y:poly[0][1]});
         for(let i=1;i<poly.length;i++){
-          ops.push({cmd:'stitch',x:poly[i][0]*scale,y:poly[i][1]*scale});
+          ops.push({cmd:'stitch',x:poly[i][0],y:poly[i][1]});
         }
       }
       return ops;
@@ -308,7 +387,6 @@
     }
 
     /* ---------------- Process flows ---------------- */
-
     async function processPhotoFlow(){
       if(!STATE.image){ fileInput?.click(); return; }
       setFormatsVisible(false); setProgress(1);
@@ -316,10 +394,12 @@
       const {width:W,height:H}=STATE.image;
       const mask = makeSubjectMask(STATE.image, STATE.subject.rect, STATE.subject.noSubject);
 
-      // Smooth outline via marching squares
       const paths = contoursFromMask(mask,W,H);
-      let ops = pathToOps(paths, 1);
-      if(chkFill.checked){ ops = ops.concat(hatchOps(mask,W,H,6)); }
+      let ops = pathToOps(paths);
+      if($('#tabs') && $('.panel[data-panel="upload"] .card.rose')){} // keep layout identical
+      if($('#tabs')){} // noop to avoid tree-shaking in some bundlers
+
+      if($('#tabs') && typeof chkFill!=='undefined' && chkFill.checked){ ops = ops.concat(hatchOps(mask,W,H,6)); }
 
       STATE.stitches = toPreviewPath(ops);
       renderBaseImage(); renderStitches(); setProgress(100);
@@ -327,6 +407,9 @@
       const dstU8=writeDST(ops,{pxPerMm:2,outW:prevCanvas.width/DPR(),outH:prevCanvas.height/DPR()});
       const expU8=writeEXP(ops,{pxPerMm:2,outW:prevCanvas.width/DPR(),outH:prevCanvas.height/DPR()});
       hookDownloads({dstU8,expU8}); setFormatsVisible(true);
+
+      // Exit highlight mode if active
+      if(STATE.subject.enabled){ STATE.subject.enabled=false; unlockScroll(); drawSubjectBox(); }
     }
 
     async function processDrawingFlow(){
@@ -334,14 +417,16 @@
       mountPreviewUI(); sizeCanvasToHost(prevCanvas,prevArea);
 
       const w=drawCanvas.width,h=drawCanvas.height,sctx=drawCanvas.getContext('2d');
-      const id=sctx.getImageData(0,0,w,h); renderBaseImageFrom(id);
+      const id=sctx.getImageData(0,0,w,h);
+      STATE.image=id; renderBaseImage();
 
-      // handwriting: dark strokes from your drawing
-      const mask=new Uint8Array(w*h); const d=id.data;
+      // handwriting: dark strokes mask
+      const mask=(STATE.mask && STATE.mask.length===w*h) ? STATE.mask : (STATE.mask=new Uint8Array(w*h));
+      const d=id.data;
       for(let i=0;i<w*h;i++){ const j=i*4; const y=0.2126*d[j]+0.7152*d[j+1]+0.0722*d[j+2]; mask[i]=(y<180)?1:0; }
       const paths=contoursFromMask(mask,w,h);
-      let ops=pathToOps(paths,1);
-      if(chkFill.checked){ ops=ops.concat(hatchOps(mask,w,h,6)); }
+      let ops=pathToOps(paths);
+      if(typeof chkFill!=='undefined' && chkFill.checked){ ops=ops.concat(hatchOps(mask,w,h,6)); }
 
       STATE.stitches=toPreviewPath(ops); renderBaseImage(); renderStitches(); setProgress(100);
 
@@ -349,12 +434,11 @@
       const expU8=writeEXP(ops,{pxPerMm:2,outW:prevCanvas.width/DPR(),outH:prevCanvas.height/DPR()});
       hookDownloads({dstU8,expU8}); setFormatsVisible(true);
 
+      // jump back to Upload tab to show preview
       const uploadBtn=tabBtns.find(b=>b.dataset.tab==='upload'); uploadBtn?.click(); prevCard?.scrollIntoView({behavior:'smooth',block:'center'});
     }
 
-    function renderBaseImageFrom(img){ STATE.image=img; renderBaseImage(); }
-
-    /* ---------------- Exports (unchanged core) ---------------- */
+    /* ---------------- Exports (same as v32) ---------------- */
     function toUnits(ops,pxPerMm,outW,outH){
       const s=1/pxPerMm*10,cx=outW/2,cy=outH/2,out=[]; let prev=null;
       for(const op of ops){

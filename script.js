@@ -1,319 +1,459 @@
-/* Loomabelle runtime — v39
-   - Fix tiny preview on iPhone (force responsive height + DPR sizing)
-   - Keep processed preview from flickering back to raw
-   - Rebind Draw & Trace reliably (Pen default = dark, touch-friendly)
-   - No visual changes to your HTML/CSS structure
+<script>
+/* Loomabelle – app wiring (v42)
+   - Keeps your visual design unchanged
+   - Enables upload + preview (hidden until image)
+   - Draw & Trace mask with Pen/Eraser + “Process Selection”
+   - Fast in-browser processing (posterize + outline + optional hatch)
+   - No external libs; offline-friendly
 */
-(() => {
-  "use strict";
-  if (window.__loom_v39) return; window.__loom_v39 = true;
 
-  const $  = (s, r=document)=>r.querySelector(s);
-  const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
-  const DPR = () => window.devicePixelRatio || 1;
+(function(){
+  'use strict';
 
-  /* panels & cards (found by headings; works with your markup) */
-  const uploadPanel = $('.panel[data-panel="upload"]') || $$('.panel').find(p=>(p.textContent||'').toLowerCase().includes('upload a photo'));
-  const drawPanel   = $('.panel[data-panel="draw"]')   || $$('.panel').find(p=>(p.textContent||'').toLowerCase().includes('draw'));
-  const previewCard = $$('.card', uploadPanel).find(c=>(c.textContent||'').toLowerCase().includes('preview'));
-  const previewHost = previewCard?.querySelector('.preview');
-  const uploadCard  = $$('.card', uploadPanel).find(c=>(c.textContent||'').toLowerCase().includes('upload a photo'));
-  const uploadZone  = uploadCard?.querySelector('.upload-zone');
+  /* --------------------- DOM helpers --------------------- */
+  const $ = (sel, root=document) => root.querySelector(sel);
+  const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
 
-  const outlineChk  = $$('.opts input[type="checkbox"]', uploadCard).find(i => (i.parentElement.textContent||'').toLowerCase().includes('edge outline')) || null;
-  const addFillsChk = $$('.formats ~ label input[type="checkbox"], .formats input[type="checkbox"]', previewCard).find(Boolean) || null;
-  const noSubjectCb = $$('.formats ~ label input[type="checkbox"], label input[type="checkbox"]', previewCard).find(i => (i.parentElement.textContent||'').toLowerCase().includes('no subject')) || null;
+  /* Panels / cards (keep your HTML as-is) */
+  const tabsWrap = $('.tabs-wrap') || document;
+  const tabBtns  = $$('.tabs .tab-btn', tabsWrap);
+  const panelUpload = $('.panel[data-panel="upload"]') || $('.panel.active') || document;
+  const cardUpload  = $('.card.blue', panelUpload);
+  const cardPreview = $('.card.rose', panelUpload);
+  const panelDraw   = $('.panel[data-panel="draw"]');
+  const cardDraw    = panelDraw ? $('.card.violet', panelDraw) : null;
+  const cardPalette = panelDraw ? $('.card.green',  panelDraw) : null;
 
-  const drawHost  = drawPanel?.querySelector('.canvas');
-  const btnPen    = $$('.toolbar .btn', drawPanel).find(b=>(b.textContent||'').toLowerCase().includes('pen')) || null;
-  const btnEraser = $$('.toolbar .btn', drawPanel).find(b=>(b.textContent||'').toLowerCase().includes('eraser')) || null;
+  /* Upload sub-elements (stable selectors) */
+  const uploadZone  = $('.upload-zone', cardUpload);
+  const uploadInput = $('.upload-zone input[type=file]', cardUpload);
+  const reduceChk   = $('.opts input[type=checkbox]:checked, .opts input[type=checkbox]', cardUpload) ? $$('.opts input[type=checkbox]', cardUpload)[0] : $('[type=checkbox]', cardUpload);
+  const outlineChk  = $$('.opts input[type=checkbox]', cardUpload)[1] || null;
+  const densityRange = $('input[type=range]', cardUpload);
 
-  const tabBtns = $$('.tab-btn');
-  function activateTab(name){
-    tabBtns.forEach(b=>b.classList.toggle('active',(b.dataset.tab||'').toLowerCase()===name));
-    $$('.panel').forEach(p=>p.classList.remove('active'));
-    (name==='draw'?drawPanel:uploadPanel)?.classList.add('active');
-  }
-
-  const S = {
-    image:null, work:null,                     // source <canvas>
-    preview:null, ro:null,                     // preview <canvas> + ResizeObserver
-    drawBG:null, mask:null, hasMask:false,     // Draw & Trace layers
-    mode:'raw',                                // 'raw' | 'proc'
-    pen:{ erase:false, size:18, color:'#0a0f1d', down:false, lastX:0, lastY:0 },
-    opts:{ outline:true, addFills:true, ignoreSubject:false }
-  };
-
-  /* ---------------- utils ---------------- */
-  const makeCanvas=(w,h)=>{ const r=DPR(), c=document.createElement('canvas'); c.width=Math.max(1,Math.round(w*r)); c.height=Math.max(1,Math.round(h*r)); c.style.width=w+'px'; c.style.height=h+'px'; return c; };
-  const ensureBtn=(root,label)=>{
-    const lbl=(label||'').toLowerCase();
-    // remove accidental duplicates
-    const dup=$$('.btn',root).filter(b=>(b.textContent||'').trim().toLowerCase()===lbl);
-    dup.slice(1).forEach(d=>d.remove());
-    if(dup[0]) return dup[0];
-    const b=document.createElement('button');
-    b.className='btn soft'; b.textContent=label;
-    (root.querySelector('.formats')||root).appendChild(b);
+  /* Preview host + action buttons */
+  const previewHost = $('.preview', cardPreview);
+  const btnsRow = $('.formats', cardPreview);
+  function ensureAction(name){
+    // Reuse if present, else create consistently styled button
+    let b = btnsRow && Array.from(btnsRow.children).find(el => el.dataset && el.dataset.action === name);
+    if (!b && btnsRow) {
+      b = document.createElement('button');
+      b.className = 'btn soft';
+      b.dataset.action = name;
+      b.textContent = ({
+        process: 'Process Photo',
+        highlight: 'Highlight Subject'
+      })[name] || name;
+      btnsRow.appendChild(b);
+    }
     return b;
+  }
+  const btnProcess   = ensureAction('process');
+  const btnHighlight = ensureAction('highlight');
+
+  /* Draw & Trace sub-elements */
+  const drawCanvasHost = cardDraw ? $('.canvas', cardDraw) : null;
+  const drawToolbar    = cardDraw ? $('.toolbar', cardDraw) : null;
+  const drawPenBtn     = drawToolbar ? $('button:nth-child(1)', drawToolbar) : null;
+  const drawEraseBtn   = drawToolbar ? $('button:nth-child(2)', drawToolbar) : null;
+
+  // Add a "Process Selection" button under the draw tools (once)
+  let processSelectionBtn = null;
+  if (cardDraw && !$('.loom-process-selection', cardDraw)) {
+    processSelectionBtn = document.createElement('button');
+    processSelectionBtn.className = 'btn soft loom-process-selection';
+    processSelectionBtn.textContent = 'Process Selection';
+    processSelectionBtn.style.margin = '12px 0 0 0';
+    cardDraw.appendChild(processSelectionBtn);
+  }
+
+  /* Thread palette swatches (simple, clickable) */
+  if (cardPalette && !$('.swatches', cardPalette)?.children.length) {
+    const sw = $('.swatches', cardPalette);
+    const colors = [
+      '#ef4444','#f472b6','#c084fc','#60a5fa','#38bdf8','#22d3ee',
+      '#34d399','#fbbf24','#f59e0b','#fb7185','#a3e635','#f43f5e'
+    ];
+    colors.forEach(c=>{
+      const d=document.createElement('div');
+      d.style.cssText='width:28px;height:28px;border-radius:50%;border:2px solid rgba(0,0,0,.1);cursor:pointer';
+      d.style.background=c;
+      d.title=c;
+      d.addEventListener('click',()=>{ state.penColor=c; drawPenBtn?.classList.add('active'); drawEraseBtn?.classList.remove('active'); state.erase=false; });
+      sw.appendChild(d);
+    });
+  }
+
+  /* --------------------- State --------------------- */
+  const state = {
+    img: null,            // HTMLImageElement
+    work: document.createElement('canvas'),   // full-res working canvas
+    mask: document.createElement('canvas'),   // user mask (draw tab)
+    penColor:'#0f172a',   // dark navy by default
+    erase:false
   };
+  const wctx = state.work.getContext('2d',{willReadFrequently:true});
+  const mctx = state.mask.getContext('2d',{willReadFrequently:true});
 
-  /* ------------- preview (responsive height + DPR) ------------- */
-  function setHostHeightFromWidth(el){
-    // Choose a pleasant aspect; clamp for phones
-    const w = Math.max(320, el.clientWidth || 0);
-    const h = Math.max(220, Math.min(520, Math.round(Math.min(window.innerHeight*0.6, w * 0.66))));
-    el.style.height = h + 'px';
-    return { w, h };
+  /* --------------------- Preview canvas --------------------- */
+  // The preview card is hidden until we mark data-empty="0"
+  function setPreviewVisible(on){
+    if (!previewHost) return;
+    previewHost.dataset.empty = on ? '0' : '1';
   }
 
-  function ensurePreview(){
-    if (!previewHost || S.preview) return;
-    const { h } = setHostHeightFromWidth(previewHost);
-    const c = makeCanvas(Math.max(640, previewHost.clientWidth||640), h);
-    c.style.width='100%'; c.style.height='100%';
-    previewHost.innerHTML=''; previewHost.appendChild(c);
-    S.preview=c;
+  // Ensure a canvas exists inside the preview card
+  let previewCanvas = previewHost ? $('canvas', previewHost) : null;
+  if (previewHost && !previewCanvas){
+    previewCanvas = document.createElement('canvas');
+    previewHost.appendChild(previewCanvas);
+  }
 
-    S.ro = new ResizeObserver(entries=>{
-      const host = entries[0].target;
-      const { h:hostH } = setHostHeightFromWidth(host);
-      const r = DPR(), w=Math.max(1,Math.round(host.clientWidth*r)), h=Math.max(1,Math.round(hostH*r));
-      if (S.preview.width!==w || S.preview.height!==h){
-        S.preview.width=w; S.preview.height=h;
-        if (S.mode==='proc') renderProcessed(); else renderRaw();
+  function fitPreview(){
+    if (!previewHost || !previewCanvas) return;
+    const w = Math.floor(previewHost.clientWidth);
+    const h = Math.floor(previewHost.clientHeight);
+    if (w>0 && h>0) {
+      if (previewCanvas.width !== w || previewCanvas.height !== h){
+        previewCanvas.width = w; previewCanvas.height = h;
       }
+    }
+  }
+  window.addEventListener('resize', fitPreview);
+  fitPreview();
+
+  function drawToPreview(drawFn){
+    if (!previewCanvas) return;
+    fitPreview();
+    const ctx = previewCanvas.getContext('2d');
+    ctx.clearRect(0,0,previewCanvas.width,previewCanvas.height);
+    drawFn(ctx, previewCanvas.width, previewCanvas.height);
+  }
+
+  /* --------------------- Tabs (your visual tabs) --------------------- */
+  if (tabBtns.length === 2 && panelDraw && panelUpload){
+    tabBtns.forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        tabBtns.forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+        const which = btn.dataset.tab || btn.textContent.toLowerCase().includes('draw') ? 'draw' : 'upload';
+        $$('.panel', tabsWrap).forEach(p=>p.classList.remove('active'));
+        (which==='draw' ? panelDraw : panelUpload).classList.add('active');
+        // Stabilize header on iOS
+        document.body.scrollTop = document.body.scrollTop; // no-op tick
+      });
     });
-    S.ro.observe(previewHost);
   }
 
-  function renderRaw(){
-    if(!S.preview || !S.work) return;
-    const g=S.preview.getContext('2d'); g.clearRect(0,0,S.preview.width,S.preview.height);
-    const s=Math.min(S.preview.width/S.work.width, S.preview.height/S.work.height);
-    const w=(S.work.width*s)|0, h=(S.work.height*s)|0, x=(S.preview.width-w)>>1, y=(S.preview.height-h)>>1;
-    g.imageSmoothingEnabled=true; g.imageSmoothingQuality='high';
-    g.drawImage(S.work,x,y,w,h);
-    S.mode='raw';
-  }
+  /* --------------------- Upload wiring --------------------- */
+  if (uploadInput) {
+    uploadInput.removeAttribute('disabled');
+    uploadInput.accept = 'image/*';
+    uploadZone?.addEventListener('click', (e)=>{
+      if(e.target === uploadZone || e.target.closest('.upload-inner')) uploadInput.click();
+    });
+    uploadInput.addEventListener('change', async (e)=>{
+      const f = e.target.files && e.target.files[0];
+      if (!f) return;
+      const url = URL.createObjectURL(f);
+      try{
+        const img = new Image();
+        await new Promise((res,rej)=>{ img.onload=res; img.onerror=rej; img.src=url; });
+        state.img = img;
+        // Fit working canvas (cap size for phones)
+        const MAX = /iPhone|iPad|iPod/i.test(navigator.userAgent) ? 1280 : 2000;
+        let W = img.naturalWidth, H = img.naturalHeight;
+        if (Math.max(W,H) > MAX){ const r = MAX/Math.max(W,H); W=(W*r)|0; H=(H*r)|0; }
+        state.work.width=W; state.work.height=H; wctx.clearRect(0,0,W,H); wctx.drawImage(img,0,0,W,H);
+        // reset mask to same size
+        state.mask.width=W; state.mask.height=H; mctx.clearRect(0,0,W,H);
 
-  /* ---------------- draw & trace ---------------- */
-  function ensureDrawLayers(){
-    if(!drawHost) return;
-    drawHost.style.position='relative';
-    drawHost.style.touchAction='none';
-    if (S.drawBG && S.mask) return;
-    const bg=makeCanvas(640,360); bg.style.cssText='position:absolute;inset:0;width:100%;height:100%;opacity:.45;';
-    const mk=makeCanvas(640,360); mk.style.cssText='position:relative;width:100%;height:100%;';
-    drawHost.innerHTML=''; drawHost.appendChild(bg); drawHost.appendChild(mk);
-    S.drawBG=bg; S.mask=mk;
-    bindDrawing(mk);
-  }
-  function mirrorToDraw(){
-    if(!S.work || !S.drawBG || !S.mask) return;
-    S.drawBG.width=S.work.width; S.drawBG.height=S.work.height;
-    S.mask.width=S.work.width;   S.mask.height=S.work.height;
-    S.drawBG.getContext('2d').drawImage(S.work,0,0);
-    S.mask.getContext('2d').clearRect(0,0,S.mask.width,S.mask.height);
-    S.hasMask=false;
-  }
-  function bindDrawing(cnv){
-    const ctx=cnv.getContext('2d',{willReadFrequently:true});
-    const pt=(ev)=>{ const r=cnv.getBoundingClientRect(); const cx=(ev.touches?ev.touches[0].clientX:ev.clientX)-r.left; const cy=(ev.touches?ev.touches[0].clientY:ev.clientY)-r.top; return {x:cx*(cnv.width/r.width), y:cy*(cnv.height/r.height)}; };
-    const start=(e)=>{ if(!S.work) return; const p=pt(e); S.pen.down=true; S.pen.lastX=p.x; S.pen.lastY=p.y; drawTo(p.x,p.y); e.preventDefault(); };
-    const move =(e)=>{ if(!S.pen.down) return; const p=pt(e); drawTo(p.x,p.y); e.preventDefault(); };
-    const end  =()=>{ S.pen.down=false; };
-    function drawTo(x,y){
-      ctx.globalCompositeOperation = S.pen.erase ? 'destination-out' : 'source-over';
-      ctx.lineWidth=S.pen.size; ctx.lineCap='round'; ctx.strokeStyle=S.pen.color;
-      ctx.beginPath(); ctx.moveTo(S.pen.lastX,S.pen.lastY); ctx.lineTo(x,y); ctx.stroke();
-      S.pen.lastX=x; S.pen.lastY=y; S.hasMask=true;
-    }
-    cnv.addEventListener('mousedown',start); window.addEventListener('mousemove',move); window.addEventListener('mouseup',end);
-    cnv.addEventListener('touchstart',start,{passive:false}); window.addEventListener('touchmove',move,{passive:false}); window.addEventListener('touchend',end);
-
-    // default to Pen (dark)
-    if (btnPen)   btnPen.onclick   = ()=>{ S.pen.erase=false; S.pen.color='#0a0f1d'; btnPen.classList.add('active'); btnEraser?.classList.remove('active'); };
-    if (btnEraser)btnEraser.onclick= ()=>{ S.pen.erase=true;  btnEraser.classList.add('active'); btnPen?.classList.remove('active'); };
-    btnPen?.click();
-  }
-
-  /* ---------------- quick processor (subject-biased kmeans) ---------------- */
-  function renderProcessed(){
-    if(!S.work||!S.preview) return;
-    const W=S.work.width,H=S.work.height;
-    const src=S.work.getContext('2d').getImageData(0,0,W,H);
-    const maskData = (S.hasMask ? S.mask.getContext('2d').getImageData(0,0,W,H).data : null);
-
-    const k=6, step=Math.max(1, Math.floor(Math.sqrt((W*H)/200000)));
-    const pts=[];
-    for(let y=0;y<H;y+=step){
-      for(let x=0;x<W;x+=step){
-        const i=(y*W+x)*4;
-        if(maskData && maskData[i+3]<12 && !S.opts.ignoreSubject) continue;
-        pts.push([src.data[i],src.data[i+1],src.data[i+2]]);
-      }
-    }
-    // init centers
-    const centers=[];
-    if(pts.length===0){ centers.push([0,0,0]); }
-    else{
-      centers.push(pts[Math.floor(Math.random()*pts.length)]);
-      while(centers.length<Math.min(k,pts.length)){
-        let best=null,bd=-1;
-        for(const p of pts){
-          let d=1e12; for(const c of centers){ const dx=p[0]-c[0],dy=p[1]-c[1],dz=p[2]-c[2]; const dd=dx*dx+dy*dy+dz*dz; if(dd<d) d=dd; }
-          if(d>bd){bd=d;best=p;}
-        }
-        centers.push(best.slice());
-      }
-      for(let it=0;it<4;it++){
-        const sum=Array.from({length:centers.length},()=>[0,0,0,0]);
-        for(const p of pts){
-          let bi=0,bd=1e12;
-          for(let i=0;i<centers.length;i++){
-            const c=centers[i],dx=p[0]-c[0],dy=p[1]-c[1],dz=p[2]-c[2]; const dd=dx*dx+dy*dy+dz*dz; if(dd<bd){bd=dd;bi=i;}
-          }
-          const s=sum[bi]; s[0]+=p[0]; s[1]+=p[1]; s[2]+=p[2]; s[3]++;
-        }
-        for(let i=0;i<centers.length;i++){ const s=sum[i]; if(s[3]) centers[i]=[(s[0]/s[3])|0,(s[1]/s[3])|0,(s[2]/s[3])|0]; }
-      }
-    }
-
-    const g=S.preview.getContext('2d'); g.clearRect(0,0,S.preview.width,S.preview.height);
-    const s=Math.min(S.preview.width/W, S.preview.height/H);
-    const w=(W*s)|0, h=(H*s)|0, ox=(S.preview.width-w)>>1, oy=(S.preview.height-h)>>1;
-    const out=g.createImageData(w,h);
-    for(let y=0;y<h;y++){
-      const sy=Math.min(H-1,(y/s)|0), row=sy*W;
-      for(let x=0;x<w;x++){
-        const sx=Math.min(W-1,(x/s)|0), base=(row+sx)*4;
-        if(maskData && !S.opts.ignoreSubject && maskData[base+3]<12){ out.data[(y*w+x)*4+3]=0; continue; }
-        const r=src.data[base], gg=src.data[base+1], b=src.data[base+2];
-        let bi=0,bd=1e12;
-        for(let c=0;c<centers.length;c++){
-          const cr=centers[c][0],cg=centers[c][1],cb=centers[c][2];
-          const dx=r-cr,dy=gg-cg,dz=b-cb; const dd=dx*dx+dy*dy+dz*dz; if(dd<bd){bd=dd;bi=c;}
-        }
-        const o=(y*w+x)*4; out.data[o]=centers[bi][0]; out.data[o+1]=centers[bi][1]; out.data[o+2]=centers[bi][2]; out.data[o+3]=255;
-      }
-    }
-    g.save(); g.translate(ox,oy); g.putImageData(out,0,0);
-
-    if (S.opts.outline && (S.hasMask || !S.opts.ignoreSubject) && maskData){
-      g.strokeStyle='#0a0f1d'; g.lineWidth=Math.max(1,Math.round(2*s)); g.lineJoin='round'; g.lineCap='round';
-      g.beginPath();
-      for(let y=1;y<H-1;y+=2){
-        for(let x=1;x<W-1;x+=2){
-          const a = maskData[(y*W+x)*4+3]>12, b = maskData[(y*W+x+1)*4+3]>12;
-          if(a && !b){ const X=Math.round((x-0.5)*s), Y=Math.round(y*s); g.moveTo(X,Y); g.lineTo(X+Math.round(s),Y); }
-        }
-      }
-      g.stroke();
-    }
-    g.restore();
-    S.mode='proc';
-  }
-
-  /* ---------------- upload (incl. HEIC) ---------------- */
-  async function heicToJpeg(file){
-    try{
-      if(!window.heic2any){
-        await new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s); });
-      }
-      const out=await window.heic2any({ blob:file, toType:'image/jpeg', quality:0.92 });
-      const blob=Array.isArray(out)?out[0]:out;
-      return new File([blob], (file.name||'image').replace(/\.\w+$/,'')+'.jpg', {type:'image/jpeg'});
-    }catch{ return file; }
-  }
-
-  function bindUpload(){
-    if(!uploadZone) return;
-    let input = uploadZone.querySelector('input[type=file]');
-    if(!input){ input=document.createElement('input'); input.type='file'; input.accept='image/*'; uploadZone.appendChild(input); }
-    else input.removeAttribute('disabled');
-
-    uploadZone.addEventListener('click', e=>{ if(e.target.tagName!=='INPUT') input.click(); });
-
-    input.addEventListener('change', async e=>{
-      const f=e.target.files?.[0]; if(!f) return;
-      const file=(/heic|heif/i.test(f.type)||/\.(heic|heif)$/i.test(f.name))? await heicToJpeg(f): f;
-      const url=URL.createObjectURL(file); const img=new Image();
-      img.onload=()=>{
+        // Show preview with the raw image scaled to card
+        setPreviewVisible(true);
+        drawToPreview((ctx,pw,ph)=>{
+          // contain fit
+          const r = Math.min(pw/W, ph/H);
+          const dw = Math.round(W*r), dh = Math.round(H*r);
+          const dx = Math.floor((pw-dw)/2), dy = Math.floor((ph-dh)/2);
+          ctx.fillStyle = '#fff'; ctx.fillRect(0,0,pw,ph);
+          ctx.drawImage(state.work, dx,dy,dw,dh);
+        });
+      } finally {
         URL.revokeObjectURL(url);
-        const maxSide=1280; let W=img.naturalWidth,H=img.naturalHeight;
-        if(Math.max(W,H)>maxSide){ const sc=maxSide/Math.max(W,H); W=(W*sc)|0; H=(H*sc)|0; }
-        const work=makeCanvas(W,H); work.getContext('2d').drawImage(img,0,0,W,H);
-        S.image=img; S.work=work;
-
-        // show preview region now
-        previewCard?.classList.remove('hidden');
-        ensurePreview(); setHostHeightFromWidth(previewHost);
-        renderRaw();
-        ensureDrawLayers(); mirrorToDraw();
-
-        // enable actions
-        ensureButtons();
-      };
-      img.onerror=()=>URL.revokeObjectURL(url);
-      img.src=url;
+      }
     });
   }
 
-  /* ---------------- buttons ---------------- */
-  function ensureButtons(){
-    const pb = ensureBtn(previewCard,'Process Photo');
-    const hb = ensureBtn(previewCard,'Highlight Subject');
-    const ps = ensureBtn(drawPanel,   'Process Selection');
+  /* --------------------- Fast processing --------------------- */
+  function processImage() {
+    if (!state.work.width) return;
+    const wantReduce  = reduceChk ? reduceChk.checked : true;
+    const wantOutline = outlineChk ? outlineChk.checked : true;
+    const addHatch    = true; // matches your “Add fills” default
 
-    pb.onclick = ()=>{
-      S.opts.outline = !!(outlineChk?.checked ?? true);
-      S.opts.addFills = !!(addFillsChk?.checked ?? true);
-      S.opts.ignoreSubject = !!(noSubjectCb?.checked);
-      renderProcessed();
-      previewCard?.scrollIntoView({behavior:'smooth',block:'start'});
-    };
-    hb.onclick = ()=>{
-      activateTab('draw'); ensureDrawLayers(); mirrorToDraw(); btnPen?.click();
-      drawPanel?.scrollIntoView({behavior:'smooth',block:'start'});
-    };
-    ps.onclick = ()=>{
-      S.hasMask = true;
-      S.opts.outline = !!(outlineChk?.checked ?? true);
-      S.opts.ignoreSubject = !!(noSubjectCb?.checked);
-      renderProcessed();
-      activateTab('upload');
-      previewCard?.scrollIntoView({behavior:'smooth',block:'start'});
-    };
-  }
+    const W = state.work.width, H = state.work.height;
+    const src = wctx.getImageData(0,0,W,H);
+    const d   = src.data;
 
-  /* ---------------- tabs & init ---------------- */
-  function bindTabs(){
-    tabBtns.forEach(b=>{
-      b.addEventListener('click',()=>{
-        const name=(b.dataset.tab||'upload').toLowerCase();
-        activateTab(name);
-        if(name==='draw'){ ensureDrawLayers(); btnPen?.click(); }
-      });
+    // Optional quantize (very lightweight k-means-ish)
+    let palette = null, indexed = null;
+    if (wantReduce){
+      const k = 6;
+      // downsample points
+      const step = Math.max(1, Math.floor(Math.sqrt((W*H)/40000)));
+      const pts  = [];
+      for(let y=0;y<H;y+=step){ const row=y*W; for(let x=0;x<W;x+=step){
+        const i=(row+x)*4; pts.push([d[i],d[i+1],d[i+2]]);
+      }}
+      // init centers randomly
+      let centers = pts.slice(0, k);
+      for(let it=0; it<6; it++){
+        const sums = Array.from({length:k},()=>[0,0,0,0]);
+        pts.forEach(p=>{
+          let bi=0,bd=1e12;
+          for(let c=0;c<k;c++){
+            const cc=centers[c], dr=p[0]-cc[0], dg=p[1]-cc[1], db=p[2]-cc[2];
+            const dd=dr*dr+dg*dg+db*db; if(dd<bd){bd=dd;bi=c;}
+          }
+          const s=sums[bi]; s[0]+=p[0]; s[1]+=p[1]; s[2]+=p[2]; s[3]++;
+        });
+        for(let c=0;c<k;c++){ const s=sums[c]; if(s[3]) centers[c]=[(s[0]/s[3])|0,(s[1]/s[3])|0,(s[2]/s[3])|0]; }
+      }
+      palette = centers;
+      indexed = new Uint8Array(W*H);
+      for(let i=0;i<W*H;i++){
+        const j=i*4; let bi=0,bd=1e12;
+        for(let c=0;c<palette.length;c++){
+          const pr=palette[c][0], pg=palette[c][1], pb=palette[c][2];
+          const dr=d[j]-pr,dg=d[j+1]-pg,db=d[j+2]-pb; const vv=dr*dr+dg*dg+db*db;
+          if(vv<bd){bd=vv;bi=c;}
+        }
+        indexed[i]=bi;
+      }
+    }
+
+    // Simple edge map (Sobel)
+    const edge = new Uint8ClampedArray(W*H);
+    (function(){
+      const gx=[-1,0,1,-2,0,2,-1,0,1], gy=[-1,-2,-1,0,0,0,1,2,1];
+      for(let y=1;y<H-1;y++){
+        for(let x=1;x<W-1;x++){
+          let sx=0, sy=0, idx=0;
+          for(let yy=-1;yy<=1;yy++){
+            for(let xx=-1;xx<=1;xx++){
+              const i=((y+yy)*W + (x+xx))*4;
+              const lum = (d[i]*0.2126 + d[i+1]*0.7152 + d[i+2]*0.0722);
+              sx += lum * gx[idx]; sy += lum * gy[idx]; idx++;
+            }
+          }
+          const mag = Math.sqrt(sx*sx+sy*sy);
+          edge[y*W+x] = mag>140 ? 255 : 0;
+        }
+      }
+    })();
+
+    // Apply user mask (if any from Draw & Trace)
+    const hasMask = state.mask && state.mask.width === W && state.mask.height === H &&
+                    mctx.getImageData(0,0,W,H).data.some((v,i)=> (i%4)===3 && v>0);
+    let maskAlpha = null;
+    if (hasMask){
+      const m = mctx.getImageData(0,0,W,H).data;
+      maskAlpha = new Uint8Array(W*H);
+      for(let i=0;i<W*H;i++) maskAlpha[i] = m[i*4+3]>8 ? 1 : 0;
+    }
+
+    // Render to preview
+    setPreviewVisible(true);
+    drawToPreview((ctx,pw,ph)=>{
+      // contain fit for drawing
+      const r = Math.min(pw/W, ph/H);
+      const dw = Math.round(W*r), dh = Math.round(H*r);
+      const dx = Math.floor((pw-dw)/2), dy = Math.floor((ph-dh)/2);
+
+      // backdrop
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0,0,pw,ph);
+
+      // base fill (palette or original)
+      const img = ctx.createImageData(dw,dh);
+      for(let y=0;y<dh;y++){
+        for(let x=0;x<dw;x++){
+          const sx = Math.min(W-1, Math.floor(x/r));
+          const sy = Math.min(H-1, Math.floor(y/r));
+          const si = sy*W+sx, di = (y*dw+x)*4;
+          if (maskAlpha && !maskAlpha[si]) {
+            // outside selection → keep white
+            img.data[di]=255; img.data[di+1]=255; img.data[di+2]=255; img.data[di+3]=255;
+          } else if (indexed){
+            const c = palette[indexed[si]]; img.data[di]=c[0]; img.data[di+1]=c[1]; img.data[di+2]=c[2]; img.data[di+3]=255;
+          } else {
+            const j=si*4; img.data[di]=d[j]; img.data[di+1]=d[j+1]; img.data[di+2]=d[j+2]; img.data[di+3]=255;
+          }
+        }
+      }
+      ctx.putImageData(img, dx,dy);
+
+      // optional diagonal hatch to simulate fill stitches
+      if (addHatch){
+        const density = densityRange ? (0.3 + 0.7*(parseFloat(densityRange.value||densityRange.min||'0') - parseFloat(densityRange.min||'0')) / ( (parseFloat(densityRange.max||'100')||100) - parseFloat(densityRange.min||'0') )) : 0.4;
+        const step = Math.max(6, Math.floor(14 - density*10)); // smaller = denser
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(dx,dy,dw,dh);
+        ctx.clip();
+        ctx.strokeStyle='rgba(0,0,0,.10)';
+        ctx.lineWidth=1;
+
+        for(let y=-dh; y<dh*2; y+=step){
+          ctx.beginPath();
+          ctx.moveTo(dx-20, dy+y);
+          ctx.lineTo(dx+dw+20, dy+y-20);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      // Outline
+      if (wantOutline){
+        ctx.save();
+        ctx.translate(dx,dy);
+        ctx.strokeStyle='#0f172a';
+        ctx.lineWidth=1.5;
+        ctx.beginPath();
+        for(let y=1;y<dh-1;y++){
+          for(let x=1;x<dw-1;x++){
+            const sx = Math.min(W-1, Math.floor(x/r));
+            const sy = Math.min(H-1, Math.floor(y/r));
+            if (edge[sy*W+sx]){ ctx.moveTo(x,y); ctx.lineTo(x+0.01,y+0.01); }
+          }
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
     });
-    $$('[data-scroll="#tabs"]').forEach(b=>{
-      b.addEventListener('click',()=>{
-        $('#tabs')?.scrollIntoView({behavior:'smooth'});
-        const isDraw=(b.textContent||'').toLowerCase().includes('drawing');
-        activateTab(isDraw?'draw':'upload');
-        if(isDraw){ ensureDrawLayers(); btnPen?.click(); }
-      });
+  }
+
+  if (btnProcess)   btnProcess.addEventListener('click', processImage);
+  if (btnHighlight) btnHighlight.addEventListener('click', ()=>{
+    if (!panelDraw || !cardDraw) return;
+    // switch tab visually
+    if (tabBtns.length) { tabBtns.forEach(b=>b.classList.remove('active')); tabBtns[1].classList.add('active'); }
+    $$('.panel', tabsWrap).forEach(p=>p.classList.remove('active'));
+    panelDraw.classList.add('active');
+    setupDrawCanvas();
+  });
+
+  /* --------------------- Draw & Trace (mask) --------------------- */
+  let drawCanvas = null, dctx = null, baseImgForDraw = null;
+  function setupDrawCanvas(){
+    if (!drawCanvasHost || !state.work.width) return;
+    // ensure canvas exists
+    if (!drawCanvas){
+      drawCanvas = document.createElement('canvas');
+      drawCanvasHost.innerHTML = '';
+      drawCanvasHost.appendChild(drawCanvas);
+      dctx = drawCanvas.getContext('2d');
+    }
+    // fit canvas to host
+    const w = Math.floor(drawCanvasHost.clientWidth);
+    const h = Math.floor(Math.max(220, drawCanvasHost.clientHeight));
+    drawCanvas.width = w; drawCanvas.height = h;
+
+    // Render the working image under a translucent veil
+    const W = state.work.width, H = state.work.height;
+    const r = Math.min(w/W, h/H);
+    const dw = Math.round(W*r), dh = Math.round(H*r);
+    const dx = Math.floor((w-dw)/2), dy = Math.floor((h-dh)/2);
+    baseImgForDraw = {r,dx,dy,dw,dh};
+
+    dctx.clearRect(0,0,w,h);
+    dctx.drawImage(state.work, dx,dy,dw,dh);
+    dctx.fillStyle='rgba(255,255,255,.35)'; dctx.fillRect(0,0,w,h);
+
+    // paint existing mask (if any)
+    if (state.mask.width===W && state.mask.height===H){
+      const id = mctx.getImageData(0,0,W,H);
+      dctx.save();
+      dctx.globalAlpha = 0.65;
+      dctx.fillStyle = '#0f172a';
+      for(let y=0;y<H;y++){
+        for(let x=0;x<W;x++){
+          if (id.data[(y*W+x)*4+3] > 10){
+            const px = Math.round(dx + x*r), py = Math.round(dy + y*r);
+            dctx.fillRect(px,py, Math.ceil(r), Math.ceil(r));
+          }
+        }
+      }
+      dctx.restore();
+    }
+  }
+
+  // draw interactions
+  if (drawCanvasHost){
+    let painting=false, lastX=0, lastY=0, size=18;
+    function hostToWork(ev){
+      if (!baseImgForDraw) return null;
+      const rect = drawCanvas.getBoundingClientRect();
+      const cx = (ev.touches?ev.touches[0].clientX:ev.clientX) - rect.left;
+      const cy = (ev.touches?ev.touches[0].clientY:ev.clientY) - rect.top;
+      // convert to work-space coords
+      const xw = Math.round( (cx - baseImgForDraw.dx) / baseImgForDraw.r );
+      const yw = Math.round( (cy - baseImgForDraw.dy) / baseImgForDraw.r );
+      return {cx,cy,xw,yw};
+    }
+    function paintDot(cx,cy){
+      dctx.save();
+      dctx.globalAlpha=1;
+      dctx.fillStyle = state.erase ? 'rgba(255,255,255,1)' : state.penColor;
+      dctx.beginPath();
+      dctx.arc(cx,cy, size/2, 0, Math.PI*2);
+      dctx.fill();
+      dctx.restore();
+      // also write to mask (work-space)
+      const rad = Math.max(1, Math.round(size/2 / baseImgForDraw.r));
+      const mx = Math.max(0, Math.min(state.mask.width-1, Math.round((cx-baseImgForDraw.dx)/baseImgForDraw.r)));
+      const my = Math.max(0, Math.min(state.mask.height-1, Math.round((cy-baseImgForDraw.dy)/baseImgForDraw.r)));
+      mctx.globalCompositeOperation = state.erase ? 'destination-out' : 'source-over';
+      mctx.fillStyle = 'rgba(0,0,0,1)';
+      mctx.beginPath(); mctx.arc(mx,my,rad,0,Math.PI*2); mctx.fill();
+      mctx.globalCompositeOperation = 'source-over';
+    }
+    function drawMove(ev){
+      if (!painting) return;
+      const p = hostToWork(ev); if(!p) return; ev.preventDefault();
+      const dx = p.cx - lastX, dy = p.cy - lastY;
+      const steps = Math.max(1, Math.ceil(Math.hypot(dx,dy) / (size*0.6)));
+      for(let i=1;i<=steps;i++){
+        const cx = lastX + dx*i/steps, cy = lastY + dy*i/steps;
+        paintDot(cx,cy);
+      }
+      lastX=p.cx; lastY=p.cy;
+    }
+    function drawStart(ev){ if(!state.work.width) return; painting=true; const p=hostToWork(ev); if(!p) return; lastX=p.cx; lastY=p.cy; paintDot(p.cx,p.cy); ev.preventDefault(); }
+    function drawEnd(){ painting=false; }
+
+    drawCanvasHost.addEventListener('mousedown', drawStart);
+    window.addEventListener('mouseup', drawEnd);
+    drawCanvasHost.addEventListener('mousemove', drawMove);
+    drawCanvasHost.addEventListener('touchstart', drawStart,{passive:false});
+    window.addEventListener('touchend', drawEnd);
+    drawCanvasHost.addEventListener('touchmove', drawMove,{passive:false});
+
+    drawPenBtn?.addEventListener('click', ()=>{ state.erase=false; drawPenBtn.classList.add('active'); drawEraseBtn?.classList.remove('active'); });
+    drawEraseBtn?.addEventListener('click',()=>{ state.erase=true;  drawEraseBtn.classList.add('active'); drawPenBtn?.classList.remove('active'); });
+
+    processSelectionBtn?.addEventListener('click', ()=>{
+      // go back to Upload tab and process with mask
+      if (tabBtns.length) { tabBtns.forEach(b=>b.classList.remove('active')); tabBtns[0].classList.add('active'); }
+      $$('.panel', tabsWrap).forEach(p=>p.classList.remove('active'));
+      panelUpload.classList.add('active');
+      processImage();
     });
   }
 
-  function init(){
-    if(!uploadPanel || !drawPanel || !previewCard) return;
-    previewCard.classList.add('hidden');       // hide until an image exists
-    bindTabs();
-    bindUpload();
-    ensureDrawLayers();                        // pre-create layers so Draw tab always works
-  }
-
-  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', init, {once:true});
-  else init();
+  /* --------------------- First render --------------------- */
+  setPreviewVisible(false);   // hidden until an image is chosen
+  window.addEventListener('load', fitPreview);
 })();
+</script>

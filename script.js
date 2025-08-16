@@ -1,487 +1,402 @@
-/* Loomabelle runtime — v34
-   - Keeps the site’s visuals/HTML unchanged.
-   - Wires Upload → Preview, Highlight Subject → Draw, Process → Stitched preview.
-   - Mobile-safe (downscale, touch/scroll lock), no server required.
+/* Loomabelle runtime — v35 (defensive)
+   - Works with the mockup HTML you pasted earlier (and minor variants).
+   - Wires tabs, upload, preview, highlight subject + process selection.
+   - Mobile-safe; no server.
 */
 
 (() => {
   "use strict";
 
-  /* ------------------------- Helpers ------------------------- */
-  const $ = (sel, root = document) => root.querySelector(sel);
-  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+  /* --------------------- element helpers --------------------- */
+  const $  = (sel, root=document) => root.querySelector(sel);
+  const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+  const byText = (root, selector, text) =>
+    $$(selector, root).find(n => (n.textContent||"").toLowerCase().includes(text));
 
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-  const dpr = () => (window.devicePixelRatio || 1);
+  const DPR = () => (window.devicePixelRatio || 1);
 
-  // Find key containers by data attributes already in your HTML
+  // Find panels (works whether data-panel exists or not)
   const panels = {
-    upload: $('.panel[data-panel="upload"]'),
-    draw:   $('.panel[data-panel="draw"]')
+    upload: $('.panel[data-panel="upload"]') || byText(document, '.panel', 'upload a photo'),
+    draw:   $('.panel[data-panel="draw"]')   || byText(document, '.panel', 'draw & trace'),
   };
-  const tabsBar = $('#tabs') || document.body; // for scrolling targets
+
+  // Tabs (buttons with class tab-btn)
+  const tabs = $$('.tab-btn');
+  function activateTab(name){
+    if(!panels.upload || !panels.draw) return;
+    tabs.forEach(b => b.classList.toggle('active', (b.dataset.tab||'').toLowerCase()===name));
+    $$('.panel').forEach(p => p.classList.remove('active'));
+    const p = (name==='upload') ? panels.upload : panels.draw;
+    p && p.classList.add('active');
+  }
 
   // Upload area
-  const uploadZone   = panels.upload?.querySelector('.upload-zone');
-  const uploadInput  = uploadZone?.querySelector('input[type="file"]');
-  const reduceChk    = panels.upload?.querySelector('label:has(input[type="checkbox"]) input') || null; // first checkbox = Reduce to stitch palette
-  const outlineChk   = panels.upload?.querySelectorAll('label input[type="checkbox"]')[1] || null;       // second checkbox = Edge outline
-  const densitySlider= panels.upload?.querySelector('input[type="range"]') || null;
+  const uploadCard = panels.upload;
+  const uploadZone = uploadCard?.querySelector('.upload-zone');
+  let uploadInput  = uploadZone?.querySelector('input[type="file"]');
+  // Checkboxes/sliders in upload card (optional)
+  const reduceChk     = uploadCard?.querySelectorAll('label input[type="checkbox"]')[0] || null;
+  const outlineChk    = uploadCard?.querySelectorAll('label input[type="checkbox"]')[1] || null;
+  const densitySlider = uploadCard?.querySelector('input[type="range"]') || null;
 
-  // Preview area (stitched)
-  const previewCard  = panels.upload?.querySelector('.card.rose');
-  const previewHost  = previewCard?.querySelector('.preview');
-  const btnProcess   = previewCard?.querySelector('button:has(+ *) , .formats') ? previewCard.querySelector('button') : null; // first button under preview = Process Photo
-  const btnHighlight = previewCard?.querySelector('button:nth-of-type(2)'); // Highlight Subject
-  const noSubjectChk = previewCard?.querySelector('input[type="checkbox"]'); // No subject (if present)
-  const addFillsChk  = previewCard?.querySelector('input[type="checkbox"] ~ *') ? previewCard.querySelectorAll('input[type="checkbox"]')[1] : null;
-  // export buttons (if any)
-  const exportRow    = previewCard?.querySelector('.formats');
+  // Preview card
+  const previewCard = byText(panels.upload, '.card', 'preview') || panels.upload;
+  const previewHost = previewCard?.querySelector('.preview');
+  // Buttons under preview (order: Process, Highlight, No subject, Add fills…)
+  const ctrlRow     = previewCard;
+  const btnProcess  = byText(ctrlRow, 'button', 'process photo');
+  const btnHighlight= byText(ctrlRow, 'button', 'highlight subject');
+  const noSubject   = byText(ctrlRow, 'label', 'no subject')?.querySelector('input[type="checkbox"]')
+                    || byText(ctrlRow, 'input[type="checkbox"]', 'no subject'); // handle both label/inline
+  const addFills    = byText(ctrlRow, 'label', 'add fills')?.querySelector('input[type="checkbox"]')
+                    || byText(ctrlRow, 'input[type="checkbox"]', 'add fills');
 
-  // Draw & Trace area
-  const drawCard     = panels.draw?.querySelector('.card.violet');
-  const drawHost     = drawCard?.querySelector('.canvas');
-  const btnPen       = drawCard?.querySelector('button:nth-of-type(1)');
-  const btnEraser    = drawCard?.querySelector('button:nth-of-type(2)');
-  const btnProcessSel= drawCard?.querySelector('button:nth-of-type(3)'); // “Process Selection”
+  // Draw card
+  const drawCard  = panels.draw;
+  const drawHost  = drawCard?.querySelector('.canvas');
+  const btnPen    = byText(drawCard, 'button', 'pen');
+  const btnEraser = byText(drawCard, 'button', 'eraser');
+  const btnProcSel= byText(drawCard, 'button', 'process selection');
 
-  /* ------------------------- State --------------------------- */
-  const State = {
-    image: null,         // HTMLImageElement of the uploaded image
-    work:  null,         // offscreen canvas of the image (RGBA)
-    mask:  null,         // user mask canvas (same px size as work)
+  /* ------------------------ state ---------------------------- */
+  const S = {
+    image: null,      // HTMLImageElement
+    work:  null,      // canvas (image)
+    preview: null,    // preview canvas
+    drawBG: null,     // draw panel background
+    mask: null,       // draw panel mask (user strokes)
     hasMask: false,
-    preview: null,       // preview <canvas> inserted into .preview
-    drawBG: null,        // faint background on draw panel
-    pen: {size: 18, erase:false, down:false, lastX:0, lastY:0},
-    settings: {
-      k: 6,
-      outline: true,
-      density: 0.4,
-      addFills: true,
-      ignoreSubject: false
-    }
+    pen: {erase:false,size:18,down:false,lastX:0,lastY:0},
+    opts: {k:6, outline:true, addFills:true, ignoreSubject:false}
   };
 
-  /* ------------------ Canvas utilities ----------------------- */
-  function makeCanvas(w, h, scaleToDPR = true) {
-    const c = document.createElement('canvas');
-    const ratio = scaleToDPR ? dpr() : 1;
-    c.width = Math.max(1, Math.round(w * ratio));
-    c.height = Math.max(1, Math.round(h * ratio));
+  /* ---------------------- canvases --------------------------- */
+  function makeCanvas(w,h,scale=true){
+    const c=document.createElement('canvas');
+    const r = scale? DPR(): 1;
+    c.width = Math.max(1, Math.round(w*r));
+    c.height= Math.max(1, Math.round(h*r));
     c.style.width = `${Math.round(w)}px`;
     c.style.height= `${Math.round(h)}px`;
     return c;
   }
 
-  function fitInside(maxW, maxH, w, h) {
-    const s = Math.min(maxW / w, maxH / h, 1);
-    return { w: Math.round(w * s), h: Math.round(h * s) };
+  function ensurePreview(){
+    if (S.preview) return;
+    if (!previewHost) return;
+    const rect = previewHost.getBoundingClientRect();
+    const w = Math.max(320, Math.floor(rect.width||480));
+    const h = Math.max(180, Math.floor(w*9/16));
+    const c = makeCanvas(w,h,false);
+    c.style.display='block'; c.style.width='100%'; c.style.height='100%';
+    previewHost.innerHTML=''; previewHost.appendChild(c);
+    S.preview = c;
   }
 
-  function drawImageScaled(dst, img) {
-    const ctx = dst.getContext('2d', { willReadFrequently:true });
-    ctx.clearRect(0,0,dst.width,dst.height);
-    const scale = Math.min(dst.width / img.naturalWidth, dst.height / img.naturalHeight);
-    const w = Math.round(img.naturalWidth * scale);
-    const h = Math.round(img.naturalHeight * scale);
-    const x = (dst.width - w) >> 1;
-    const y = (dst.height - h) >> 1;
-    ctx.drawImage(img, x, y, w, h);
-  }
-
-  /* ------------------- HEIC → JPEG (iOS) --------------------- */
-  async function heicToJpeg(file) {
-    const name = (file.name||'image').replace(/\.\w+$/, '');
-    // lightweight CDN; if it fails we just return the original file
-    try {
-      if (!window.heic2any) {
-        await new Promise((res, rej) => {
-          const s = document.createElement('script');
-          s.src = 'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';
-          s.onload = res; s.onerror = rej; document.head.appendChild(s);
-        });
-      }
-      const out = await window.heic2any({ blob:file, toType:'image/jpeg', quality:0.92 });
-      const blob = Array.isArray(out) ? out[0] : out;
-      return new File([blob], `${name}.jpg`, { type:'image/jpeg' });
-    } catch {
-      return file;
-    }
-  }
-
-  /* -------------------- UI bootstrapping --------------------- */
-  function ensurePreviewCanvas() {
-    if (State.preview) return;
-    // keep host size stable; just create one canvas inside it
-    const hostRect = previewHost.getBoundingClientRect();
-    const cw = Math.max(300, Math.floor(hostRect.width));
-    const ch = Math.max(180, Math.floor(hostRect.width * 9/16));
-    const c = makeCanvas(cw, ch, false);
-    c.style.display = 'block';
-    c.style.width = '100%';
-    c.style.height= '100%';
-    previewHost.innerHTML = '';
-    previewHost.appendChild(c);
-    State.preview = c;
-  }
-
-  function ensureDrawLayers() {
-    if (State.drawBG && State.mask) return;
-    // background (faint image)
-    const bg = makeCanvas(640, 360, false);
-    bg.style.width = '100%'; bg.style.height = '100%';
-    bg.style.display = 'block';
-    bg.style.position = 'absolute';
-    bg.style.inset = '0';
-    bg.style.opacity = '0.45';
-    // mask (user strokes)
-    const mk = makeCanvas(640, 360, false);
-    mk.style.width = '100%'; mk.style.height = '100%';
-    mk.style.display = 'block';
-    mk.style.position = 'relative';
-    // host
-    drawHost.innerHTML = '';
+  function ensureDrawLayer(){
+    if (S.drawBG && S.mask) return;
+    if (!drawHost) return;
     drawHost.style.position = 'relative';
-    drawHost.appendChild(bg);
-    drawHost.appendChild(mk);
-    State.drawBG = bg;
-    State.mask = mk;
+    drawHost.style.touchAction = 'none';
 
-    bindDraw(mk);
+    const bg = makeCanvas(640,360,false);
+    bg.style.cssText='position:absolute;inset:0;display:block;width:100%;height:100%;opacity:.45;';
+    const mk = makeCanvas(640,360,false);
+    mk.style.cssText='position:relative;display:block;width:100%;height:100%;';
+
+    drawHost.innerHTML=''; drawHost.appendChild(bg); drawHost.appendChild(mk);
+    S.drawBG = bg; S.mask = mk;
+    bindDrawing(mk);
   }
 
-  /* --------------------- File upload ------------------------- */
-  function bindUpload() {
-    if (!uploadInput || !uploadZone) return;
-    uploadZone.addEventListener('click', () => uploadInput.click());
+  /* -------------------- file upload -------------------------- */
+  function bindUpload(){
+    if (!uploadZone) return;
+    // enable input if mockup had disabled
+    if (!uploadInput) {
+      uploadInput = document.createElement('input');
+      uploadInput.type='file';
+      uploadInput.accept='image/*';
+      uploadZone.appendChild(uploadInput);
+    } else {
+      uploadInput.removeAttribute('disabled');
+    }
 
-    uploadInput.addEventListener('change', async (e) => {
+    uploadZone.addEventListener('click', e => {
+      if (e.target && e.target.tagName !== 'INPUT') uploadInput.click();
+    });
+
+    uploadInput.addEventListener('change', async e => {
       const f = e.target.files && e.target.files[0];
       if (!f) return;
 
       let file = f;
-      const isHeic = /heic|heif/i.test(f.type) || /\.heic$/i.test(f.name) || /\.heif$/i.test(f.name);
-      if (isHeic) file = await heicToJpeg(f);
+      if (/\.(heic|heif)$/i.test(f.name) || /heic|heif/i.test(f.type)) {
+        try { file = await heicToJpeg(f); } catch {}
+      }
 
-      // Load image
       const url = URL.createObjectURL(file);
       const img = new Image();
       img.onload = () => {
         URL.revokeObjectURL(url);
 
-        // Downscale to iOS-safe max side 1280
-        const maxSide = 1280;
+        // downscale to 1280 max side
         let W = img.naturalWidth, H = img.naturalHeight;
-        if (Math.max(W, H) > maxSide) {
-          const s = maxSide / Math.max(W, H);
-          W = (W * s) | 0;
-          H = (H * s) | 0;
-        }
-        const work = makeCanvas(W, H, false);
-        work.getContext('2d').drawImage(img, 0, 0, W, H);
-        State.image = img;
-        State.work  = work;
-        State.hasMask = false;
+        const maxSide = 1280;
+        if (Math.max(W,H)>maxSide){ const s=maxSide/Math.max(W,H); W=(W*s)|0; H=(H*s)|0; }
+        const work = makeCanvas(W,H,false);
+        work.getContext('2d').drawImage(img,0,0,W,H);
 
-        // preview shows the raw image immediately
-        ensurePreviewCanvas();
-        renderImagePreview(State.preview, work);
+        S.image = img;
+        S.work  = work;
+        S.hasMask = false;
 
-        // prepare the draw tab with the image underneath
-        ensureDrawLayers();
-        placeImageOnDrawBG(img);
+        ensurePreview();
+        drawRawPreview();
+        ensureDrawLayer();
+        mirrorToDraw();
 
-        // enable buttons
-        btnProcess && (btnProcess.disabled = false);
-        btnHighlight && (btnHighlight.disabled = false);
-        btnProcessSel && (btnProcessSel.disabled = false);
+        // enable controls
+        btnProcess && (btnProcess.disabled=false);
+        btnHighlight && (btnHighlight.disabled=false);
+        btnProcSel && (btnProcSel.disabled=false);
+        btnPen && btnPen.click();
       };
       img.onerror = () => URL.revokeObjectURL(url);
       img.src = url;
     });
   }
 
-  /* --------------- Drawing (mask) interactions ---------------- */
-  function bindDraw(maskCnv) {
-    const ctx = maskCnv.getContext('2d', { willReadFrequently:true });
+  function drawRawPreview(){
+    if (!S.preview || !S.work) return;
+    const c = S.preview, ctx = c.getContext('2d');
+    ctx.clearRect(0,0,c.width,c.height);
+    const scale = Math.min(c.width/S.work.width, c.height/S.work.height);
+    const w = (S.work.width*scale)|0, h=(S.work.height*scale)|0;
+    const x = (c.width-w)>>1, y=(c.height-h)>>1;
+    ctx.drawImage(S.work, x, y, w, h);
+  }
 
-    function canvasPoint(ev) {
-      const r = maskCnv.getBoundingClientRect();
-      const x = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left;
-      const y = (ev.touches ? ev.touches[0].clientY : ev.clientY) - r.top;
-      return { x: x * (maskCnv.width / r.width), y: y * (maskCnv.height / r.height) };
+  function mirrorToDraw(){
+    if (!S.drawBG || !S.work) return;
+    S.drawBG.width = S.work.width;  S.drawBG.height = S.work.height;
+    S.mask.width   = S.work.width;  S.mask.height   = S.work.height;
+    const g = S.drawBG.getContext('2d'); g.clearRect(0,0,S.drawBG.width,S.drawBG.height);
+    g.drawImage(S.work,0,0);
+    S.mask.getContext('2d').clearRect(0,0,S.mask.width,S.mask.height);
+    S.hasMask = false;
+  }
+
+  /* ------------------- drawing (mask) ------------------------ */
+  function bindDrawing(cnv){
+    const ctx = cnv.getContext('2d', { willReadFrequently:true });
+    function pt(ev){
+      const r = cnv.getBoundingClientRect();
+      const cx = (ev.touches? ev.touches[0].clientX : ev.clientX) - r.left;
+      const cy = (ev.touches? ev.touches[0].clientY : ev.clientY) - r.top;
+      return { x: cx*(cnv.width/r.width), y: cy*(cnv.height/r.height) };
     }
-
-    function strokeTo(x, y) {
-      ctx.globalCompositeOperation = State.pen.erase ? 'destination-out' : 'source-over';
-      ctx.lineWidth = State.pen.size;
-      ctx.lineCap = 'round';
-      ctx.strokeStyle = '#fff';
-      ctx.beginPath();
-      ctx.moveTo(State.pen.lastX, State.pen.lastY);
-      ctx.lineTo(x, y);
-      ctx.stroke();
-      State.pen.lastX = x;
-      State.pen.lastY = y;
-      State.hasMask = true;
+    function strokeTo(x,y){
+      ctx.globalCompositeOperation = S.pen.erase? 'destination-out':'source-over';
+      ctx.lineWidth = S.pen.size; ctx.lineCap = 'round'; ctx.strokeStyle='#fff';
+      ctx.beginPath(); ctx.moveTo(S.pen.lastX,S.pen.lastY); ctx.lineTo(x,y); ctx.stroke();
+      S.pen.lastX=x; S.pen.lastY=y; S.hasMask=true;
     }
+    const start = (ev)=>{ if(!S.work) return; const p=pt(ev); S.pen.down=true; S.pen.lastX=p.x; S.pen.lastY=p.y; strokeTo(p.x,p.y); ev.preventDefault(); };
+    const move  = (ev)=>{ if(!S.pen.down) return; const p=pt(ev); strokeTo(p.x,p.y); ev.preventDefault(); };
+    const end   = ()=>{ S.pen.down=false; };
 
-    const start = (ev) => {
-      if (!State.work) return;
-      State.pen.down = true;
-      const p = canvasPoint(ev);
-      State.pen.lastX = p.x;
-      State.pen.lastY = p.y;
-      strokeTo(p.x, p.y);
-      ev.preventDefault();
-    };
-    const move = (ev) => {
-      if (!State.pen.down) return;
-      strokeTo(...Object.values(canvasPoint(ev)));
-      ev.preventDefault();
-    };
-    const end = () => { State.pen.down = false; };
-
-    // touch: keep screen from scrolling while drawing
-    drawHost.style.touchAction = 'none';
-
-    maskCnv.addEventListener('mousedown', start);
-    maskCnv.addEventListener('mousemove', move);
+    cnv.addEventListener('mousedown', start);
+    window.addEventListener('mousemove', move);
     window.addEventListener('mouseup', end);
-
-    maskCnv.addEventListener('touchstart', start, { passive:false });
-    maskCnv.addEventListener('touchmove', move, { passive:false });
+    cnv.addEventListener('touchstart', start, {passive:false});
+    window.addEventListener('touchmove', move, {passive:false});
     window.addEventListener('touchend', end);
 
-    btnPen && (btnPen.onclick = () => { State.pen.erase = false; btnPen.classList.add('active'); btnEraser?.classList.remove('active'); });
-    btnEraser && (btnEraser.onclick = () => { State.pen.erase = true;  btnEraser.classList.add('active'); btnPen?.classList.remove('active'); });
+    if (btnPen)   btnPen.onclick   = ()=>{ S.pen.erase=false; btnPen.classList.add('active'); btnEraser?.classList.remove('active'); };
+    if (btnEraser)btnEraser.onclick= ()=>{ S.pen.erase=true;  btnEraser.classList.add('active'); btnPen?.classList.remove('active'); };
   }
 
-  function placeImageOnDrawBG(img) {
-    if (!State.drawBG) return;
-    const bg = State.drawBG;
-    // match BG & mask to work resolution
-    const W = State.work.width, H = State.work.height;
-    bg.width = W; bg.height = H;
-    State.mask.width = W; State.mask.height = H;
-    // paint
-    const c = bg.getContext('2d');
-    c.clearRect(0,0,W,H);
-    c.drawImage(img, 0, 0, W, H);
-    // make mask empty
-    const m = State.mask.getContext('2d');
-    m.clearRect(0,0,W,H);
-    State.hasMask = false;
-  }
+  /* ------------------ quantize + render ---------------------- */
+  function processPreview(){
+    if (!S.work) return;
+    const W=S.work.width, H=S.work.height;
+    const src = S.work.getContext('2d').getImageData(0,0,W,H);
+    const maskA = (S.hasMask && !S.opts.ignoreSubject)
+      ? S.mask.getContext('2d').getImageData(0,0,W,H).data
+      : null;
 
-  /* ------------------ Simple processing ---------------------- */
-  // Fast preview: reduce to k colors, optional edge outline, optional fills
-  function processToPreview() {
-    if (!State.work) return;
-    const k =  clamp(6, 2, 10);
-    const outline = !!(outlineChk?.checked ?? true);
-    const addFills = !!(addFillsChk?.checked ?? true);
-    const ignoreSubject = !!(noSubjectChk?.checked);
-
-    const W = State.work.width, H = State.work.height;
-    // read image data
-    const src = State.work.getContext('2d').getImageData(0,0,W,H);
-    const hasMask = State.hasMask && !ignoreSubject;
-    const maskA = hasMask ? State.mask.getContext('2d').getImageData(0,0,W,H).data : null;
-
-    // Build a light working set (downsample if still large)
-    const step = Math.max(1, Math.floor(Math.sqrt((W*H)/250000))); // ~250k samples
-    const pts = [];
-    for (let y=0;y<H;y+=step) {
-      const row = y*W;
-      for (let x=0;x<W;x+=step) {
-        const i = row+x, j = i*4;
-        if (maskA && maskA[j+3] < 12) continue; // outside mask
+    // gather samples (~200k)
+    const k=6, step=Math.max(1, Math.floor(Math.sqrt((W*H)/200000)));
+    const pts=[];
+    for(let y=0;y<H;y+=step){
+      const row=y*W;
+      for(let x=0;x<W;x+=step){
+        const i=row+x, j=i*4;
+        if (maskA && maskA[j+3] < 12) continue;
         pts.push([src.data[j],src.data[j+1],src.data[j+2]]);
       }
     }
-    // k-means-ish
-    const centers = [];
-    if (pts.length === 0) { centers.push([0,0,0]); }
-    else {
+    // k-means-lite
+    const centers=[];
+    if(pts.length===0){ centers.push([0,0,0]); }
+    else{
       centers.push(pts[Math.floor(Math.random()*pts.length)]);
-      while (centers.length < k && centers.length < pts.length) {
-        let best = null, bd = -1;
-        for (const p of pts) {
-          let d = 1e9;
-          for (const c of centers) {
-            const dx = p[0]-c[0], dy=p[1]-c[1], dz=p[2]-c[2];
-            const dd = dx*dx+dy*dy+dz*dz;
-            if (dd < d) d = dd;
-          }
-          if (d > bd) { bd = d; best = p; }
+      while(centers.length<k && centers.length<pts.length){
+        let best=null, bd=-1;
+        for(const p of pts){
+          let d=1e9;
+          for(const c of centers){ const dx=p[0]-c[0],dy=p[1]-c[1],dz=p[2]-c[2]; const dd=dx*dx+dy*dy+dz*dz; if(dd<d) d=dd; }
+          if(d>bd){ bd=d; best=p; }
         }
         centers.push(best.slice());
       }
-      for (let it=0; it<4; it++) {
-        const sum = Array.from({length:centers.length}, ()=>[0,0,0,0]);
-        for (const p of pts) {
-          let bi=0, bd=1e12;
-          for (let i=0;i<centers.length;i++){
-            const c=centers[i], dx=p[0]-c[0], dy=p[1]-c[1], dz=p[2]-c[2];
-            const dd=dx*dx+dy*dy+dz*dz; if (dd<bd){bd=dd;bi=i;}
+      for(let it=0;it<4;it++){
+        const sum=Array.from({length:centers.length},()=>[0,0,0,0]);
+        for(const p of pts){
+          let bi=0, bd=1e12; for(let i=0;i<centers.length;i++){
+            const c=centers[i], dx=p[0]-c[0],dy=p[1]-c[1],dz=p[2]-c[2];
+            const dd=dx*dx+dy*dy+dz*dz; if(dd<bd){bd=dd;bi=i;}
           }
           const s=sum[bi]; s[0]+=p[0]; s[1]+=p[1]; s[2]+=p[2]; s[3]++;
         }
-        for (let i=0;i<centers.length;i++){
-          const s=sum[i]; if (s[3]) centers[i]=[(s[0]/s[3])|0,(s[1]/s[3])|0,(s[2]/s[3])|0];
-        }
+        for(let i=0;i<centers.length;i++){ const s=sum[i]; if(s[3]) centers[i]=[(s[0]/s[3])|0,(s[1]/s[3])|0,(s[2]/s[3])|0]; }
       }
     }
-    // paint preview
-    ensurePreviewCanvas();
-    const dst = State.preview;
-    const ctx = dst.getContext('2d');
+
+    ensurePreview();
+    const dst=S.preview, ctx=dst.getContext('2d');
     ctx.clearRect(0,0,dst.width,dst.height);
-    // background: empty if mask used or "no subject" set, else keep full image reduced
-    const scale = Math.min(dst.width/W, dst.height/H);
-    const w = (W*scale)|0, h = (H*scale)|0, ox = (dst.width - w)>>1, oy = (dst.height - h)>>1;
+    const scale=Math.min(dst.width/W, dst.height/H);
+    const w=(W*scale)|0, h=(H*scale)|0, ox=(dst.width-w)>>1, oy=(dst.height-h)>>1;
 
-    // quantize and draw to preview
-    const out = ctx.createImageData(w, h);
-    for (let y=0;y<h;y++){
-      const sy = Math.min(H-1, Math.floor(y/scale));
-      const row = sy*W;
-      for (let x=0;x<w;x++){
-        const sx = Math.min(W-1, Math.floor(x/scale));
-        const i = row+sx, j=i*4;
-        if (hasMask && maskA[j+3] < 12) {
-          // transparent background when subject highlighted
-          out.data[(y*w+x)*4+3] = 0;
-          continue;
+    const out=ctx.createImageData(w,h);
+    for(let y=0;y<h;y++){
+      const sy=Math.min(H-1, (y/scale)|0), row=sy*W;
+      for(let x=0;x<w;x++){
+        const sx=Math.min(W-1, (x/scale)|0), i=row+sx, j=i*4;
+        if (maskA && maskA[j+3] < 12){ out.data[(y*w+x)*4+3]=0; continue; }
+        const r=src.data[j], g=src.data[j+1], b=src.data[j+2];
+        let bi=0, bd=1e12; for(let c=0;c<centers.length;c++){
+          const cr=centers[c][0],cg=centers[c][1],cb=centers[c][2];
+          const dx=r-cr,dy=g-cg,dz=b-cb; const dd=dx*dx+dy*dy+dz*dz;
+          if(dd<bd){bd=dd;bi=c;}
         }
-        const r = src.data[j], g=src.data[j+1], b=src.data[j+2];
-        let bi=0, bd=1e12;
-        for (let c=0;c<centers.length;c++){
-          const pr=centers[c][0],pg=centers[c][1],pb=centers[c][2];
-          const dx=r-pr,dy=g-pg,dz=b-pb; const dd=dx*dx+dy*dy+dz*dz;
-          if (dd<bd){bd=dd;bi=c;}
-        }
-        const o = (y*w+x)*4;
-        out.data[o]   = centers[bi][0];
-        out.data[o+1] = centers[bi][1];
-        out.data[o+2] = centers[bi][2];
-        out.data[o+3] = 255;
+        const o=(y*w+x)*4; out.data[o]=centers[bi][0]; out.data[o+1]=centers[bi][1]; out.data[o+2]=centers[bi][2]; out.data[o+3]=255;
       }
     }
-    // put image
-    ctx.save();
-    ctx.translate(ox, oy);
-    ctx.putImageData(out, 0, 0);
+    ctx.save(); ctx.translate(ox,oy); ctx.putImageData(out,0,0);
 
-    // simple stroke outline from mask (if any)
-    if (outline && hasMask) {
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.strokeStyle = 'rgba(20,24,38,0.95)';
-      ctx.lineWidth = Math.max(1, Math.round(2*scale));
-      ctx.lineJoin = 'round';
-      ctx.lineCap = 'round';
-
-      // trace contour quickly by stepping pixels (cheap)
-      const mw = W, mh = H;
-      const m = State.mask.getContext('2d').getImageData(0,0,mw,mh).data;
+    // rough outline from mask
+    if (S.opts.outline && maskA){
+      ctx.globalCompositeOperation='source-over';
+      ctx.strokeStyle='rgba(20,24,38,.95)';
+      ctx.lineWidth=Math.max(1, Math.round(2*scale));
+      ctx.lineCap='round'; ctx.lineJoin='round';
+      const mw=W, mh=H;
       ctx.beginPath();
-      for (let y=0;y<mh;y+=3){
-        for (let x=0;x<mw;x+=3){
-          const j = (y*mw+x)*4 + 3;
-          const on = m[j] > 10;
-          if (!on) continue;
-          // check a neighbour to form tiny segments (rough silhouette)
-          const nn = ((y*mw+Math.min(mw-1,x+3))*4+3);
-          if ((m[nn]||0) > 10) {
-            const px = Math.round(x*scale), py = Math.round(y*scale);
-            const px2= Math.round((x+3)*scale), py2= py;
-            ctx.moveTo(px,py); ctx.lineTo(px2,py2);
-          }
+      for(let y=0;y<mh;y+=3){
+        for(let x=0;x<mw;x+=3){
+          const a=maskA[(y*mw+x)*4+3]; if(a<12) continue;
+          const nx=Math.min(mw-1,x+3);
+          const b=maskA[(y*mw+nx)*4+3]; if(b<12) continue;
+          const X1=Math.round(x*scale), Y1=Math.round(y*scale);
+          const X2=Math.round((x+3)*scale), Y2=Y1;
+          ctx.moveTo(X1,Y1); ctx.lineTo(X2,Y2);
         }
       }
       ctx.stroke();
     }
-
     ctx.restore();
-
-    // enable export row if present (hook your real exporters later)
-    if (exportRow) exportRow.style.pointerEvents = 'auto';
   }
 
-  function renderImagePreview(canvas, workCanvas) {
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    // letterbox draw
-    const scale = Math.min(canvas.width/workCanvas.width, canvas.height/workCanvas.height);
-    const w = (workCanvas.width*scale)|0, h=(workCanvas.height*scale)|0;
-    const x = (canvas.width-w)>>1, y=(canvas.height-h)>>1;
-    ctx.drawImage(workCanvas, x, y, w, h);
+  /* -------------------- buttons wiring ----------------------- */
+  function bindButtons(){
+    // Top tabs (if present)
+    tabs.forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const name = (btn.dataset.tab||'upload').toLowerCase();
+        activateTab(name);
+      });
+    });
+
+    // “Start with a photo” / “Open the drawing tab” hero buttons also scroll to tabs
+    $$('[data-scroll="#tabs"]').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        $('#tabs')?.scrollIntoView({behavior:'smooth', block:'start'});
+        // if hero button says open drawing tab, switch
+        if ((b.textContent||'').toLowerCase().includes('drawing')) activateTab('draw');
+        else activateTab('upload');
+      });
+    });
+
+    if (btnHighlight) btnHighlight.onclick = ()=>{
+      activateTab('draw');
+      ensureDrawLayer();
+      if (S.image) mirrorToDraw();
+      panels.draw?.scrollIntoView({behavior:'smooth', block:'start'});
+      btnPen?.click();
+    };
+
+    if (btnProcSel) btnProcSel.onclick = ()=>{
+      S.hasMask = true;  // user drew something
+      S.opts.outline = !!(outlineChk?.checked ?? true);
+      S.opts.ignoreSubject = !!(noSubject?.checked);
+      processPreview();
+      activateTab('upload');
+      previewCard?.scrollIntoView({behavior:'smooth', block:'start'});
+    };
+
+    if (btnProcess) btnProcess.onclick = ()=>{
+      S.opts.outline = !!(outlineChk?.checked ?? true);
+      S.opts.ignoreSubject = !!(noSubject?.checked);
+      S.opts.addFills = !!(addFills?.checked ?? true);
+      processPreview();
+    };
   }
 
-  /* --------------------- Wire buttons ------------------------ */
-  function bindButtons() {
-    if (btnHighlight) {
-      btnHighlight.onclick = () => {
-        // switch to draw tab
-        $$('.tab-btn').forEach(b => b.classList.remove('active'));
-        $$('.panel').forEach(p => p.classList.remove('active'));
-        $('.tab-btn[data-tab="draw"]')?.classList.add('active');
-        panels.draw?.classList.add('active');
-        ensureDrawLayers();
-        if (State.image) placeImageOnDrawBG(State.image);
-
-        // scroll to draw block
-        panels.draw?.scrollIntoView({ behavior:'smooth', block:'start' });
-        btnPen?.click(); // default to pen
-      };
-    }
-    if (btnProcessSel) {
-      btnProcessSel.onclick = () => {
-        // Use the painted mask from draw panel and process
-        State.hasMask = true;
-        processToPreview();
-        // jump back to preview area for continuity
-        previewCard?.scrollIntoView({ behavior:'smooth', block:'start' });
-      };
-    }
-    if (btnProcess) {
-      btnProcess.onclick = () => {
-        State.settings.outline = !!(outlineChk?.checked ?? true);
-        State.settings.addFills = !!(addFillsChk?.checked ?? true);
-        State.settings.ignoreSubject = !!(noSubjectChk?.checked);
-        processToPreview();
-      };
+  /* --------------------- HEIC support ------------------------ */
+  async function heicToJpeg(file){
+    try{
+      if (!window.heic2any){
+        await new Promise((res,rej)=>{
+          const s=document.createElement('script');
+          s.src='https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';
+          s.onload=res; s.onerror=rej; document.head.appendChild(s);
+        });
+      }
+      const out = await window.heic2any({ blob:file, toType:'image/jpeg', quality:0.92 });
+      const blob = Array.isArray(out) ? out[0] : out;
+      return new File([blob], (file.name||'image').replace(/\.\w+$/, '')+'.jpg', { type:'image/jpeg' });
+    }catch{
+      return file;
     }
   }
 
-  /* ------------------------ Init ----------------------------- */
-  function init() {
-    if (!panels.upload || !panels.draw) return;
-    ensurePreviewCanvas();   // stable preview area from the start
-    ensureDrawLayers();      // prepare draw layers
-
+  /* ------------------------- init ---------------------------- */
+  function init(){
+    if (!panels.upload || !panels.draw) return; // page variant without tabs
+    // start with upload tab active (matches your UI)
+    activateTab('upload');
+    ensurePreview();
+    ensureDrawLayer();
     bindUpload();
     bindButtons();
 
-    // Keep preview host from growing: CSS already constrains height,
-    // but we also keep its child canvas in sync on resize.
-    window.addEventListener('resize', () => {
-      if (!State.preview) return;
-      const hostRect = previewHost.getBoundingClientRect();
-      const cw = Math.max(300, Math.floor(hostRect.width));
-      const ch = Math.max(180, Math.floor(hostRect.width * 9/16));
-      State.preview.width = cw; State.preview.height = ch;
-      State.preview.style.width = '100%';
-      State.preview.style.height= '100%';
-      if (State.work) renderImagePreview(State.preview, State.work);
-    }, { passive:true });
+    // keep preview canvas size in sync with host on resize
+    window.addEventListener('resize', ()=>{
+      if(!S.preview || !previewHost) return;
+      const r = previewHost.getBoundingClientRect();
+      const w = Math.max(320, Math.floor(r.width||480));
+      const h = Math.max(180, Math.floor(w*9/16));
+      S.preview.width=w; S.preview.height=h;
+      S.preview.style.width='100%'; S.preview.style.height='100%';
+      if (S.work) drawRawPreview();
+    }, {passive:true});
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init, { once:true });
-  } else {
-    init();
-  }
+  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', init, {once:true});
+  else init();
 })();

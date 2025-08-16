@@ -1,11 +1,8 @@
-/* Loomabelle — script.js v28
-   - Works entirely client-side (no server).
-   - Upload → Preview (JPG/PNG/GIF/HEIC*)
-   - Optional highlight subject box or “No subject”
-   - Draw & Trace (pen/eraser) → Process Drawing
-   - Simple quantization + stitch path planning
-   - Exports: DST & EXP
-   * HEIC note: most desktop browsers won’t decode HEIC without a converter; iOS Safari is fine.
+/* Loomabelle — script.js v29
+   Fixes:
+   - Prevent preview canvas infinite growth (no host minHeight writes; stable sizing).
+   - Hide Preview card until an image/drawing exists.
+   - Keeps all features: upload → preview → process → export; drawing; subject box; thread palette.
 */
 (function(){
   'use strict';
@@ -39,27 +36,30 @@
     $$('[data-scroll="#tabs"]').forEach(btn=>{
       on(btn,'click',(e)=>{
         e.preventDefault();
-        document.querySelector('#tabs')?.scrollIntoView({behavior:'smooth',block:'start'});
+        $('#tabs')?.scrollIntoView({behavior:'smooth',block:'start'});
         const t=(btn.textContent||'').toLowerCase();
         activate(t.includes('drawing')?'draw':'upload');
       });
     });
 
     // DOM refs
-    const upPanel   = $('.panel[data-panel="upload"]');
-    const drawPanel = $('.panel[data-panel="draw"]');
+    const upPanel    = $('.panel[data-panel="upload"]');
+    const drawPanel  = $('.panel[data-panel="draw"]');
 
-    const upZone    = upPanel?.querySelector('.upload-zone');
-    const fileInput = upPanel?.querySelector('.upload-zone input[type=file]');
-    const prevCard  = upPanel?.querySelector('.card.rose');
-    const prevArea  = upPanel?.querySelector('.preview');
-    const formats   = upPanel?.querySelector('.formats');
+    const upZone     = upPanel?.querySelector('.upload-zone');
+    const fileInput  = upPanel?.querySelector('.upload-zone input[type=file]');
+    const prevCard   = upPanel?.querySelector('.card.rose');   // whole preview card
+    const prevArea   = upPanel?.querySelector('.preview');     // preview canvas host
+    const formats    = upPanel?.querySelector('.formats');
 
-    const drawHost  = drawPanel?.querySelector('.canvas');
-    const drawToolbar = drawPanel?.querySelector('.toolbar');
-    const swatchesBox = drawPanel?.querySelector('.swatches');
+    const drawHost   = drawPanel?.querySelector('.canvas');
+    const drawToolbar= drawPanel?.querySelector('.toolbar');
+    const swatchesBox= drawPanel?.querySelector('.swatches');
 
-    // Ensure file input is enabled & accepts images
+    // Hide preview card until there is content
+    if (prevCard) prevCard.classList.add('hidden');
+
+    // Enable file input
     if (fileInput){
       fileInput.removeAttribute('disabled');
       fileInput.accept='image/*,.png,.jpg,.jpeg,.gif,.heic,.heif';
@@ -73,37 +73,62 @@
     const dctx = drawCanvas.getContext('2d',{willReadFrequently:true});
     dctx.lineCap='round'; dctx.lineJoin='round';
 
-    // Sizing
-    function fit(cnv, host){
-      let w = Math.max(320, host.clientWidth || host.parentElement?.clientWidth || 640);
-      let h = Math.max(220, Math.round(w*9/16));
+    // Stable sizing — NO writes to host minHeight to avoid feedback loops
+    function fitCanvasToHost(cnv, host){
+      // Use host width; compute height only for canvas (don’t change host size)
+      const w = Math.max(320, host.clientWidth || 640);
+      const h = Math.max(220, Math.round(w * 9/16));
       const s = DPR();
-      cnv.style.width = w+'px'; cnv.style.height=h+'px';
-      cnv.width = Math.round(w*s); cnv.height=Math.round(h*s);
-      cnv.getContext('2d').setTransform(s,0,0,s,0,0);
+      cnv.style.width  = w+'px';
+      cnv.style.height = h+'px';
+      cnv.width  = Math.round(w*s);
+      cnv.height = Math.round(h*s);
+      const c = cnv.getContext('2d');
+      c.setTransform(s,0,0,s,0,0);
     }
-    function queueResize(){ setTimeout(()=>{ fit(prevCanvas, prevArea); fit(drawCanvas, drawHost); redraw(); }, 0); }
-    const ro=new ResizeObserver(()=>{ fit(prevCanvas, prevArea); fit(drawCanvas, drawHost); redraw(); });
-    if (prevArea) ro.observe(prevArea);
-    if (drawHost) ro.observe(drawHost);
-    queueResize();
 
-    // Progress
+    function queueResize(){
+      // Only resize drawing canvas always; preview canvas only when content exists
+      setTimeout(()=>{
+        fitCanvasToHost(drawCanvas, drawHost);
+        if (STATE.image) fitCanvasToHost(prevCanvas, prevArea);
+        redraw();
+      }, 0);
+    }
+
+    // Observe host sizes safely
+    const ro = new ResizeObserver(()=>{
+      fitCanvasToHost(drawCanvas, drawHost);
+      if (STATE.image) fitCanvasToHost(prevCanvas, prevArea);
+      redraw();
+    });
+    if (drawHost) ro.observe(drawHost);
+    // NOTE: we do NOT observe prevArea until image/drawing exists, to avoid resize loops.
+
+    // Progress bar in the preview card (when visible)
     const progWrap=document.createElement('div');
     progWrap.style.cssText='position:absolute;left:12px;top:12px;right:12px;height:8px;background:rgba(0,0,0,.06);border-radius:999px;overflow:hidden;display:none;z-index:4';
-    const progBar=document.createElement('div'); progBar.style.cssText='height:100%;width:0%;background:#111827;opacity:.9';
-    progWrap.appendChild(progBar); ensurePosition(prevCard).appendChild(progWrap);
-    const setProgress=(p)=>{ progWrap.style.display='block'; progBar.style.width=(p|0)+'%'; if(p>=100) setTimeout(()=>progWrap.style.display='none',400); };
+    const progBar=document.createElement('div');
+    progBar.style.cssText='height:100%;width:0%;background:#111827;opacity:.9';
+    progWrap.appendChild(progBar);
+    // Add later when preview card is shown
+
+    const setProgress=(p)=>{
+      if (!prevCard || prevCard.classList.contains('hidden')) return;
+      progWrap.style.display='block';
+      progBar.style.width=(p|0)+'%';
+      if(p>=100) setTimeout(()=>progWrap.style.display='none',400);
+    };
 
     // Preview tools
     const tools=document.createElement('div');
     tools.style.cssText='position:absolute;left:12px;bottom:12px;display:flex;gap:10px;flex-wrap:wrap;z-index:3;visibility:hidden;';
     const btnProcess   = makeBtn('Process Photo');
     const btnHighlight = makeBtn('Highlight Subject');
-    const lblNo = document.createElement('label'); const chkNo=document.createElement('input'); chkNo.type='checkbox';
+    const lblNo = document.createElement('label');
+    const chkNo=document.createElement('input'); chkNo.type='checkbox';
     lblNo.appendChild(chkNo); lblNo.appendChild(document.createTextNode(' No subject'));
     tools.append(btnProcess, btnHighlight, lblNo);
-    ensurePosition(prevCard).appendChild(tools);
 
     // Export buttons
     const fmtBtns = Array.from(formats?.querySelectorAll('button,a')||[])
@@ -179,8 +204,8 @@
     // Helpers
     function ensureCanvas(host){
       const c=document.createElement('canvas'); c.style.display='block';
+      // DO NOT modify host minHeight here (prevents growth loop)
       if(getComputedStyle(host).position==='static') host.style.position='relative';
-      if(host.clientHeight<180) host.style.minHeight='220px';
       host.appendChild(c); return c;
     }
     function ensurePosition(host){
@@ -195,15 +220,28 @@
       const url=URL.createObjectURL(file);
       try{
         const img = await new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=url; });
+
+        // Show preview card now, attach progress/tools exactly once
+        if (prevCard && prevCard.classList.contains('hidden')){
+          prevCard.classList.remove('hidden');
+          ensurePosition(prevCard).appendChild(progWrap);
+          ensurePosition(prevCard).appendChild(tools);
+        }
+
+        // Observe prevArea size now that it’s visible
+        ro.observe(prevArea);
+
+        // Downscale large images for memory/speed
         const isIOS=/\b(iPhone|iPad|iPod)\b/i.test(navigator.userAgent||'');
         const maxSide=isIOS?1024:1600;
         let W=img.naturalWidth, H=img.naturalHeight;
         if (Math.max(W,H) > maxSide){ const r=maxSide/Math.max(W,H); W=(W*r)|0; H=(H*r)|0; }
-        const c=document.createElement('canvas'); c.width=W; c.height=H; c.getContext('2d').drawImage(img,0,0,W,H);
+        const c=document.createElement('canvas'); c.width=W; c.height=H;
+        c.getContext('2d').drawImage(img,0,0,W,H);
         STATE.image=c.getContext('2d').getImageData(0,0,W,H);
 
-        activate('upload');
-        fit(prevCanvas, prevArea);
+        // Fit preview canvas only now (prevents growth on empty state)
+        fitCanvasToHost(prevCanvas, prevArea);
         renderBaseImage(); STATE.stitches.length=0; renderStitches();
         tools.style.visibility='visible'; setFormatsVisible(false);
         prevCard?.scrollIntoView({behavior:'smooth',block:'center'});
@@ -215,7 +253,7 @@
 
     function renderBaseImage(){
       const img=STATE.image; if(!img) return;
-      fit(prevCanvas, prevArea);
+      // (prevCanvas already sized at load or on resize)
       const W=img.width, H=img.height;
       const Wp=prevCanvas.width/DPR(), Hp=prevCanvas.height/DPR();
       const s=Math.min(Wp/W, Hp/H), w=W*s, h=H*s, ox=(Wp-w)/2, oy=(Hp-h)/2;
@@ -235,7 +273,8 @@
       for(const s of STATE.stitches){
         if(s.move){ ctx.moveTo(s.x,s.y); started=true; }
         else if(started){ ctx.lineTo(s.x,s.y); }
-      } ctx.stroke(); ctx.restore();
+      }
+      ctx.stroke(); ctx.restore();
     }
 
     function drawSubjectBox(){
@@ -246,7 +285,7 @@
       }
     }
 
-    // === Image quantization (simple/fast) & stitch planning ===
+    // === Simple quant + stitch plan ===
     function kmeansPalette(imgData,k,mask){
       const W=imgData.width,H=imgData.height,d=imgData.data;
       const step=Math.max(1,Math.floor(Math.sqrt((W*H)/20000)));
@@ -360,7 +399,7 @@
       });
     }
 
-    // === Exports (DST / EXP) ===
+    // Exports
     function toUnits(ops, pxPerMm, outW, outH){
       const s=1/pxPerMm*10, cx=outW/2, cy=outH/2;
       const out=[]; let prev=null;
@@ -424,7 +463,7 @@
       });
     }
 
-    // === Flows ===
+    // Flows
     async function processPhotoFlow(){
       if(!STATE.image){ fileInput?.click(); return; }
       setFormatsVisible(false); setProgress(1);
@@ -442,8 +481,7 @@
       }
 
       const q = await quantizeFast(STATE.image, 6, mask);
-      STATE.palette = q.palette.slice();
-      paintSwatches(STATE.palette);
+      STATE.palette = q.palette.slice(); paintSwatches(STATE.palette);
       const ops = planStitches(q,{ outline:true, angle:45 });
 
       STATE.stitches = toPreviewPath(ops);
@@ -456,6 +494,16 @@
 
     async function processDrawingFlow(){
       setFormatsVisible(false); setProgress(1);
+
+      // Reveal preview card if still hidden
+      if (prevCard && prevCard.classList.contains('hidden')){
+        prevCard.classList.remove('hidden');
+        ensurePosition(prevCard).appendChild(progWrap);
+        ensurePosition(prevCard).appendChild(tools);
+        ro.observe(prevArea);
+        fitCanvasToHost(prevCanvas, prevArea);
+      }
+
       const w=drawCanvas.width, h=drawCanvas.height, sctx=drawCanvas.getContext('2d');
       const id=sctx.getImageData(0,0,w,h);
       STATE.image=id; renderBaseImage();
@@ -463,8 +511,7 @@
       // treat drawn alpha as mask → 2-color preview
       const mask=new Uint8Array(w*h); for(let i=0;i<w*h;i++){ mask[i]= id.data[i*4+3] > 10 ? 1 : 0; }
       const q={indexed:mask, palette:[[0,0,0],[255,255,255]], W:w, H:h};
-      STATE.palette = [[34,34,34],[220,220,220]];
-      paintSwatches(STATE.palette);
+      STATE.palette = [[34,34,34],[220,220,220]]; paintSwatches(STATE.palette);
 
       const ops=planStitches(q,{outline:true, angle:45});
       STATE.stitches=toPreviewPath(ops); renderStitches(); setProgress(100);
@@ -473,7 +520,7 @@
       const expU8=writeEXP(ops,{pxPerMm:2,outW:prevCanvas.width/DPR(),outH:prevCanvas.height/DPR()});
       hookDownloads({dstU8,expU8}); setFormatsVisible(true);
 
-      // focus back to preview
+      // focus back to upload/preview tab
       const uploadBtn = $$('.tabs .tab-btn').find(b=>b.dataset.tab==='upload'); uploadBtn?.click();
       prevCard?.scrollIntoView({behavior:'smooth',block:'center'});
     }
@@ -483,8 +530,7 @@
       if(!swatchesBox) return;
       swatchesBox.innerHTML='';
       pal.forEach((c,i)=>{
-        const sw=document.createElement('button');
-        sw.className='swatch';
+        const sw=document.createElement('button'); sw.className='swatch';
         const [r,g,b]=c; const hex = '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
         sw.title=`Color ${i+1}: rgb(${r},${g},${b})`;
         sw.style.cssText=`width:36px;height:36px;border-radius:10px;border:2px solid rgba(0,0,0,.08);background:${hex};cursor:pointer`;
@@ -495,11 +541,10 @@
 
   } // init
 
-  // tiny helpers
+  // helpers (kept outside for clarity)
   function ensureCanvas(host){
     const c=document.createElement('canvas'); c.style.display='block';
     if(getComputedStyle(host).position==='static') host.style.position='relative';
-    if(host.clientHeight<180) host.style.minHeight='220px';
     host.appendChild(c); return c;
   }
   function ensurePosition(host){

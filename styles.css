@@ -71,6 +71,9 @@ body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 'Quicksand',sy
 .footlinks{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .dot{opacity:.5}
 
+/* v29 patch */
+.hidden { display: none !important; }
+
 @media (max-width:900px){
   .hero-grid{grid-template-columns:1fr}
   .grid{grid-template-columns:1fr}

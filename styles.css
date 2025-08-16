@@ -95,6 +95,11 @@ body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 'Quicksand',sy
 /* v29 patch */
 .hidden { display: none !important; }
 
+/* v33: avoid page scroll when highlight mode is active (body is fixed) */
+body.loom-lock { overscroll-behavior: none; }
+.panel .card.rose .preview { position: relative; }
+.panel .card.rose .preview + .formats { margin-top: 12px; }
+
 @media (max-width:900px){
   .hero-grid{grid-template-columns:1fr}
   .grid{grid-template-columns:1fr}

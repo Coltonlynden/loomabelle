@@ -1,160 +1,131 @@
-/* Loomabelle — script.js v21 (for your posted index.html)
-   - No layout changes; wires the existing DOM as-is
-   - Tabs: switches panels; hero CTAs scroll and activate correct tab
-   - Upload zone: click/drag&drop → loads image (enables file input)
-   - Preview: shows image immediately; tools inside preview:
-       Process Photo, Highlight Subject, No subject, progress bar
-   - Draw & Trace: freehand canvas + Process Drawing
-   - Exports: DST / EXP appear only after processing
+/* Loomabelle — script.js v23 (hardwired to your posted index.html)
+   Focus: make buttons respond even if anything else fails.
 */
-
 (function(){
-  "use strict";
+  'use strict';
 
-  const READY = (fn)=> (document.readyState === "loading")
-    ? document.addEventListener("DOMContentLoaded", fn, {once:true})
+  // ---- fail-fast visibility ----
+  window.addEventListener('error', (e)=>{
+    console.error('[Loomabelle v23] window error:', e.error || e.message);
+    // Uncomment to surface crashes to the user:
+    // alert('JS error: ' + (e.message || e.error));
+  });
+
+  const READY = (fn)=> (document.readyState === 'loading')
+    ? document.addEventListener('DOMContentLoaded', fn, {once:true})
     : fn();
 
   const $  = (s,root)=> (root||document).querySelector(s);
   const $$ = (s,root)=> Array.from((root||document).querySelectorAll(s));
   const on = (el,ev,fn,opt)=> el && el.addEventListener(ev,fn,opt||{passive:false});
   const DPR = ()=> window.devicePixelRatio||1;
-  const clamp = (v,mi,ma)=>Math.max(mi,Math.min(ma,v));
-  const defer = ()=> new Promise(r=>setTimeout(r,0));
 
   READY(init);
 
   function init(){
-    // year
+    console.log('[Loomabelle v23] init start');
+
+    // Year
     const y=$('#year'); if(y) y.textContent = new Date().getFullYear();
 
-    // hide "mockup" mini note only (keep the rest of your copy)
-    $$('.mini,.muted,.badge,small').forEach(el=>{
-      if((el.textContent||'').toLowerCase().includes('mockup')) el.style.display='none';
-    });
-
-    // ----- tabs wiring -----
+    // Tabs (hardwire to your DOM)
     const tabBtns = $$('.tabs .tab-btn');
     const panels  = $$('.panel');
-    function activate(tab){
-      tabBtns.forEach(b=> b.classList.toggle('active', b.dataset.tab===tab));
-      panels.forEach(p=> p.classList.toggle('active', p.dataset.panel===tab));
+    function activate(tabName){
+      tabBtns.forEach(b=> b.classList.toggle('active', b.dataset.tab===tabName));
+      panels.forEach(p=> p.classList.toggle('active', p.dataset.panel===tabName));
     }
-    tabBtns.forEach(b=> on(b,'click',()=> activate(b.dataset.tab)));
+    tabBtns.forEach(b=> on(b,'click', ()=> activate(b.dataset.tab)));
+    console.log('[Loomabelle v23] tabs wired:', tabBtns.length, 'buttons');
 
-    // hero CTAs scroll + activate proper tab
+    // Hero CTA buttons
     $$('[data-scroll="#tabs"]').forEach(btn=>{
-      on(btn,'click', (e)=>{
+      on(btn,'click',(e)=>{
         e.preventDefault();
-        const t=(btn.textContent||'').toLowerCase();
         document.querySelector('#tabs')?.scrollIntoView({behavior:'smooth',block:'start'});
+        const t=(btn.textContent||'').toLowerCase();
         if(t.includes('drawing')) activate('draw'); else activate('upload');
       });
     });
+    console.log('[Loomabelle v23] hero CTAs wired');
 
-    // quick refs to sections
-    const uploadPanel  = $('.panel[data-panel="upload"]');
-    const drawPanel    = $('.panel[data-panel="draw"]');
-    const uploadZone   = uploadPanel?.querySelector('.upload-zone');
-    const uploadInner  = uploadPanel?.querySelector('.upload-inner');
-    const fileInput    = uploadPanel?.querySelector('.upload-zone input[type=file]');
-    const previewCard  = uploadPanel?.querySelector('.card.rose');
-    const previewArea  = previewCard?.querySelector('.preview');
-    const formatsRow   = previewCard?.querySelector('.formats');
-    const drawCanvasHost = drawPanel?.querySelector('.canvas');
-    const drawToolbar  = drawPanel?.querySelector('.toolbar');
+    // Upload panel wiring
+    const uploadPanel = $('.panel[data-panel="upload"]');
+    const uploadZone  = uploadPanel?.querySelector('.upload-zone');
+    const fileInput   = uploadPanel?.querySelector('.upload-zone input[type=file]');
+    const previewCard = uploadPanel?.querySelector('.card.rose');
+    const previewArea = previewCard?.querySelector('.preview');
+    const formatsRow  = previewCard?.querySelector('.formats');
 
-    // ensure preview/draw canvases exist (without changing structure)
-    const previewCanvas = ensureCanvas(previewArea);
-    const pctx = previewCanvas.getContext('2d', {willReadFrequently:true});
-    const drawCanvas = ensureCanvas(drawCanvasHost);
-    const dctx = drawCanvas.getContext('2d', {willReadFrequently:true}); dctx.lineCap='round'; dctx.lineJoin='round';
+    // Draw panel wiring
+    const drawPanel   = $('.panel[data-panel="draw"]');
+    const drawHost    = drawPanel?.querySelector('.canvas');
+    const drawToolbar = drawPanel?.querySelector('.toolbar');
 
-    // keep canvases sized to their host
+    // Enable file input (your HTML disables it)
+    if (fileInput) {
+      fileInput.removeAttribute('disabled');
+      fileInput.accept = 'image/*,.heic,.heif';
+    }
+
+    // Create canvases inside existing blocks (no layout changes)
+    const previewCanvas = makeCanvas(previewArea);
+    const pctx = previewCanvas.getContext('2d',{willReadFrequently:true});
+    const drawCanvas = makeCanvas(drawHost);
+    const dctx = drawCanvas.getContext('2d',{willReadFrequently:true}); dctx.lineCap='round'; dctx.lineJoin='round';
+
     function fit(cnv, host){
-      const w = Math.max(320, host.clientWidth || 640);
-      const h = Math.max(220, Math.round(w*9/16));
-      const s = DPR();
-      cnv.style.width = w+'px';
-      cnv.style.height = h+'px';
-      cnv.width  = Math.round(w*s);
-      cnv.height = Math.round(h*s);
+      const w=Math.max(320, host.clientWidth||640);
+      const h=Math.max(220, Math.round(w*9/16));
+      const s=DPR();
+      cnv.style.width=w+'px'; cnv.style.height=h+'px';
+      cnv.width=Math.round(w*s); cnv.height=Math.round(h*s);
       cnv.getContext('2d').setTransform(s,0,0,s,0,0);
     }
-    const ro = new ResizeObserver(()=>{ fit(previewCanvas, previewArea); fit(drawCanvas, drawCanvasHost); redraw(); });
+    const ro = new ResizeObserver(()=>{ fit(previewCanvas, previewArea); fit(drawCanvas, drawHost); redraw(); });
     if (previewArea) ro.observe(previewArea);
-    if (drawCanvasHost) ro.observe(drawCanvasHost);
+    if (drawHost)    ro.observe(drawHost);
+    fit(previewCanvas, previewArea); fit(drawCanvas, drawHost);
 
-    // show hint until we load the first image
-    let previewHasImage = false;
-    function setPreviewHint(on){
-      if(!previewArea) return;
-      previewArea.style.position='relative';
-      let hint = previewArea.querySelector('.lb-hint');
-      if(on){
-        if(!hint){
-          hint=document.createElement('div');
-          hint.className='lb-hint';
-          hint.textContent='Your stitched preview appears here';
-          hint.style.cssText='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#64748b';
-          previewArea.appendChild(hint);
-        }
-      } else if(hint){ hint.remove(); }
-    }
-    setPreviewHint(true);
+    // State
+    const STATE = {
+      image: null,               // ImageData of uploaded image
+      imgFit: null,              // mapping into preview canvas
+      stitches: [],              // preview path
+      subject: { enabled:false, rect:null, noSubject:false }
+    };
 
-    // progress bar in preview
-    const progWrap = document.createElement('div');
-    progWrap.style.cssText='position:absolute;left:12px;top:12px;right:12px;height:8px;background:rgba(0,0,0,.06);border-radius:999px;overflow:hidden;display:none;z-index:4';
-    const progBar = document.createElement('div'); progBar.style.cssText='height:100%;width:0%;background:#111827;opacity:.9';
-    progWrap.appendChild(progBar);
-    ensurePosition(previewCard).appendChild(progWrap);
-    const setProgress = (p)=>{ progWrap.style.display='block'; progBar.style.width=(p|0)+'%'; if(p>=100) setTimeout(()=>progWrap.style.display='none',300); };
-
-    // preview tools bar
+    // Add preview toolbar (Process Photo, Highlight Subject, No subject)
     const tools = document.createElement('div');
     tools.style.cssText='position:absolute;left:12px;bottom:12px;display:flex;gap:10px;flex-wrap:wrap;z-index:3;visibility:hidden;';
     const btnProcess   = makeBtn('Process Photo');
     const btnHighlight = makeBtn('Highlight Subject');
-    const lblNo = document.createElement('label'); const chkNo=document.createElement('input'); chkNo.type='checkbox';
+    const lblNo=document.createElement('label'); const chkNo=document.createElement('input'); chkNo.type='checkbox';
     lblNo.appendChild(chkNo); lblNo.appendChild(document.createTextNode(' No subject'));
     tools.append(btnProcess, btnHighlight, lblNo);
     ensurePosition(previewCard).appendChild(tools);
 
-    // format buttons → hidden until processing finishes
+    // Progress bar
+    const progWrap=document.createElement('div');
+    progWrap.style.cssText='position:absolute;left:12px;top:12px;right:12px;height:8px;background:rgba(0,0,0,.06);border-radius:999px;overflow:hidden;display:none;z-index:4';
+    const progBar=document.createElement('div'); progBar.style.cssText='height:100%;width:0%;background:#111827;opacity:.9';
+    progWrap.appendChild(progBar); ensurePosition(previewCard).appendChild(progWrap);
+    const setProgress=(p)=>{ progWrap.style.display='block'; progBar.style.width=(p|0)+'%'; if(p>=100) setTimeout(()=>progWrap.style.display='none',300); };
+
+    // Export buttons (DST/EXP become visible after processing)
     const fmtBtns = Array.from(formatsRow?.querySelectorAll('button,a')||[])
       .filter(b=>['DST','EXP','PES','JEF'].includes((b.textContent||'').trim().toUpperCase()));
-    const setFormatsVisible = (v)=> fmtBtns.forEach(b=> b.style.display = v ? 'inline-block' : 'none');
+    const setFormatsVisible = (v)=> fmtBtns.forEach(b=> b.style.display = v?'inline-block':'none');
     setFormatsVisible(false);
 
-    // state
-    const STATE = {
-      image: null,               // ImageData (source)
-      imgFit: null,              // mapping into preview canvas
-      stitches: [],              // preview path after processing
-      subject: { enabled:false, rect:null, noSubject:false }
-    };
-
-    // upload zone behavior — enable input and wire events
-    if (fileInput) fileInput.removeAttribute('disabled');
-    on(uploadZone,'click', (e)=>{
-      if(e.target.closest('button,a,input,label')) return;
-      fileInput?.click();
-    });
+    // Upload zone events (click + DnD)
+    on(uploadZone,'click',(e)=>{ if(e.target.closest('button,a,input,label')) return; fileInput?.click(); });
     on(uploadZone,'dragover', e=>e.preventDefault());
-    on(uploadZone,'drop', async (e)=>{
-      e.preventDefault();
-      const f=e.dataTransfer.files && e.dataTransfer.files[0];
-      if(f) await loadImageFile(f);
-    });
-    on(fileInput,'change', async ()=>{
-      const f=fileInput.files && fileInput.files[0];
-      if(f) await loadImageFile(f);
-    });
+    on(uploadZone,'drop', async (e)=>{ e.preventDefault(); const f=e.dataTransfer.files?.[0]; if(f) await loadImageFile(f); });
+    on(fileInput,'change', async ()=>{ const f=fileInput.files?.[0]; if(f) await loadImageFile(f); });
+    console.log('[Loomabelle v23] upload wired');
 
-    // allow hero/upper buttons to scroll to tabs (already wired above)
-
-    // draw & trace basics
+    // Draw area: simple pen
     drawCanvas.style.touchAction='none';
     let drawing=false, pid=null;
     on(drawCanvas,'pointerdown',e=>{
@@ -170,27 +141,23 @@
     const stopDraw=(e)=>{ if(e.pointerId===pid){ drawing=false; pid=null; try{drawCanvas.releasePointerCapture(e.pointerId);}catch(_){}} };
     on(drawCanvas,'pointerup',stopDraw); on(drawCanvas,'pointercancel',stopDraw);
 
-    // Add "Process Drawing" button into your existing toolbar (keeps style)
-    if (drawToolbar) {
-      const btnPD = document.createElement('button');
-      btnPD.className='btn soft';
-      btnPD.textContent='Process Drawing';
-      // Enable toolbar buttons look/feel (don’t change others)
+    // Add “Process Drawing” button into your existing toolbar
+    if (drawToolbar){
       Array.from(drawToolbar.children).forEach(b=> b.removeAttribute('disabled'));
+      const btnPD=document.createElement('button'); btnPD.className='btn soft'; btnPD.textContent='Process Drawing';
       drawToolbar.appendChild(btnPD);
       on(btnPD,'click', processDrawingFlow);
     }
 
-    // Highlight Subject toggle
+    // Highlight subject toggle + rect
     on(btnHighlight,'click',()=>{
-      STATE.subject.enabled = !STATE.subject.enabled;
-      if(!STATE.subject.enabled) STATE.subject.rect = null;
+      STATE.subject.enabled=!STATE.subject.enabled;
+      if(!STATE.subject.enabled) STATE.subject.rect=null;
       btnHighlight.classList.toggle('active', STATE.subject.enabled);
       drawSubjectBox();
     });
     on(chkNo,'change',()=>{ STATE.subject.noSubject = chkNo.checked; });
 
-    // subject rectangle drawing over preview
     let dragging=false, start=null;
     on(previewCanvas,'pointerdown',e=>{
       if(!STATE.subject.enabled) return;
@@ -200,30 +167,23 @@
     on(previewCanvas,'pointermove',e=>{
       if(!dragging||!STATE.subject.enabled) return;
       const r=previewCanvas.getBoundingClientRect(); const x=e.clientX-r.left, y=e.clientY-r.top;
-      STATE.subject.rect={x:Math.min(start[0],x),y:Math.min(start[1],y),w:Math.abs(x-start[0]),h:Math.abs(y-start[1])};
-      drawSubjectBox();
+      STATE.subject.rect={x:Math.min(start[0],x),y:Math.min(start[1],y),w:Math.abs(x-start[0]),h:Math.abs(y-start[1])}; drawSubjectBox();
     });
     on(window,'pointerup',()=>{ dragging=false; });
 
-    // process buttons
+    // Process buttons
     on(btnProcess,'click', processPhotoFlow);
 
-    // fit canvases once
-    fit(previewCanvas, previewArea); fit(drawCanvas, drawCanvasHost);
-
-    // ===== helpers =====
-    function ensureCanvas(host){
-      const c=document.createElement('canvas');
-      c.style.display='block';
-      host.appendChild(c);
-      return c;
-    }
+    // ===== helper fns =====
     function ensurePosition(host){
       const cs=getComputedStyle(host); if(cs.position==='static') host.style.position='relative'; return host;
     }
+    function makeCanvas(host){
+      const c=document.createElement('canvas'); c.style.display='block'; host.appendChild(c); return c;
+    }
 
     async function loadImageFile(file){
-      const url = URL.createObjectURL(file);
+      const url=URL.createObjectURL(file);
       try{
         const img = await new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=url; });
         const isIOS=/\b(iPhone|iPad|iPod)\b/i.test(navigator.userAgent||'');
@@ -233,37 +193,27 @@
         const c=document.createElement('canvas'); c.width=W; c.height=H; c.getContext('2d').drawImage(img,0,0,W,H);
         STATE.image=c.getContext('2d').getImageData(0,0,W,H);
 
-        // show image in preview immediately
-        previewHasImage = true;
-        setPreviewHint(false);
+        // Show in preview immediately
         fit(previewCanvas, previewArea);
-        redraw();
-        // reveal tools
+        renderBaseImage();
         tools.style.visibility='visible';
-        // hide export buttons until processed
         setFormatsVisible(false);
-        // ensure Upload tab is active (if user used hero)
+        // Activate Upload tab to reveal preview
         activate('upload');
-        // scroll into view
         previewCard?.scrollIntoView({behavior:'smooth',block:'center'});
-      }finally{ URL.revokeObjectURL(url); }
+      } finally { URL.revokeObjectURL(url); }
     }
 
-    function redraw(){
-      if(!STATE.image) return;
-      renderBaseImage();
-      renderStitches();
-    }
+    function redraw(){ if(!STATE.image) return; renderBaseImage(); renderStitches(); }
+
     function renderBaseImage(){
       const img=STATE.image; if(!img) return;
-      const W=img.width, H=img.height;
+      const W=img.width,H=img.height;
       const Wp=previewCanvas.width/DPR(), Hp=previewCanvas.height/DPR();
       const s=Math.min(Wp/W, Hp/H), w=W*s, h=H*s, ox=(Wp-w)/2, oy=(Hp-h)/2;
-      const tmp=document.createElement('canvas'); tmp.width=W; tmp.height=H;
-      tmp.getContext('2d').putImageData(img,0,0);
+      const tmp=document.createElement('canvas'); tmp.width=W; tmp.height=H; tmp.getContext('2d').putImageData(img,0,0);
       const ctx=previewCanvas.getContext('2d'); ctx.setTransform(DPR(),0,0,DPR(),0,0);
-      ctx.clearRect(0,0,Wp,Hp); ctx.fillStyle='#fff'; ctx.fillRect(0,0,Wp,Hp);
-      ctx.drawImage(tmp,ox,oy,w,h);
+      ctx.clearRect(0,0,Wp,Hp); ctx.fillStyle='#fff'; ctx.fillRect(0,0,Wp,Hp); ctx.drawImage(tmp,ox,oy,w,h);
       STATE.imgFit={ox,oy,scale:s,iw:W,ih:H};
     }
     function renderStitches(){
@@ -284,7 +234,7 @@
       }
     }
 
-    // ===== very fast offline processing =====
+    // ===== very fast offline “processing” =====
     function kmeansPalette(imgData,k,mask,onProgress){
       const W=imgData.width,H=imgData.height,d=imgData.data;
       const step=Math.max(1,Math.floor(Math.sqrt((W*H)/20000)));
@@ -339,7 +289,7 @@
           }
         }
         onProgress && onProgress(60+Math.round(40*y/H));
-        await defer();
+        await new Promise(r=>setTimeout(r,0));
       }
       return {indexed,palette,W,H};
     }
@@ -350,7 +300,6 @@
       const outline=!!(opts?.outline);
       const step=Math.max(2,Math.floor(Math.min(W,H)/220));
       const ops=[];
-
       if(outline){
         const edges=new Uint8Array(W*H);
         for(let y=1;y<H-1;y++){
@@ -370,7 +319,6 @@
           if(run){ ops.push({cmd:'jump',x:run.x0,y:run.y}); ops.push({cmd:'stitch',x:W-1,y:run.y}); }
         }
       }
-
       const rad=angle*Math.PI/180, sin=Math.sin(rad), cos=Math.cos(rad);
       const bands=Math.max(4,Math.floor(Math.min(W,H)/24));
       for(let b=0;b<bands;b++){
@@ -450,22 +398,11 @@
       return new Uint8Array(bytes);
     }
 
-    function hookDownloads(res){
-      fmtBtns.forEach(btn=>{
-        const fmt=(btn.textContent||'').trim().toUpperCase();
-        if(fmt==='DST'){ btn.onclick=()=>saveU8(res.dstU8,'loomabelle.dst'); }
-        else if(fmt==='EXP'){ btn.onclick=()=>saveU8(res.expU8,'loomabelle.exp'); }
-        else { btn.onclick=()=>alert('Coming soon'); }
-      });
-    }
-    function saveU8(u8,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([u8])); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1200); }
-
-    // ===== flows =====
     async function processPhotoFlow(){
       if(!STATE.image){ fileInput?.click(); return; }
       setFormatsVisible(false); setProgress(1);
 
-      // optional subject rect → mask in image space
+      // optional subject rect → mask
       let mask=null;
       if(STATE.subject.rect && !STATE.subject.noSubject && STATE.imgFit){
         const {ox,oy,scale,iw,ih}=STATE.imgFit;
@@ -479,37 +416,42 @@
 
       const q = await quantizeFast(STATE.image, 6, mask, p=>setProgress(Math.max(1,Math.min(95,p))));
       const ops = planStitches(q, {outline:true, angle:45});
-
       STATE.stitches = toPreviewPath(ops);
-      redraw(); setProgress(100);
+      renderBaseImage(); renderStitches(); setProgress(100);
 
       const dstU8=writeDST(ops,{pxPerMm:2,outW:previewCanvas.width/DPR(),outH:previewCanvas.height/DPR()});
       const expU8=writeEXP(ops,{pxPerMm:2,outW:previewCanvas.width/DPR(),outH:previewCanvas.height/DPR()});
-      hookDownloads({dstU8,expU8});
-      setFormatsVisible(true);
+      hookDownloads({dstU8,expU8}); setFormatsVisible(true);
     }
+
+    function hookDownloads(res){
+      fmtBtns.forEach(btn=>{
+        const fmt=(btn.textContent||'').trim().toUpperCase();
+        if(fmt==='DST'){ btn.onclick=()=>saveU8(res.dstU8,'loomabelle.dst'); btn.style.display='inline-block'; }
+        else if(fmt==='EXP'){ btn.onclick=()=>saveU8(res.expU8,'loomabelle.exp'); btn.style.display='inline-block'; }
+        else { btn.onclick=()=>alert('Coming soon'); }
+      });
+    }
+    function saveU8(u8,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([u8])); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1200); }
 
     async function processDrawingFlow(){
       setFormatsVisible(false); setProgress(1);
       const w=drawCanvas.width, h=drawCanvas.height, sctx=drawCanvas.getContext('2d');
       const id=sctx.getImageData(0,0,w,h);
-      // show drawing in preview then process as mask
-      STATE.image=id; fit(previewCanvas, previewArea); setPreviewHint(false); redraw();
-
-      const mask=new Uint8Array(w*h);
-      for(let i=0;i<w*h;i++){ mask[i]= id.data[i*4+3] > 10 ? 1 : 0; }
+      STATE.image=id; renderBaseImage();
+      const mask=new Uint8Array(w*h); for(let i=0;i<w*h;i++){ mask[i]= id.data[i*4+3] > 10 ? 1 : 0; }
       const q={indexed:mask, palette:[[0,0,0],[255,255,255]], W:w, H:h};
       const ops=planStitches(q,{outline:true, angle:45});
-      STATE.stitches=toPreviewPath(ops); redraw(); setProgress(100);
-
+      STATE.stitches=toPreviewPath(ops); renderStitches(); setProgress(100);
       const dstU8=writeDST(ops,{pxPerMm:2,outW:previewCanvas.width/DPR(),outH:previewCanvas.height/DPR()});
       const expU8=writeEXP(ops,{pxPerMm:2,outW:previewCanvas.width/DPR(),outH:previewCanvas.height/DPR()});
       hookDownloads({dstU8,expU8}); setFormatsVisible(true);
+      // Jump to preview
+      activate('upload');
       previewCard?.scrollIntoView({behavior:'smooth',block:'center'});
-      activate('upload'); // jump to preview after drawing process
     }
 
-    function setFormatsVisible(v){ fmtBtns.forEach(b=> b.style.display = v ? 'inline-block' : 'none'); }
+    console.log('[Loomabelle v23] init done');
   }
 
 })();

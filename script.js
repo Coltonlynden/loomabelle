@@ -1,20 +1,22 @@
-/* Loomabelle runtime — v36
-   - Restores/creates "Process Photo" + "Highlight Subject" buttons.
-   - Ensures a "Process Selection" button in Draw & Trace.
-   - Pen is dark navy by default; eraser toggles.
-   - Populates Thread Palette swatches.
+/* Loomabelle runtime — v37
+   Fixes:
+   - Preview card stays hidden until a photo is chosen.
+   - No duplicate "Process Photo / Highlight Subject" buttons.
+   - Single-run guard so the script can’t re-init on reloads.
+   (v36 features kept: dark pen, draw mask, HEIC -> JPEG, fast preview.)
 */
-
 (() => {
   "use strict";
+  if (window.__loom_v37) return; // single-run guard
+  window.__loom_v37 = true;
 
-  /* -------- helpers -------- */
+  /* ---------- helpers ---------- */
   const $  = (s, r=document)=>r.querySelector(s);
   const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
   const byText=(root,sel,text)=> $$(sel,root).find(n=>(n.textContent||"").toLowerCase().includes(text));
   const DPR = () => window.devicePixelRatio || 1;
 
-  /* -------- locate panels (works with your current HTML) -------- */
+  /* ---------- find panels/cards already in your HTML ---------- */
   const uploadPanel = $('.panel[data-panel="upload"]') || byText(document,'.panel','upload a photo');
   const drawPanel   = $('.panel[data-panel="draw"]')   || byText(document,'.panel','draw & trace');
 
@@ -33,27 +35,24 @@
   const btnPen      = byText(drawPanel,'button','pen');
   const btnEraser   = byText(drawPanel,'button','eraser');
 
-  /* -------- state -------- */
+  /* ---------- state ---------- */
   const S = {
-    work: null,          // image canvas
-    image: null,
-    preview: null,       // preview canvas
-    drawBG: null,        // draw panel image layer
-    mask: null,          // draw panel strokes layer
-    hasMask: false,
-    pen: { erase:false, size:18, color:'#0a0f1d', down:false, lastX:0, lastY:0 },
+    work:null, image:null,
+    preview:null, drawBG:null, mask:null,
+    hasMask:false,
+    pen:{ erase:false, size:18, color:'#0a0f1d', down:false, lastX:0, lastY:0 },
     opts:{ outline:true, addFills:true, ignoreSubject:false }
   };
 
-  /* -------- basic UI: tabs -------- */
+  /* ---------- tabs ---------- */
   const tabBtns = $$('.tab-btn');
   function activateTab(name){
     tabBtns.forEach(b=>b.classList.toggle('active',(b.dataset.tab||'').toLowerCase()===name));
     $$('.panel').forEach(p=>p.classList.remove('active'));
-    (name==='draw' ? drawPanel : uploadPanel)?.classList.add('active');
+    (name==='draw'?drawPanel:uploadPanel)?.classList.add('active');
   }
 
-  /* -------- canvases -------- */
+  /* ---------- canvases ---------- */
   function makeCanvas(w,h){
     const r=DPR(), c=document.createElement('canvas');
     c.width=Math.max(1,Math.round(w*r));
@@ -62,10 +61,10 @@
     return c;
   }
   function ensurePreview(){
-    if (S.preview || !previewHost) return;
+    if (!previewHost || S.preview) return;
     const rect=previewHost.getBoundingClientRect();
-    const w=Math.max(320, Math.floor(rect.width||480));
-    const h=Math.max(180, Math.floor(w*9/16));
+    const w=Math.max(320,Math.floor(rect.width||480));
+    const h=Math.max(180,Math.floor(w*9/16));
     const c=makeCanvas(w,h);
     c.style.width='100%'; c.style.height='100%';
     previewHost.innerHTML=''; previewHost.appendChild(c);
@@ -99,7 +98,7 @@
     S.hasMask=false;
   }
 
-  /* -------- drawing (dark pen) -------- */
+  /* ---------- drawing ---------- */
   function bindDrawing(cnv){
     const ctx=cnv.getContext('2d',{willReadFrequently:true});
     const pt=(ev)=>{ const r=cnv.getBoundingClientRect(); const cx=(ev.touches?ev.touches[0].clientX:ev.clientX)-r.left; const cy=(ev.touches?ev.touches[0].clientY:ev.clientY)-r.top; return {x:cx*(cnv.width/r.width), y:cy*(cnv.height/r.height)}; };
@@ -120,7 +119,7 @@
     if (btnEraser)btnEraser.onclick= ()=>{ S.pen.erase=true;  btnEraser.classList.add('active'); btnPen?.classList.remove('active'); };
   }
 
-  /* -------- upload -------- */
+  /* ---------- upload ---------- */
   async function heicToJpeg(file){
     try{
       if(!window.heic2any){
@@ -152,12 +151,16 @@
         if(Math.max(W,H)>maxSide){ const s=maxSide/Math.max(W,H); W=(W*s)|0; H=(H*s)|0; }
         const work=makeCanvas(W,H); work.getContext('2d').drawImage(img,0,0,W,H);
         S.image=img; S.work=work;
+
+        // reveal preview card (was hidden initially)
+        previewCard?.classList.remove('hidden');
+
         ensurePreview(); drawRawPreview();
         ensureDrawLayers(); mirrorToDraw();
-        // enable controls
-        processBtn()?.removeAttribute('disabled');
-        highlightBtn()?.removeAttribute('disabled');
-        processSelBtn()?.removeAttribute('disabled');
+        // enable buttons
+        processBtn().removeAttribute('disabled');
+        highlightBtn().removeAttribute('disabled');
+        processSelBtn().removeAttribute('disabled');
         btnPen && btnPen.click();
       };
       img.onerror=()=>URL.revokeObjectURL(url);
@@ -165,14 +168,14 @@
     });
   }
 
-  /* -------- fast k-means-ish quantize (subject-aware) -------- */
+  /* ---------- quick quantized preview (subject-aware) ---------- */
   function processPreview(){
-    if(!S.work){ return; }
+    if(!S.work) return;
     const W=S.work.width,H=S.work.height;
     const src=S.work.getContext('2d').getImageData(0,0,W,H);
     const mask = (S.hasMask && !S.opts.ignoreSubject) ? S.mask.getContext('2d').getImageData(0,0,W,H).data : null;
 
-    // sample points
+    // sample
     const k=6, step=Math.max(1, Math.floor(Math.sqrt((W*H)/200000)));
     const pts=[];
     for(let y=0;y<H;y+=step){
@@ -183,7 +186,6 @@
         pts.push([src.data[j],src.data[j+1],src.data[j+2]]);
       }
     }
-    // init centers
     const centers=[];
     if(pts.length===0) centers.push([0,0,0]);
     else{
@@ -237,7 +239,6 @@
     if (S.opts.outline && mask){
       g.globalCompositeOperation='source-over';
       g.strokeStyle='#0a0f1d'; g.lineWidth=Math.max(1,Math.round(2*s)); g.lineCap='round'; g.lineJoin='round';
-      // Quick marching squares-ish vertical scan to emphasize edge
       const mw=W,mh=H;
       g.beginPath();
       for(let x=0;x<mw;x+=3){
@@ -251,20 +252,27 @@
     g.restore();
   }
 
-  /* -------- control buttons: create if missing -------- */
+  /* ---------- buttons (no duplicates) ---------- */
+  function removeDupButtons(root, label){
+    const all = $$('.btn', root).filter(b => (b.textContent||'').trim().toLowerCase()===label.toLowerCase());
+    if (all.length>1){ all.slice(1).forEach(b=>b.remove()); }
+    return all[0] || null;
+  }
   function ensureButton(root, label){
-    let b = byText(root,'button',label);
-    if (b) return b;
-    // create a soft button with same look
-    b=document.createElement('button');
+    // if it already exists, keep ONE
+    const existing = removeDupButtons(root, label);
+    if (existing){ existing.dataset.lb = '1'; return existing; }
+    // create one
+    const b=document.createElement('button');
     b.className='btn soft';
     b.textContent=label;
-    (root.querySelector('.formats') || root.querySelector('.preview')?.parentElement || root).appendChild(b);
+    b.dataset.lb='1';
+    (root.querySelector('.formats') || root).appendChild(b);
     return b;
   }
-  const processBtn     = ()=> ensureButton(previewCard,'Process Photo');
-  const highlightBtn   = ()=> ensureButton(previewCard,'Highlight Subject');
-  const processSelBtn  = ()=> ensureButton(drawPanel,'Process Selection');
+  const processBtn    = ()=> ensureButton(previewCard,'Process Photo');
+  const highlightBtn  = ()=> ensureButton(previewCard,'Highlight Subject');
+  const processSelBtn = ()=> ensureButton(drawPanel   ,'Process Selection');
 
   function bindButtons(){
     // Tabs
@@ -273,7 +281,7 @@
       b.addEventListener('click',()=>{ $('#tabs')?.scrollIntoView({behavior:'smooth'}); if((b.textContent||'').toLowerCase().includes('drawing')) activateTab('draw'); else activateTab('upload'); });
     });
 
-    // Preview buttons
+    // Actions
     processBtn().onclick = ()=>{
       S.opts.outline = !!(outlineChk?.checked ?? true);
       S.opts.addFills = !!(addFillsChk?.checked ?? true);
@@ -287,8 +295,6 @@
       btnPen?.click();
       drawPanel?.scrollIntoView({behavior:'smooth',block:'start'});
     };
-
-    // Draw button
     processSelBtn().onclick = ()=>{
       S.hasMask = true;
       S.opts.outline = !!(outlineChk?.checked ?? true);
@@ -299,41 +305,39 @@
     };
   }
 
-  /* -------- thread palette -------- */
+  /* ---------- swatches ---------- */
   function populateSwatches(){
     const host = drawPanel?.querySelector('.swatches');
     if (!host) return;
-    const colors = [
-      '#f87171','#f472b6','#c4b5fd','#a78bfa','#93c5fd',
-      '#60a5fa','#38bdf8','#22d3ee','#34d399','#a3e635',
-      '#fde047','#f59e0b','#fb7185','#f97316','#84cc16'
-    ];
+    if (host.dataset.lb === '1') return; // already populated
+    host.dataset.lb = '1';
+    const colors = ['#f87171','#f472b6','#c4b5fd','#a78bfa','#93c5fd','#60a5fa','#38bdf8','#22d3ee','#34d399','#a3e635','#fde047','#f59e0b','#fb7185','#f97316','#84cc16'];
     host.innerHTML='';
     colors.forEach(hex=>{
       const sw=document.createElement('button');
-      sw.className='btn soft';
-      sw.style.borderRadius='999px';
+      sw.className='btn soft'; sw.style.borderRadius='999px';
       sw.style.width='32px'; sw.style.height='32px'; sw.style.padding='0';
       sw.style.boxShadow='inset 0 0 0 2px rgba(0,0,0,.08)';
-      sw.style.background=hex;
-      sw.title=hex;
-      sw.onclick=()=>{ /* future: color-aware fills; for now allow pen color change if desired */
-        S.pen.color = '#0a0f1d';  // keep outline dark for visibility
-      };
+      sw.style.background=hex; sw.title=hex;
+      sw.onclick=()=>{ /* keep outline dark for now */ };
       host.appendChild(sw);
     });
   }
 
-  /* -------- init -------- */
+  /* ---------- init ---------- */
   function init(){
     if(!uploadPanel || !drawPanel) return;
+
+    // Hide the preview card until a photo is uploaded
+    previewCard?.classList.add('hidden');
+
     activateTab('upload');
-    ensurePreview();
-    ensureDrawLayers();
+    ensureDrawLayers(); // ready so "Highlight Subject" can swap immediately
     bindUpload();
     bindButtons();
     populateSwatches();
 
+    // keep preview canvas sized with card
     window.addEventListener('resize',()=>{
       if(!S.preview||!previewHost) return;
       const r=previewHost.getBoundingClientRect();

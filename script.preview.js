@@ -14,6 +14,7 @@
 
   // fit canvas to host
   function fitCanvas(){
+    if(!host) return;
     const r = host.getBoundingClientRect();
     c.width = Math.floor(r.width * devicePixelRatio);
     c.height= Math.floor(r.height* devicePixelRatio);
@@ -23,6 +24,7 @@
 
   // draw an ImageBitmap into preview canvas (letterbox)
   function drawBitmap(bmp){
+    if(!bmp) return;
     fitCanvas();
     ctx.setTransform(1,0,0,1,0,0);
     ctx.clearRect(0,0,c.width,c.height);

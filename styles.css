@@ -1,25 +1,21 @@
-/* Loomabelle styles */
+/* Loomabelle styles (kept from your look, with fixes) */
 :root{
   --bg:#fffaf3; --ink:#111827; --muted:#6b7280;
   --rose:#fde2e7; --blue:#e0f2fe; --violet:#ede9fe; --green:#dcfce7;
   --card:#ffffff; --border:rgba(0,0,0,.08);
-  --ring:rgba(17,24,39,.12);
 }
 *{box-sizing:border-box}
 html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 'Quicksand',system-ui,-apple-system,Segoe UI,Roboto,Arial}
 .page{min-height:100%}
 
-/* full-bleed, sticky header */
-.topnav{
-  position:sticky; top:0; z-index:50;
-  width:100%;
-  background:linear-gradient(90deg,#fbe7f0,#e2f0ff,#fef9c3);
-  border-bottom:1px solid var(--border);
-}
+/* full-width sticky header (prevents iOS gap/snaps) */
+.topnav{position:sticky;top:0;z-index:10;
+  background:linear-gradient(90deg,#fbe7f0,#e2f0ff,#fef9c3);border-bottom:1px solid var(--border);
+  backface-visibility:hidden;will-change:transform}
 .navwrap{max-width:1100px;margin:0 auto;display:flex;align-items:center;gap:16px;padding:10px 20px}
 .logo{display:flex;align-items:center;gap:10px}
-.logo-img{width:48px;height:48px;border-radius:50%;background:radial-gradient(circle at 30% 30%, #fde68a, #93c5fd 60%, #f9a8d4); box-shadow:inset 0 0 0 3px #fff}
+.logo .dot{width:28px;height:28px;border-radius:50%;background:#fff;box-shadow:inset 0 0 0 3px #93c5fd}
 .wordmark .brand{font-family:'Satisfy',cursive;font-size:28px}
 .wordmark .tag{font-size:12px;color:var(--muted);margin-top:-6px}
 .links{margin-left:auto;display:flex;gap:16px}
@@ -30,9 +26,10 @@ body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 'Quicksand',sy
 .btn.soft{background:#fff;border:1px solid var(--border);color:var(--ink)}
 .btn.ghost{background:transparent;border:1px solid var(--border);color:var(--ink)}
 .btn.rainbow{background:linear-gradient(90deg,#f9a8d4,#93c5fd,#fde68a);color:#111827;font-weight:600}
+.btn.soft.strong{font-weight:600}
 .btn.soft.active{outline:3px solid rgba(0,0,0,.25)}
 
-.hero{position:relative;padding:34px 20px}
+.hero{position:relative;padding:48px 20px}
 .hero-grid{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:1.2fr 1fr;gap:24px;align-items:center}
 .hero-copy h1{font-family:'Fraunces',serif;font-weight:700;font-size:44px;margin:0 0 10px}
 .hero-copy p{margin:0 0 16px}
@@ -41,8 +38,8 @@ body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 'Quicksand',sy
 .bullets{margin:0;padding:0;list-style:none;display:grid;gap:6px}
 .bullets .sparkle{display:inline-block;width:10px;height:10px;background:#fde68a;border-radius:50%;margin-right:6px}
 
-.hero-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:10px;min-height:180px}
-.hero-blob{width:100%;height:100%;background:linear-gradient(180deg,#dbeafe,#fde2e7);border-radius:12px}
+.hero-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:10px;min-height:220px}
+.hero-blob{width:100%;height:100%;border-radius:12px;background:linear-gradient(180deg,#e0f2fe 0,#fde2e7 100%)}
 
 .tabs-wrap{max-width:1100px;margin:10px auto 0;padding:0 20px}
 .tabs{display:flex;align-items:center;gap:10px}
@@ -67,43 +64,31 @@ body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 'Quicksand',sy
 .upload-inner{pointer-events:none;text-align:center;color:#6b7280}
 
 .preview{position:relative;border:2px dashed rgba(0,0,0,.12);background:#fff;border-radius:14px;min-height:220px;display:flex;align-items:center;justify-content:center;padding:10px}
-.hidden{display:none!important}
+.canvas{position:relative;border:2px dashed rgba(0,0,0,.12);background:#fff;border-radius:14px;min-height:220px;padding:0}
+.preview.hidden{display:none}
 
 .formats{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
-.formats.under{margin-top:6px}
-.opts{display:grid;gap:8px;margin-top:10px}
-.range{display:flex;gap:10px;align-items:center}
-
-.canvas{position:relative;border:2px dashed rgba(0,0,0,.12);background:#fff;border-radius:14px;min-height:260px;padding:0}
-.canvas-layer{position:absolute;left:0;top:0;width:100%;height:100%}
-.canvas-bg{opacity:.85}
-.canvas-pen{touch-action:none}
-
-.toolbar{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.opts{display:grid;gap:6px;margin-top:10px}
+.slider{display:flex;gap:10px;align-items:center}
 
 .swatches{display:flex;gap:8px;flex-wrap:wrap}
-.swatches .sw{width:28px;height:28px;border-radius:999px;border:1px solid var(--border);box-shadow:0 1px 0 var(--ring)}
+.swatches .chip{width:28px;height:28px;border-radius:50%;border:1px solid var(--border)}
+
+.progress{position:absolute;left:12px;right:12px;bottom:12px;background:#fff;border:1px solid var(--border);border-radius:10px;padding:6px 10px;display:flex;gap:10px;align-items:center}
+.progress.hidden{display:none}
+.progress #progressBar{height:8px;flex:1;border-radius:6px;background:linear-gradient(90deg,#93c5fd,#f9a8d4);transform:scaleX(0);transform-origin:left;transition:transform .15s ease}
 
 .sitefooter{margin-top:36px;background:#fff;border-top:1px solid var(--border)}
 .footcard{max-width:1100px;margin:0 auto;padding:20px}
-.footgrid{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.footgrid{display:flex;align-items:center;justify-content:space-between;gap:14px}
 .footlinks{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .dot{opacity:.5}
-
-/* Preview/Canvas sizing that works on mobile */
-.preview, .canvas { aspect-ratio: 16/10; max-height:min(60vh,520px); overflow:hidden }
-.preview canvas, .canvas canvas { width:100%; height:100%; display:block }
-
-/* Progress overlay */
-.overlay{position:fixed;inset:0;background:rgba(255,255,255,.75);backdrop-filter:saturate(1.2) blur(2px);display:flex;align-items:center;justify-content:center}
-.overlay.hidden{display:none!important}
-.overlay-card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:18px 18px 14px;min-width:260px;box-shadow:0 10px 40px rgba(0,0,0,.08)}
-.spinner{width:28px;height:28px;border-radius:50%;border:3px solid #e5e7eb;border-top-color:#93c5fd;margin-bottom:8px;animation:spin 0.9s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-.bar{height:8px;background:#f3f4f6;border-radius:999px;overflow:hidden}
-.bar-fill{height:100%;background:linear-gradient(90deg,#f9a8d4,#93c5fd,#fde68a)}
 
 @media (max-width:900px){
   .hero-grid{grid-template-columns:1fr}
   .grid{grid-template-columns:1fr}
 }
+
+/* Host sizing that stays stable */
+.preview, .canvas { aspect-ratio: 16/9; max-height: min(60vh,520px); overflow:hidden }
+.preview canvas, .canvas canvas { width:100%; height:100%; display:block; }

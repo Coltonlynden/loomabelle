@@ -82,15 +82,16 @@
   if (toolPen)    toolPen.addEventListener('click', ()=>{tool='pen';    toolPen.classList.add('active'); toolEraser.classList.remove('active');});
   if (toolEraser) toolEraser.addEventListener('click', ()=>{tool='eraser'; toolEraser.classList.add('active'); toolPen.classList.remove('active');});
 
-  // Process Selection with mask
+  // Process Selection with mask -> run pipeline -> return to Upload with preview updated
   if (toolProcess) toolProcess.addEventListener('click', async ()=>{
     if(!App.image){ return; }
+
+    // build mask at image resolution from draw canvas
     const mask = document.createElement('canvas');
     mask.width = App.image.width; mask.height = App.image.height;
-    const mx = mask.getContext('2d');
-
+    const mx = mask.getContext('2d', {willReadFrequently:true});
     const tmp = dctx.getImageData(0,0,draw.width,draw.height).data;
-    const mdata = mx.getImageData(0,0,mask.width,mask.height);
+    const mdata = mx.createImageData(mask.width, mask.height);
     const md = mdata.data;
 
     for(let iy=0; iy<mask.height; iy++){
@@ -99,7 +100,7 @@
         const dy = Math.round(iy*scale + offsetY);
         let a = 0;
         if(dx>=0 && dy>=0 && dx<draw.width && dy<draw.height){
-          const di = (dy*draw.width + dx)*4 + 3; // alpha from draw layer
+          const di = (dy*draw.width + dx)*4 + 3;
           a = tmp[di];
         }
         const i = (iy*mask.width + ix)*4;
@@ -109,18 +110,23 @@
     mx.putImageData(mdata,0,0);
     App.mask = mask;
 
-    const host = document.getElementById('previewHost');
+    // show preview/progress while processing
+    const previewHost = document.getElementById('previewHost');
+    const previewCard = document.getElementById('previewCard');
     const bar  = document.getElementById('progressBar');
     const lab  = document.getElementById('progressLabel');
     const wrap = document.getElementById('progressWrap');
-    if(host) host.classList.remove('hidden');
-    if(wrap) wrap.classList.remove('hidden');
+    if (previewCard) previewCard.style.display='';
+    if (previewHost) previewHost.classList.remove('hidden');
+    if (wrap) wrap.classList.remove('hidden');
 
-    const progress = (p,l)=>{ if(bar) bar.style.transform=`scaleX(${p})`; if(lab && l) lab.textContent=l; };
-    const bmp = await Processing.processImage(App.image, mask, Object.assign({}, App.options, { noSubject:false }), progress);
+    const progress = (p,l)=>{ if(bar) bar.style.transform=`scaleX(${Math.max(0,Math.min(1,p))})`; if(lab && l) lab.textContent=l; };
+    const bmp = await Processing.processImage(App.image, mask, {...App.options, noSubject:false}, progress);
 
-    if(wrap) wrap.classList.add('hidden');
+    if (wrap) wrap.classList.add('hidden');
     App.lastResult = bmp;
+
+    // switch back to Upload tab and update preview
     document.querySelector('.tab-btn[data-tab="upload"]').click();
     App.emit('image:loaded', bmp);
   });
@@ -129,11 +135,10 @@
   window.addEventListener('resize', fitCanvases);
   fitCanvases();
 
-  // palette chips
+  // palette chips (unchanged)
   const sw = document.getElementById('swatches');
   if(sw){
     const palette = ['#ef4444','#f472b6','#a78bfa','#60a5fa','#38bdf8','#22d3ee','#34d399','#fde047','#f59e0b','#fb7185','#10b981','#16a34a'];
     sw.innerHTML = palette.map(c=>`<div class="chip" title="${c}" style="background:${c}"></div>`).join('');
   }
 })();
-

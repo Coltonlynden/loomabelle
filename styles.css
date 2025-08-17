@@ -1,9 +1,4 @@
-/* Loomabelle styles – v42
-   - Keeps the original look
-   - Preview stays hidden until an image loads
-   - Stable preview/canvas sizing across devices
-   - iOS touch-safe drawing surface
-*/
+/* Loomabelle styles – v45 */
 
 :root{
   --bg:#fffaf3; --ink:#111827; --muted:#6b7280;
@@ -13,19 +8,13 @@
 
 *{box-sizing:border-box}
 html,body{height:100%}
-body{
-  margin:0;background:var(--bg);color:var(--ink);
-  font:16px/1.5 'Quicksand',system-ui,-apple-system,Segoe UI,Roboto,Arial
-}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:16px/1.5 'Quicksand',system-ui,-apple-system,Segoe UI,Roboto,Arial}
 .page{min-height:100%}
 
-/* ---------- Top bar (unchanged look, smoother on iOS) ---------- */
-.topnav{
-  position:sticky;top:0;z-index:10;
-  background:linear-gradient(90deg,#fbe7f0,#e2f0ff,#fef9c3);
-  border-bottom:1px solid var(--border);
-  will-change:transform;backface-visibility:hidden;
-}
+/* Top bar (unchanged look; smoother on iOS) */
+.topnav{position:sticky;top:0;background:linear-gradient(90deg,#fbe7f0,#e2f0ff,#fef9c3);
+  border-bottom:1px solid var(--border);z-index:10;will-change:transform;backface-visibility:hidden}
 .navwrap{max-width:1100px;margin:0 auto;display:flex;align-items:center;gap:16px;padding:10px 20px}
 .logo{display:flex;align-items:center;gap:10px}
 .wordmark .brand{font-family:'Satisfy',cursive;font-size:28px}
@@ -34,15 +23,12 @@ body{
 .links a{color:var(--ink);text-decoration:none;opacity:.8}
 .actions{display:flex;gap:8px}
 
-/* ---------- Buttons ---------- */
-.btn{appearance:none;border:none;border-radius:999px;padding:10px 16px;cursor:pointer;box-shadow:0 2px 0 rgba(0,0,0,.06)}
-.btn{background:#111827;color:#fff}
+.btn{appearance:none;border:none;border-radius:999px;padding:10px 16px;background:#111827;color:#fff;cursor:pointer;box-shadow:0 2px 0 rgba(0,0,0,.06)}
 .btn.soft{background:#fff;border:1px solid var(--border);color:var(--ink)}
 .btn.ghost{background:transparent;border:1px solid var(--border);color:var(--ink)}
 .btn.rainbow{background:linear-gradient(90deg,#f9a8d4,#93c5fd,#fde68a);color:#111827;font-weight:600}
 .btn.soft.active{outline:3px solid rgba(0,0,0,.25)}
 
-/* ---------- Hero (unchanged) ---------- */
 .hero{position:relative;padding:48px 20px}
 .hero-grid{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:1.2fr 1fr;gap:24px;align-items:center}
 .hero-copy h1{font-family:'Fraunces',serif;font-weight:700;font-size:44px;margin:0 0 10px}
@@ -51,18 +37,15 @@ body{
 .cta{display:flex;gap:10px;margin:10px 0 18px}
 .bullets{margin:0;padding:0;list-style:none;display:grid;gap:6px}
 .bullets .sparkle{display:inline-block;width:10px;height:10px;background:#fde68a;border-radius:50%;margin-right:6px}
-
 .hero-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:10px}
 .hero-card svg{width:100%;height:auto;display:block}
 
-/* ---------- Tabs ---------- */
 .tabs-wrap{max-width:1100px;margin:10px auto 0;padding:0 20px}
 .tabs{display:flex;align-items:center;gap:10px}
 .tab-btn{border:1px solid var(--border);background:#fff;border-radius:999px;padding:8px 14px;cursor:pointer}
 .tab-btn.active{background:#111827;color:#fff}
 .muted{color:var(--muted);font-size:12px;margin-left:10px}
 
-/* ---------- Panels & grid ---------- */
 .panel{display:none;margin-top:14px}
 .panel.active{display:block}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
@@ -75,74 +58,42 @@ body{
 .card-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
 .icon{font-size:20px}
 
-/* ---------- Upload ---------- */
-.upload-zone{
-  position:relative;border:2px dashed rgba(0,0,0,.15);border-radius:14px;
-  min-height:150px;background:#fff;display:flex;align-items:center;justify-content:center;
-  padding:16px;cursor:pointer
-}
+/* Upload */
+.upload-zone{position:relative;border:2px dashed rgba(0,0,0,.15);border-radius:14px;min-height:150px;background:#fff;display:flex;align-items:center;justify-content:center;padding:16px;cursor:pointer}
 .upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer}
 .upload-inner{pointer-events:none;text-align:center;color:#6b7280}
 .opts{display:grid;gap:6px;margin-top:10px}
 .formats{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
 
-/* ---------- Preview card ---------- */
+/* Preview card */
 .preview{
-  position:relative;
-  border:2px dashed rgba(0,0,0,.12);
-  background:#fff;border-radius:14px;
-  display:flex;align-items:center;justify-content:center;
-  padding:10px;overflow:hidden;
-  /* Height is tied to width for stability; capped for phone/desktop */
-  aspect-ratio:16/9;max-height:min(60vh,520px);
+  position:relative;border:2px dashed rgba(0,0,0,.12);background:#fff;border-radius:14px;
+  display:flex;align-items:center;justify-content:center;padding:10px;overflow:hidden;
+  aspect-ratio:16/9;max-height:min(60vh,520px)
 }
-
-/* Hide preview until JS sets data-empty="0" */
 .preview[data-empty="1"]{visibility:hidden}
-.preview[data-empty="1"]::before{
-  content:'Your stitched preview appears here';
-  visibility:visible;color:#6b7280
-}
-
-/* Make the canvas fill the preview without affecting layout */
+.preview[data-empty="1"]::before{content:'Your stitched preview appears here';visibility:visible;color:#6b7280}
 .preview > canvas{width:100%;height:100%;display:block}
 
-/* ---------- Draw & Trace ---------- */
-.canvas{
-  position:relative;border:2px dashed rgba(0,0,0,.12);
-  background:#fff;border-radius:14px;min-height:220px;padding:0;
-  aspect-ratio:16/9;max-height:min(60vh,520px);overflow:hidden;
-}
+/* Draw & Trace */
+.canvas{position:relative;border:2px dashed rgba(0,0,0,.12);background:#fff;border-radius:14px;min-height:220px;padding:0;aspect-ratio:16/9;max-height:min(60vh,520px);overflow:hidden}
 .canvas > canvas{width:100%;height:100%;display:block;touch-action:none}
-
-/* Draw toolbar */
 .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
-.toolbar .btn{user-select:none}
 
-/* Extra button under tools */
-.loom-process-selection{display:inline-block}
-
-/* ---------- Thread palette ---------- */
+/* Thread palette */
 .swatches{display:flex;gap:8px;flex-wrap:wrap}
-.swatches > div{
-  width:28px;height:28px;border-radius:50%;
-  border:2px solid rgba(0,0,0,.1);cursor:pointer
-}
+.swatches > button{width:28px;height:28px;border-radius:50%;border:2px solid rgba(0,0,0,.1);cursor:pointer}
 
-/* ---------- Footer ---------- */
+/* Footer */
 .sitefooter{margin-top:36px;background:#fff;border-top:1px solid var(--border)}
 .footcard{max-width:1100px;margin:0 auto;padding:20px}
 .footgrid{display:flex;align-items:center;justify-content:space-between;gap:14px}
 .footlinks{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .dot{opacity:.5}
 
-/* Utility */
-.hidden{display:none !important}
-
-/* iOS scrolling while drawing */
+.hidden{display:none!important}
 body.loom-lock{overscroll-behavior:none}
 
-/* Responsive */
 @media (max-width:900px){
   .hero-grid{grid-template-columns:1fr}
   .grid{grid-template-columns:1fr}

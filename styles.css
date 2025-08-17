@@ -1,4 +1,4 @@
-/* Loomabelle styles (kept from your look, with fixes) */
+/* Loomabelle styles (kept from your look) */
 :root{
   --bg:#fffaf3; --ink:#111827; --muted:#6b7280;
   --rose:#fde2e7; --blue:#e0f2fe; --violet:#ede9fe; --green:#dcfce7;
@@ -91,4 +91,10 @@ body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 'Quicksand',sy
 
 /* Host sizing that stays stable */
 .preview, .canvas { aspect-ratio: 16/9; max-height: min(60vh,520px); overflow:hidden }
+/* canvases should fill host */
 .preview canvas, .canvas canvas { width:100%; height:100%; display:block; }
+
+/* >>> NEW: overlay the two canvases so Pen receives input <<< */
+#bgCanvas, #drawCanvas { position:absolute; inset:0; width:100%; height:100%; }
+#bgCanvas{ z-index:0; pointer-events:none; }
+#drawCanvas{ z-index:1; touch-action:none; cursor:crosshair; }

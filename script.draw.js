@@ -1,112 +1,117 @@
-// Simple pen/eraser over a guide image; produces a mask for processing.
+/* Drawing tab: pen/eraser/clear + Process Selection */
 (function(){
-  const $ = (s, r=document)=>r.querySelector(s);
-  const drawHost = $('#drawHost');
-  const drawCanvas = $('#drawCanvas');
-  const penBtn = $('#penBtn');
-  const eraserBtn = $('#eraserBtn');
-  const clearBtn = $('#clearBtn');
-  const processSelBtn = $('#processSelectionBtn');
-  const swatchesEl = $('#swatches');
+  const host   = document.getElementById('draw-host');
+  const canvas = document.getElementById('draw-canvas');
+  const ctx = canvas.getContext('2d', { willReadFrequently:true });
 
-  const state = {
-    color: '#111827',
-    size: 8,
-    mode: 'pen', // 'pen' | 'eraser'
-    drawing: false,
-    lastX: 0, lastY: 0,
-  };
+  let drawing = false;
+  let mode = 'pen';
+  let stroke = '#1f2937';
+  let lastX=0, lastY=0;
 
-  // Palette
-  const COLORS = ['#ef4444','#f472b6','#a78bfa','#60a5fa','#93c5fd','#38bdf8','#34d399','#84cc16',
-                  '#facc15','#fb923c','#f87171','#22c55e'];
-  COLORS.forEach(c=>{
-    const sw = document.createElement('button');
-    sw.className = 'sw';
-    sw.style.background = c;
-    sw.addEventListener('click',()=>{ state.color = c; state.mode='pen'; setButtons(); });
-    swatchesEl.appendChild(sw);
-  });
+  // tool buttons
+  const bPen = document.getElementById('toolPen');
+  const bErs = document.getElementById('toolErase');
+  const bClr = document.getElementById('toolClear');
+  const bProc= document.getElementById('toolProcessSel');
 
-  function setButtons(){
-    penBtn.classList.toggle('rainbow', state.mode==='pen');
-    eraserBtn.classList.toggle('rainbow', state.mode==='eraser');
+  function setActive(btn){
+    [bPen,bErs,bClr,bProc].forEach(b=>b && b.classList.remove('active'));
+    btn && btn.classList.add('active');
   }
 
-  function fit(){
-    const {w,h} = window.LoomaPreview.fitCanvasToHost(drawCanvas, drawHost);
-    const ctx = drawCanvas.getContext('2d');
-    ctx.clearRect(0,0,w,h);
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.strokeStyle = state.color;
-    ctx.lineWidth = state.size * (window.devicePixelRatio||1);
-    // if there’s an existing guide image, redraw it
-    if (window.Looma.imageBitmap){
-      // draw faint guide underneath the ink (separate canvas not needed; we draw on preview instead)
-      // Guide is displayed in the preview panel; the drawing canvas is only mask.
+  bPen.addEventListener('click', ()=>{ mode='pen'; setActive(bPen); });
+  bErs.addEventListener('click', ()=>{ mode='erase'; setActive(bErs); });
+  bClr.addEventListener('click', ()=>{ clearMask(); setActive(bClr); });
+  bProc.addEventListener('click', ()=> exportMaskAndProcess());
+
+  // Swatches set pen color
+  document.getElementById('swatches').addEventListener('click', (e)=>{
+    const b = e.target.closest('.sw'); if (!b) return;
+    stroke = b.dataset.color || '#1f2937';
+    setActive(bPen); mode='pen';
+  });
+
+  // Keep canvas pixel size in sync with CSS box
+  function fitCanvas(){
+    const rect = host.getBoundingClientRect();
+    const w = Math.max(320, Math.floor(rect.width));
+    const h = Math.max(180, Math.floor(rect.height));
+    if (canvas.width!==w || canvas.height!==h){
+      const prev = ctx.getImageData(0,0,canvas.width,canvas.height);
+      canvas.width = w; canvas.height = h;
+      // repaint previous content scaled to new size
+      const tmp = document.createElement('canvas');
+      tmp.width = prev.width; tmp.height = prev.height;
+      tmp.getContext('2d').putImageData(prev,0,0);
+      ctx.drawImage(tmp,0,0,w,h);
     }
   }
+  new ResizeObserver(fitCanvas).observe(host);
+  fitCanvas();
 
-  function posFrom(ev){
-    const rect = drawCanvas.getBoundingClientRect();
-    const dpr = Math.max(1, window.devicePixelRatio||1);
-    const pt = ('touches' in ev && ev.touches[0]) ? ev.touches[0] : ev;
-    return { x:(pt.clientX-rect.left)*dpr, y:(pt.clientY-rect.top)*dpr };
+  function pointerPos(e){
+    const r = canvas.getBoundingClientRect();
+    const x = (e.clientX ?? e.touches?.[0]?.clientX) - r.left;
+    const y = (e.clientY ?? e.touches?.[0]?.clientY) - r.top;
+    return {x, y};
   }
 
-  function start(ev){
-    state.drawing = true;
-    const {x,y} = posFrom(ev);
-    state.lastX=x; state.lastY=y;
-    ev.preventDefault();
+  function begin(e){
+    drawing = true;
+    const {x,y} = pointerPos(e); lastX=x; lastY=y;
+    e.preventDefault();
   }
-  function move(ev){
-    if(!state.drawing) return;
-    const {x,y} = posFrom(ev);
-    const ctx = drawCanvas.getContext('2d');
-    ctx.globalCompositeOperation = state.mode==='eraser' ? 'destination-out' : 'source-over';
-    ctx.strokeStyle = state.mode==='eraser' ? '#000' : state.color;
-    ctx.lineWidth = state.size * (window.devicePixelRatio||1);
+  function move(e){
+    if(!drawing) return;
+    const {x,y} = pointerPos(e);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 10; // feel like a marker
+    if (mode==='erase'){
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.strokeStyle = 'rgba(0,0,0,1)';
+    } else {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = stroke;
+    }
     ctx.beginPath();
-    ctx.moveTo(state.lastX, state.lastY);
+    ctx.moveTo(lastX,lastY);
     ctx.lineTo(x,y);
     ctx.stroke();
-    state.lastX=x; state.lastY=y;
-    ev.preventDefault();
+    lastX=x; lastY=y;
+    e.preventDefault();
   }
-  function end(){ state.drawing=false; }
+  function end(){ drawing=false; }
 
-  ['mousedown','touchstart'].forEach(e=>drawCanvas.addEventListener(e,start,{passive:false}));
-  ['mousemove','touchmove'].forEach(e=>drawCanvas.addEventListener(e,move,{passive:false}));
-  ['mouseup','mouseleave','touchend','touchcancel'].forEach(e=>drawCanvas.addEventListener(e,end));
+  // Pointer + touch
+  canvas.addEventListener('pointerdown', begin);
+  canvas.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', end);
+  canvas.addEventListener('touchstart', begin, {passive:false});
+  canvas.addEventListener('touchmove', move, {passive:false});
+  window.addEventListener('touchend', end);
 
-  penBtn.addEventListener('click', ()=>{ state.mode='pen'; setButtons(); });
-  eraserBtn.addEventListener('click', ()=>{ state.mode='eraser'; setButtons(); });
-  clearBtn.addEventListener('click', ()=>{
-    const ctx = drawCanvas.getContext('2d');
-    ctx.clearRect(0,0,drawCanvas.width,drawCanvas.height);
-  });
+  function clearMask(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+  }
 
-  processSelBtn.addEventListener('click', ()=>{
-    // Pass mask to processing by saving it to Looma state
-    window.Looma.setMaskFrom(drawCanvas);
-    // jump back to upload tab and run process immediately
-    document.getElementById('tabUpload').click();
-    document.getElementById('btnProcess').click();
-  });
+  function exportMaskAndProcess(){
+    // Export a transparent PNG where drawn strokes mark the subject.
+    // Thicken the path into a filled region by drawing the current
+    // canvas onto itself with a fat shadow (simple “dilate”).
+    const work = document.createElement('canvas');
+    work.width = canvas.width; work.height = canvas.height;
+    const wctx = work.getContext('2d');
+    wctx.drawImage(canvas,0,0);
+    wctx.globalCompositeOperation='source-over';
+    wctx.filter='blur(6px)'; // soft dilate
+    wctx.drawImage(work,0,0);
 
-  // When user clicks "Highlight Subject" on preview, show the guide photo under the drawing panel
-  window.addEventListener('loom:draw:showGuide', ()=>{
-    // We simply show the original photo in the preview panel while user draws on mask;
-    // the draw canvas is a solid alpha mask.
-    window.dispatchEvent(new CustomEvent('loom:preview:showOriginal'));
-  });
-
-  // Fit on load & resize
-  window.addEventListener('resize', fit);
-  document.addEventListener('DOMContentLoaded', fit);
-
-  // public
-  window.LoomaDraw = { fit, drawCanvas };
+    const maskDataURL = work.toDataURL('image/png');
+    // Jump back to upload tab + process
+    document.querySelector('.tab-btn[data-tab="upload"]').click();
+    document.querySelector('#preview-host').scrollIntoView({behavior:'smooth', block:'start'});
+    window.LMB.setMask(maskDataURL);
+  }
 })();

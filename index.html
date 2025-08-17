@@ -4,13 +4,16 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Loomabelle — photo → stitch files</title>
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Quicksand:wght@400;500;600&family=Satisfy&display=swap" rel="stylesheet">
+
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
   <div class="page">
+    <!-- Top nav / hero (unchanged visuals) -->
     <header class="topnav">
       <div class="navwrap">
         <div class="logo">
@@ -44,18 +47,14 @@
       </div>
     </header>
 
-    <section class="hero">
-      <div class="hero-blobs" aria-hidden="true"></div>
-      <div class="decor decor-flower"></div>
-      <div class="decor decor-scallop"></div>
-
+    <section class="hero" id="features" aria-label="Intro">
       <div class="hero-grid">
         <div class="hero-copy">
           <h1>Turn photos into <span class="fancy-underline">embroidery</span> files.</h1>
           <p>A colorful, cozy tool to convert images into stitch-ready formats. Upload a photo or doodle in our cute stitch canvas.</p>
           <div class="cta">
-            <button class="btn rainbow" data-scroll="#tabs" data-tab-target="upload">Start with a photo</button>
-            <button class="btn soft" data-scroll="#tabs" data-tab-target="draw">Open the drawing tab</button>
+            <button class="btn rainbow" data-scroll="#tabs">Start with a photo</button>
+            <button class="btn soft" data-scroll="#tabs" data-tab="draw">Open the drawing tab</button>
           </div>
           <ul class="bullets">
             <li><span class="sparkle"></span> Auto color reduction</li>
@@ -64,7 +63,7 @@
             <li><span class="sparkle"></span> Light & dark fabric modes</li>
           </ul>
         </div>
-        <div class="hero-art hero-card colorful" aria-hidden="true">
+        <div class="hero-card colorful" aria-hidden="true">
           <svg viewBox="0 0 520 420">
             <defs>
               <pattern id="stitchPattern" width="24" height="24" patternUnits="userSpaceOnUse" patternTransform="rotate(22)">
@@ -73,7 +72,6 @@
             </defs>
             <circle cx="260" cy="210" r="150" fill="#fffaf3" stroke="#f9a8d4" stroke-width="10" />
             <circle cx="260" cy="210" r="130" fill="url(#stitchPattern)" stroke="#a5b4fc" stroke-width="3" stroke-dasharray="4 10" />
-            <g id="flowers"></g>
             <path d="M370 100 L480 40" stroke="#0ea5e9" stroke-width="6" stroke-linecap="round"/>
             <path d="M480 40 q -30 40 -10 80 t -40 70" stroke="#fb7185" stroke-width="4" fill="none" stroke-dasharray="1 10"/>
           </svg>
@@ -81,82 +79,107 @@
       </div>
     </section>
 
+    <!-- Tabs header -->
     <section id="tabs" class="tabs-wrap">
       <div class="tabs">
-        <button class="tab-btn active" data-tab="upload" id="tabUpload">Upload Photo</button>
-        <button class="tab-btn" data-tab="draw" id="tabDraw">Draw &amp; Trace</button>
-        <span class="muted" id="tabHint">ready to use</span>
+        <button class="tab-btn active" data-tab="upload" id="btnTabUpload">Upload Photo</button>
+        <button class="tab-btn" data-tab="draw" id="btnTabDraw">Draw &amp; Trace</button>
+        <span class="muted" id="tabHint" aria-live="polite">ready to use</span>
       </div>
 
-      <!-- Upload tab -->
+      <!-- Upload panel -->
       <div class="panel active" data-panel="upload" id="panelUpload">
         <div class="grid">
+          <!-- Upload card -->
           <div class="col card blue">
-            <div class="card-head"><span class="icon">🧵</span><h3>Upload a photo</h3></div>
+            <div class="card-head">
+              <span class="icon" aria-hidden="true">🧵</span>
+              <h3>Upload a photo</h3>
+            </div>
 
-            <div class="upload-zone" id="uploadZone">
+            <label class="upload-zone" id="drop">
               <div class="upload-inner">
                 <svg width="56" height="56" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 16v-6m0 0l-3 3m3-3l3 3M6 20h12a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2h-1.5M6 20a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2h3l2-2h2l2 2h3"/></svg>
                 <p>Drag &amp; drop or click to choose</p>
               </div>
-              <input type="file" id="fileInput" accept="image/*,.heic,.heif" />
-            </div>
+              <input id="file" type="file" accept="image/*,.heic,.heif" />
+            </label>
 
             <div class="opts">
-              <label><input type="checkbox" id="optReduce" checked> Reduce to stitch palette</label>
-              <label><input type="checkbox" id="optEdge" checked> Edge outline</label>
-              <label style="display:flex;align-items:center;gap:10px">
-                <input type="range" id="optDensity" min="0.3" max="0.8" step="0.05" value="0.4" style="flex:1">
-                <span>Density</span>
+              <label><input id="optPalette" type="checkbox" checked> Reduce to stitch palette</label>
+              <label><input id="optOutline" type="checkbox" checked> Edge outline</label>
+              <label style="display:flex;align-items:center;gap:.6rem">
+                <input id="optDensity" type="range" min="0.25" max="0.8" step="0.05" value="0.4" style="flex:1"> Density
               </label>
             </div>
           </div>
 
-          <div class="col card rose">
-            <div class="card-head"><span class="icon">🪡</span><h3>Preview (stitched)</h3></div>
-            <div class="preview" id="previewHost" data-empty="1">
-              <canvas id="preview" width="640" height="360" aria-label="Embroidery preview"></canvas>
+          <!-- Preview card (starts hidden) -->
+          <div class="col card rose hidden" id="cardPreview">
+            <div class="card-head">
+              <span class="icon" aria-hidden="true">🪡</span>
+              <h3>Preview (stitched)</h3>
             </div>
+
+            <div class="preview" id="previewHost" data-empty="1">
+              <canvas id="preview" width="640" height="360" aria-label="Preview canvas"></canvas>
+            </div>
+
             <div class="formats">
               <button class="btn soft" id="btnDST">DST</button>
               <button class="btn soft" id="btnEXP">EXP</button>
               <button class="btn soft" id="btnPES">PES</button>
               <button class="btn soft" id="btnJEF">JEF</button>
+
               <button class="btn soft" id="btnProcess">Process Photo</button>
-              <button class="btn soft" id="btnHighlight">Highlight Subject</button>
+              <button class="btn soft" id="btnMask">Highlight Subject</button>
+              <label class="btn soft" style="display:flex;gap:.5rem;align-items:center">
+                <input id="optNoSubject" type="checkbox"> No subject
+              </label>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Draw tab -->
+      <!-- Draw & trace panel -->
       <div class="panel" data-panel="draw" id="panelDraw">
         <div class="grid">
           <div class="col card violet">
-            <div class="card-head"><span class="icon">✂️</span><h3>Draw &amp; Trace</h3></div>
-            <div class="canvas"><canvas id="drawCanvas" width="960" height="540" aria-label="Trace canvas"></canvas></div>
+            <div class="card-head">
+              <span class="icon" aria-hidden="true">✂️</span>
+              <h3>Draw &amp; Trace</h3>
+            </div>
+
+            <div class="canvas" id="drawHost">
+              <canvas id="draw" width="960" height="540" aria-label="Drawing canvas"></canvas>
+              <!-- overlay for highlight subject -->
+              <canvas id="mask" width="960" height="540" aria-label="Mask canvas" class="hidden"></canvas>
+            </div>
+
             <div class="toolbar">
-              <button class="btn soft" id="btnPen">Pen</button>
-              <button class="btn soft" id="btnEraser">Eraser</button>
-              <button class="btn soft loom-process-selection" id="btnProcessSelection">Process Selection</button>
+              <button class="btn soft" id="toolPen">Pen</button>
+              <button class="btn soft" id="toolErase">Eraser</button>
+              <button class="btn soft" id="btnProcessMask">Process Selection</button>
             </div>
           </div>
 
           <div class="col card green">
-            <div class="card-head"><span class="icon">🎨</span><h3>Thread Palette</h3></div>
-            <div class="swatches" id="swatches" aria-label="Thread palette"></div>
+            <div class="card-head">
+              <span class="icon" aria-hidden="true">🎨</span>
+              <h3>Thread Palette</h3>
+            </div>
+            <div class="swatches" id="swatches" aria-label="Thread palette swatches"></div>
             <div class="formats">
-              <button class="btn soft" id="btnSuggest" disabled>Suggest Stitch Types</button>
-              <button class="btn soft" id="btnExport" disabled>Export Embroidery</button>
+              <button class="btn soft" id="btnSuggest">Suggest Stitch Types</button>
+              <button class="btn soft" id="btnExport">Export Embroidery</button>
             </div>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="break"><div class="pattern-strip"><div class="thread"></div><div class="sticker heart"></div><div class="sticker flower"></div></div></section>
-
-    <section id="gallery" class="inspo">
+    <!-- Simple “how it looks” + footer (unchanged visuals) -->
+    <section class="inspo" id="gallery" aria-label="Inspiration">
       <div class="inspo-inner">
         <div class="inspo-copy">
           <h3>Make it cute, make it yours</h3>
@@ -177,9 +200,9 @@
             <h4>Join the list</h4>
             <p>Be first to hear when the converter goes live.</p>
           </div>
-          <form class="sub" onsubmit="return false;">
-            <input placeholder="Email address" disabled />
-            <button class="btn rainbow" disabled>Subscribe</button>
+          <form class="sub">
+            <input disabled placeholder="Email address" />
+            <button disabled class="btn rainbow">Subscribe</button>
           </form>
         </div>
         <div class="footlinks">

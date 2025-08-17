@@ -14,12 +14,13 @@
   let tool='pen', drawing=false, lastX=0,lastY=0, scale=1, offsetX=0, offsetY=0, bmpForBg=null;
   let lassoMode=false, lassoPts=[];
 
+  function DPR(){ return window.devicePixelRatio || 1; }
+
   function fitCanvases(){
     const r = host.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
+    const w = Math.max(1, Math.floor(r.width  * DPR()));
+    const h = Math.max(1, Math.floor(r.height * DPR()));
     [bg,draw].forEach(cv=>{
-      const w = Math.max(1, Math.floor(r.width  * dpr));
-      const h = Math.max(1, Math.floor(r.height * dpr));
       if (cv.width!==w || cv.height!==h){
         cv.width  = w; cv.height = h;
         cv.style.width  = r.width  + 'px';
@@ -44,33 +45,22 @@
   App.on('draw:bg', ({bmp})=>{ fitCanvases(); paintBackground(bmp); clearDraw(); });
   App.on('draw:lasso', ()=>{ lassoMode = true; lassoPts = []; setTool('pen'); });
 
-  // drawing
   function pointerXY(e){
     const rect = draw.getBoundingClientRect();
-    const dpr  = window.devicePixelRatio || 1;
-    const x = (e.clientX - rect.left) * dpr;
-    const y = (e.clientY - rect.top ) * dpr;
+    const x = (e.clientX - rect.left) * DPR();
+    const y = (e.clientY - rect.top ) * DPR();
     return {x,y};
   }
   function drawLine(x,y){
     dctx.lineCap='round'; dctx.lineJoin='round';
-    dctx.lineWidth = 16 * (window.devicePixelRatio || 1);
+    dctx.lineWidth = 16 * DPR();
     dctx.globalCompositeOperation = (tool==='pen' ? 'source-over' : 'destination-out');
     dctx.strokeStyle = (tool==='pen' ? '#0f172a' : 'rgba(0,0,0,1)');
-    dctx.beginPath();
-    dctx.moveTo(lastX,lastY);
-    dctx.lineTo(x,y);
-    dctx.stroke();
+    dctx.beginPath(); dctx.moveTo(lastX,lastY); dctx.lineTo(x,y); dctx.stroke();
     lastX=x; lastY=y;
   }
-  function onDown(e){
-    drawing=true; const p=pointerXY(e); lastX=p.x; lastY=p.y; e.preventDefault();
-    if(lassoMode){ lassoPts.push({x:lastX, y:lastY}); }
-  }
-  function onMove(e){
-    if(!drawing) return; const p=pointerXY(e); drawLine(p.x,p.y); e.preventDefault();
-    if(lassoMode){ lassoPts.push({x:p.x, y:p.y}); }
-  }
+  function onDown(e){ drawing=true; const p=pointerXY(e); lastX=p.x; lastY=p.y; e.preventDefault(); if(lassoMode){ lassoPts=[{x:lastX,y:lastY}]; } }
+  function onMove(e){ if(!drawing) return; const p=pointerXY(e); drawLine(p.x,p.y); e.preventDefault(); if(lassoMode){ lassoPts.push({x:p.x,y:p.y}); } }
   function onUp(){ drawing=false; dctx.globalCompositeOperation='source-over'; }
 
   draw.addEventListener('pointerdown', onDown, {passive:false});
@@ -90,7 +80,7 @@
   if (toolPen)    toolPen.addEventListener('click', ()=>{ setTool('pen'); lassoMode=false; });
   if (toolEraser) toolEraser.addEventListener('click', ()=>{ setTool('eraser'); lassoMode=false; });
 
-  // Fill the lasso polygon into the draw layer
+  // Fill the lasso polygon into the draw layer (so "anything within area drawn" becomes selected)
   function fillLassoIfAny(){
     if (!lassoMode || lassoPts.length < 3) return;
     dctx.save();
@@ -106,28 +96,21 @@
     lassoPts = [];
   }
 
-  // Process Selection with mask -> pipeline -> Upload tab with preview
-  if (toolProcess) toolProcess.addEventListener('click', async ()=>{
-    if(!App.image){ return; }
-
-    // ensure lasso is filled to create a solid interior
-    fillLassoIfAny();
-
-    // build mask at image resolution from draw canvas
+  // Build mask in image space from draw layer (device-pixel correct)
+  function makeMaskFromDraw(){
     const mask = document.createElement('canvas');
     mask.width = App.image.width; mask.height = App.image.height;
     const mx = mask.getContext('2d', {willReadFrequently:true});
     const tmp = dctx.getImageData(0,0,draw.width,draw.height).data;
     const mdata = mx.createImageData(mask.width, mask.height);
     const md = mdata.data;
-
     for(let iy=0; iy<mask.height; iy++){
       for(let ix=0; ix<mask.width; ix++){
         const dx = Math.round(ix*scale + offsetX);
         const dy = Math.round(iy*scale + offsetY);
         let a = 0;
         if(dx>=0 && dy>=0 && dx<draw.width && dy<draw.height){
-          const di = (dy*draw.width + dx)*4 + 3; // alpha from draw layer
+          const di = (dy*draw.width + dx)*4 + 3;
           a = tmp[di];
         }
         const i = (iy*mask.width + ix)*4;
@@ -135,42 +118,45 @@
       }
     }
     mx.putImageData(mdata,0,0);
-    App.mask = mask;
+    return mask;
+  }
 
-    // show preview area & progress
-    const previewHost = document.getElementById('previewHost');
+  // Process Selection -> pipeline -> switch to Upload + show preview
+  if (toolProcess) toolProcess.addEventListener('click', async ()=>{
+    if(!App.image){ return; }
+    fillLassoIfAny();
+    const mask = makeMaskFromDraw();
+
+    // make preview visible first
     const previewCard = document.getElementById('previewCard');
+    const previewHost = document.getElementById('previewHost');
+    if (previewCard) previewCard.style.display='';
+    if (previewHost) previewHost.classList.remove('hidden');
+
     const bar  = document.getElementById('progressBar');
     const lab  = document.getElementById('progressLabel');
     const wrap = document.getElementById('progressWrap');
-    if (previewCard) previewCard.style.display='';
-    if (previewHost) previewHost.classList.remove('hidden');
     if (wrap) wrap.classList.remove('hidden');
-
     const progress = (p,l)=>{ if(bar) bar.style.transform=`scaleX(${Math.max(0,Math.min(1,p))})`; if(lab && l) lab.textContent=l; };
+
     const bmp = await Processing.processImage(App.image, mask, Object.assign({}, App.options, { noSubject:false }), progress);
 
     if (wrap) wrap.classList.add('hidden');
     App.lastResult = bmp;
 
-    // switch back to Upload tab and update preview
-    const btn = document.querySelector('.tab-btn[data-tab="upload"]');
-    if (btn) btn.click();
-    else switchTo('upload');
+    // hard switch to Upload tab (independent of button handlers)
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab==='upload'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active', p.dataset.panel==='upload'));
+
+    // update preview
     App.emit('image:loaded', bmp);
   });
-
-  // Fallback tab switcher (if no .tab-btn click handler available)
-  function switchTo(name){
-    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
-    document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active', p.dataset.panel===name));
-  }
 
   new ResizeObserver(()=>fitCanvases()).observe(host);
   window.addEventListener('resize', fitCanvases);
   fitCanvases();
 
-  // palette chips (unchanged)
+  // palette chips
   const sw = document.getElementById('swatches');
   if(sw){
     const palette = ['#ef4444','#f472b6','#a78bfa','#60a5fa','#38bdf8','#22d3ee','#34d399','#fde047','#f59e0b','#fb7185','#10b981','#16a34a'];

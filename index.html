@@ -10,30 +10,28 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="page">
-    <!-- Top bar (full-width gradient, no gaps on iOS) -->
-    <header class="topnav">
-      <div class="navwrap">
-        <div class="logo">
-          <div class="dot"></div>
-          <div class="wordmark">
-            <div class="brand">Loomabelle</div>
-            <div class="tag">photo → stitch files</div>
-          </div>
-        </div>
-        <nav class="links">
-          <a href="#features">Features</a>
-          <a href="#how">How it works</a>
-          <a href="#gallery">Gallery</a>
-        </nav>
-        <div class="actions">
-          <button class="btn ghost">Sign in</button>
-          <button class="btn rainbow" data-scroll="#tabs">Try it</button>
+  <header class="topnav">
+    <div class="navwrap">
+      <div class="logo">
+        <div class="logo-img" id="logoImg" aria-label="Loomabelle logo"></div>
+        <div class="wordmark">
+          <div class="brand">Loomabelle</div>
+          <div class="tag">photo → stitch files</div>
         </div>
       </div>
-    </header>
+      <nav class="links">
+        <a href="#features">Features</a>
+        <a href="#how">How it works</a>
+        <a href="#gallery">Gallery</a>
+      </nav>
+      <div class="actions">
+        <button class="btn ghost">Sign in</button>
+        <button class="btn rainbow" data-scroll="#tabs">Try it</button>
+      </div>
+    </div>
+  </header>
 
-    <!-- Hero (unchanged look) -->
+  <main>
     <section class="hero">
       <div class="hero-grid">
         <div class="hero-copy">
@@ -41,7 +39,7 @@
           <p>A cozy in-browser tool. Upload a photo or trace by hand, then export a stitch file.</p>
           <div class="cta">
             <button class="btn rainbow" data-scroll="#tabs">Start with a photo</button>
-            <button class="btn soft" data-scroll="#tabs" data-tab="draw">Open the drawing tab</button>
+            <button class="btn soft" data-scroll="#tabs" data-activate="draw">Open the drawing tab</button>
           </div>
           <ul class="bullets">
             <li><span class="sparkle"></span> Auto color reduction</li>
@@ -50,13 +48,12 @@
             <li><span class="sparkle"></span> Offline — no server needed</li>
           </ul>
         </div>
-        <div class="hero-card colorful">
+        <div class="hero-art hero-card colorful" aria-hidden="true">
           <div class="hero-blob"></div>
         </div>
       </div>
     </section>
 
-    <!-- Main tool -->
     <section id="tabs" class="tabs-wrap">
       <div class="tabs">
         <button class="tab-btn active" data-tab="upload">Upload Photo</button>
@@ -64,104 +61,110 @@
         <span class="muted">ready to use</span>
       </div>
 
-      <!-- Upload panel -->
+      <!-- Upload Panel -->
       <div class="panel active" data-panel="upload">
         <div class="grid">
           <div class="col card blue">
             <div class="card-head">
-              <span class="icon" aria-hidden="true">🧵</span>
+              <span class="icon">🧵</span>
               <h3>Upload a photo</h3>
             </div>
 
-            <!-- Drop / pick -->
-            <label class="upload-zone" id="dropZone">
+            <label class="upload-zone" id="uploadZone">
+              <input id="fileInput" type="file" accept="image/*" />
               <div class="upload-inner">
                 <svg width="56" height="56" viewBox="0 0 24 24"><path fill="currentColor" d="M12 16v-6m0 0l-3 3m3-3l3 3M6 20h12a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2h-1.5M6 20a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2h3l2-2h2l2 2h3"/></svg>
                 <p>Drag &amp; drop or click to choose</p>
               </div>
-              <input id="fileInput" type="file" accept="image/*" />
             </label>
 
-            <!-- Options -->
             <div class="opts">
-              <label><input id="optPalette" type="checkbox" checked> Reduce to stitch palette</label>
-              <label><input id="optEdge" type="checkbox" checked> Edge outline</label>
-              <label class="slider">
-                <input id="optDensity" type="range" min="1" max="8" value="3" />
+              <label><input id="optPosterize" type="checkbox" checked> Reduce to stitch palette</label>
+              <label><input id="optEdges" type="checkbox" checked> Edge outline</label>
+              <div class="range">
+                <input id="density" type="range" min="0" max="100" value="20" />
                 <span>Density</span>
-              </label>
+              </div>
             </div>
           </div>
 
           <div class="col card rose">
             <div class="card-head">
-              <span class="icon" aria-hidden="true">🪡</span>
+              <span class="icon">🪡</span>
               <h3>Preview (stitched)</h3>
             </div>
 
-            <!-- Hidden until a file arrives -->
-            <div id="previewHost" class="preview hidden">
-              <canvas id="previewCanvas"></canvas>
-
-              <!-- progress -->
-              <div id="progressWrap" class="progress hidden" role="status" aria-live="polite">
-                <div id="progressBar"></div>
-                <div id="progressLabel">Preparing…</div>
-              </div>
+            <div class="preview hidden" id="previewHost">
+              <!-- filled by JS -->
             </div>
 
             <div class="formats">
-              <button id="btnDst" class="btn soft">DST</button>
-              <button id="btnExp" class="btn soft">EXP</button>
-              <button id="btnPng" class="btn soft">PNG</button>
+              <button class="btn soft" id="btnDst" disabled>DST</button>
+              <button class="btn soft" id="btnExp" disabled>EXP</button>
+              <button class="btn soft" id="btnPng">PNG</button>
+              <button class="btn soft" id="btnProcess">Process Photo</button>
+            </div>
 
-              <button id="btnProcess" class="btn soft strong">Process Photo</button>
-              <button id="btnHighlight" class="btn soft">Highlight Subject</button>
-              <label class="check"><input id="chkNoSubject" type="checkbox"> No subject</label>
+            <div class="formats under">
+              <button class="btn soft" id="btnHighlight">Highlight Subject</button>
+              <label class="check"><input type="checkbox" id="noSubject"> No subject</label>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Draw panel -->
+      <!-- Draw & Trace Panel -->
       <div class="panel" data-panel="draw">
         <div class="grid">
           <div class="col card violet">
             <div class="card-head">
-              <span class="icon" aria-hidden="true">✂️</span>
+              <span class="icon">✂️</span>
               <h3>Draw &amp; Trace</h3>
             </div>
 
-            <div id="drawHost" class="canvas">
-              <!-- the background image is painted into bgCanvas; overlay is the pen -->
-              <canvas id="bgCanvas" aria-hidden="true"></canvas>
-              <canvas id="drawCanvas"></canvas>
+            <div class="canvas" id="drawHost">
+              <!-- image layer + drawing layer are injected -->
             </div>
 
             <div class="toolbar">
-              <button id="toolPen" class="btn soft active">Pen</button>
-              <button id="toolEraser" class="btn soft">Eraser</button>
-              <button id="toolClear" class="btn soft">Clear</button>
-              <button id="toolProcessSel" class="btn soft strong">Process Selection</button>
+              <button class="btn soft" id="penBtn">Pen</button>
+              <button class="btn soft" id="eraserBtn">Eraser</button>
+              <button class="btn soft" id="clearBtn">Clear</button>
+              <button class="btn soft" id="processSelectionBtn">Process Selection</button>
             </div>
           </div>
 
           <div class="col card green">
             <div class="card-head">
-              <span class="icon" aria-hidden="true">🎨</span>
+              <span class="icon">🎨</span>
               <h3>Thread Palette</h3>
             </div>
-            <div id="swatches" class="swatches"></div>
+
+            <div class="swatches" id="swatches"></div>
+
             <div class="formats">
-              <button class="btn soft" disabled>Suggest Stitch Types</button>
-              <button class="btn soft" disabled>Export Embroidery</button>
+              <button class="btn soft" id="suggestBtn">Suggest Stitch Types</button>
+              <button class="btn soft" id="exportEmbroideryBtn" disabled>Export Embroidery</button>
             </div>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Footer (unchanged look) -->
+    <section id="gallery" class="inspo">
+      <div class="inspo-inner">
+        <div class="inspo-copy">
+          <h3>Make it cute, make it yours</h3>
+          <p>Inspired by soft pastels, scalloped edges, and playful shapes. Loomabelle’s look draws from modern stationery and cozy craft vibes.</p>
+          <div class="cta"><button class="btn soft">Brand kit</button><button class="btn soft">Color themes</button></div>
+        </div>
+        <div class="inspo-grid">
+          <div class="tile"></div><div class="tile"></div><div class="tile"></div>
+          <div class="tile"></div><div class="tile"></div><div class="tile"></div>
+        </div>
+      </div>
+    </section>
+
     <footer class="sitefooter">
       <div class="footcard">
         <div class="footgrid">
@@ -169,9 +172,9 @@
             <h4>Join the list</h4>
             <p>Be first to hear when the converter goes live.</p>
           </div>
-          <form class="sub">
-            <input placeholder="Email address" disabled />
-            <button class="btn rainbow" disabled>Subscribe</button>
+          <form class="sub" onsubmit="return false;">
+            <input placeholder="Email address" />
+            <button class="btn rainbow">Subscribe</button>
           </form>
         </div>
         <div class="footlinks">
@@ -183,41 +186,20 @@
         </div>
       </div>
     </footer>
+  </main>
+
+  <!-- Progress overlay -->
+  <div id="progressOverlay" class="overlay hidden" role="status" aria-live="polite">
+    <div class="overlay-card">
+      <div class="spinner"></div>
+      <div class="overlay-text" id="progressText">Processing…</div>
+      <div class="bar"><div class="bar-fill" id="progressFill" style="width:0%"></div></div>
+    </div>
   </div>
 
-  <!-- App state (tiny event bus) -->
-  <script>
-    window.App = {
-      image: null,          // ImageBitmap of the uploaded image
-      lastResult: null,     // ImageBitmap of last processed result
-      mask: null,           // HTMLCanvasElement from Draw tab (selection)
-      options: { palette:true, edge:true, density:3 },
-      emit(type, detail){ document.dispatchEvent(new CustomEvent(type,{detail})) },
-      on(type, fn){ document.addEventListener(type, e=>fn(e.detail)) }
-    };
-  </script>
-
-  <!-- Modules -->
-  <script src="processing.js"></script>
-  <script src="script.upload.js"></script>
-  <script src="script.preview.js"></script>
-  <script src="script.draw.js"></script>
-  <script>
-    // Tabs + smooth scroll
-    document.querySelectorAll('[data-scroll]').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        document.querySelector(btn.dataset.scroll).scrollIntoView({behavior:'smooth'});
-        if (btn.dataset.tab) switchTab(btn.dataset.tab);
-      });
-    });
-
-    const tabBtns=[...document.querySelectorAll('.tab-btn')];
-    function switchTab(name){
-      tabBtns.forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
-      document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active', p.dataset.panel===name));
-    }
-    tabBtns.forEach(b=>b.addEventListener('click', ()=>switchTab(b.dataset.tab)));
-    document.getElementById('year').textContent = new Date().getFullYear();
-  </script>
+  <script src="processing.js" defer></script>
+  <script src="script.preview.js" defer></script>
+  <script src="script.upload.js" defer></script>
+  <script src="script.draw.js" defer></script>
 </body>
 </html>

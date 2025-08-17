@@ -1,71 +1,33 @@
-/* Upload handling + tab switching + glue logic */
-(() => {
-  const $ = s => document.querySelector(s);
+// Handles file input & initial preview
+(function(){
+  const $ = (s, r=document)=>r.querySelector(s);
+  const input = $('#fileInput');
 
-  // Tabs
-  document.querySelectorAll('.tab-btn').forEach(btn=>{
+  input.addEventListener('change', async (e)=>{
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+
+    // Load as ImageBitmap (fast)
+    const blobURL = URL.createObjectURL(file);
+    const img = await fetch(blobURL).then(r=>r.blob()).then(createImageBitmap);
+    URL.revokeObjectURL(blobURL);
+
+    window.Looma.imageBitmap = img;
+
+    // Reset mask & processed canvas
+    window.Looma.maskCanvas = null;
+    window.Looma.processedCanvas = null;
+
+    // Show original in preview and enable things
+    await window.LoomaPreview.drawIntoPreview(img);
+  });
+
+  // Also allow clicking hero buttons to scroll to tabs
+  document.querySelectorAll('[data-scroll]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
-      const tab = btn.dataset.tab;
-      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b===btn));
-      document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active', p.dataset.panel===tab));
-      if (tab==='draw' && LB.photoCanvas) LBSetDrawBackground(LB.photoCanvas);
+      const sel = btn.getAttribute('data-scroll');
+      const el = document.querySelector(sel);
+      if (el) el.scrollIntoView({behavior:'smooth'});
     });
   });
-  document.querySelectorAll('[data-scroll]').forEach(b=>{
-    b.addEventListener('click',()=>{
-      const target = document.querySelector(b.dataset.scroll);
-      if (b.dataset.tab) document.querySelector(`.tab-btn[data-tab="${b.dataset.tab}"]`).click();
-      target?.scrollIntoView({behavior:'smooth',block:'start'});
-    });
-  });
-
-  // Footer year
-  document.getElementById('year').textContent = new Date().getFullYear();
-
-  // Upload handlers (click + drag)
-  const fileInput = $('#fileInput');
-  const dropArea = $('#dropArea');
-  ;['dragenter','dragover'].forEach(ev=>dropArea.addEventListener(ev,e=>{e.preventDefault(); dropArea.classList.add('hover');}));
-  ;['dragleave','drop'].forEach(ev=>dropArea.addEventListener(ev,e=>{e.preventDefault(); dropArea.classList.remove('hover');}));
-  dropArea.addEventListener('drop',e=>{
-    const f=e.dataTransfer.files?.[0]; if (f) handleFile(f);
-  });
-  fileInput.addEventListener('change', e=>{
-    const f=e.target.files?.[0]; if (f) handleFile(f);
-  });
-
-  async function handleFile(file){
-    try{
-      const bmp = await createImageBitmap(file);
-      LB.image = bmp;
-      // scale to preview host size (logical px)
-      LBShowPreview(true);
-      LBSizePreview();
-      const pr = document.getElementById('previewHost').getBoundingClientRect();
-      const canvas = LoomaProc.scaleToFit(bmp, pr.width*2, pr.height*2); // high-res for quality
-      LB.photoCanvas = canvas;
-      LB.maskCanvas = null; // reset previous mask
-      LBRepaint();
-      // sync draw tab guide
-      LBSetDrawBackground(canvas);
-    }catch(err){
-      console.error(err);
-      alert('Sorry — could not read that image.');
-    }
-  }
-
-  // Export buttons (PNG demo; others are placeholders)
-  function downloadCanvasPNG(c, name='loomabelle.png'){
-    const a=document.createElement('a');
-    a.href = c instanceof OffscreenCanvas ? c.convertToBlob ? URL.createObjectURL(await c.convertToBlob()) : '' : c.toDataURL('image/png');
-    if (!a.href){ alert('PNG export not supported in this browser'); return; }
-  }
-
-  document.getElementById('btnPNG')?.addEventListener('click', ()=>{
-    const a=document.createElement('a');
-    a.download='loomabelle.png';
-    a.href=LB.previewCanvas.toDataURL('image/png');
-    a.click();
-  });
-
 })();

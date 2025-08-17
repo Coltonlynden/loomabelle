@@ -11,13 +11,12 @@
     App.lastResult = null;
     App.emit('image:loaded', bmp);
     previewHost.classList.remove('hidden');
-    document.getElementById('previewCard').style.display = '';
+    // NEW: show the entire preview card (keeps design unchanged, only visibility)
+    const card = document.getElementById('previewCard'); if(card) card.style.display='';
   }
 
   // helpers
-  async function blobFromFile(file){
-    return await file.slice(0,file.size, file.type||'image/*');
-  }
+  function blobFromFile(file){ return new Promise(res=>{ const r=new FileReader(); r.onload=()=>res(new Blob([r.result])); r.readAsArrayBuffer(file); }); }
 
   // drag/drop
   ['dragenter','dragover'].forEach(ev=>dropZone.addEventListener(ev,e=>{e.preventDefault();}));

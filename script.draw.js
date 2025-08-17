@@ -1,4 +1,4 @@
-// Drawing canvas (pen/eraser), background image, Process Selection -> pipeline with mask
+// Drawing: pen/eraser, optional LASSO fill, Process -> back to Upload with preview updated
 (function(){
   const host = document.getElementById('drawHost');
   const bg   = document.getElementById('bgCanvas');
@@ -12,6 +12,7 @@
   const toolProcess  = document.getElementById('toolProcessSel');
 
   let tool='pen', drawing=false, lastX=0,lastY=0, scale=1, offsetX=0, offsetY=0, bmpForBg=null;
+  let lassoMode=false, lassoPts=[];
 
   function fitCanvases(){
     const r = host.getBoundingClientRect();
@@ -39,8 +40,9 @@
     bctx.drawImage(bmp, 0,0,bmp.width,bmp.height, offsetX,offsetY, w,h);
   }
 
-  // set background from preview
+  // from Preview
   App.on('draw:bg', ({bmp})=>{ fitCanvases(); paintBackground(bmp); clearDraw(); });
+  App.on('draw:lasso', ()=>{ lassoMode = true; lassoPts = []; setTool('pen'); });
 
   // drawing
   function pointerXY(e){
@@ -53,21 +55,22 @@
   function drawLine(x,y){
     dctx.lineCap='round'; dctx.lineJoin='round';
     dctx.lineWidth = 16 * (window.devicePixelRatio || 1);
-    if(tool==='pen'){
-      dctx.globalCompositeOperation='source-over';
-      dctx.strokeStyle='#0f172a';
-    }else{
-      dctx.globalCompositeOperation='destination-out';
-      dctx.strokeStyle='rgba(0,0,0,1)';
-    }
+    dctx.globalCompositeOperation = (tool==='pen' ? 'source-over' : 'destination-out');
+    dctx.strokeStyle = (tool==='pen' ? '#0f172a' : 'rgba(0,0,0,1)');
     dctx.beginPath();
     dctx.moveTo(lastX,lastY);
     dctx.lineTo(x,y);
     dctx.stroke();
     lastX=x; lastY=y;
   }
-  function onDown(e){ drawing=true; const p=pointerXY(e); lastX=p.x; lastY=p.y; e.preventDefault(); }
-  function onMove(e){ if(!drawing) return; const p=pointerXY(e); drawLine(p.x,p.y); e.preventDefault(); }
+  function onDown(e){
+    drawing=true; const p=pointerXY(e); lastX=p.x; lastY=p.y; e.preventDefault();
+    if(lassoMode){ lassoPts.push({x:lastX, y:lastY}); }
+  }
+  function onMove(e){
+    if(!drawing) return; const p=pointerXY(e); drawLine(p.x,p.y); e.preventDefault();
+    if(lassoMode){ lassoPts.push({x:p.x, y:p.y}); }
+  }
   function onUp(){ drawing=false; dctx.globalCompositeOperation='source-over'; }
 
   draw.addEventListener('pointerdown', onDown, {passive:false});
@@ -76,15 +79,39 @@
   draw.addEventListener('pointercancel',onUp,   {passive:false});
   draw.addEventListener('pointerleave', onUp,   {passive:false});
 
-  function clearDraw(){ dctx.setTransform(1,0,0,1,0,0); dctx.clearRect(0,0,draw.width,draw.height); }
-  if (toolClear) toolClear.addEventListener('click', clearDraw);
+  function clearDraw(){ dctx.setTransform(1,0,0,1,0,0); dctx.clearRect(0,0,draw.width,draw.height); lassoPts=[]; }
+  if (toolClear) toolClear.addEventListener('click', ()=>{ clearDraw(); lassoMode=false; });
 
-  if (toolPen)    toolPen.addEventListener('click', ()=>{tool='pen';    toolPen.classList.add('active'); toolEraser.classList.remove('active');});
-  if (toolEraser) toolEraser.addEventListener('click', ()=>{tool='eraser'; toolEraser.classList.add('active'); toolPen.classList.remove('active');});
+  function setTool(name){
+    tool=name;
+    if (toolPen)    toolPen.classList.toggle('active', tool==='pen');
+    if (toolEraser) toolEraser.classList.toggle('active', tool==='eraser');
+  }
+  if (toolPen)    toolPen.addEventListener('click', ()=>{ setTool('pen'); lassoMode=false; });
+  if (toolEraser) toolEraser.addEventListener('click', ()=>{ setTool('eraser'); lassoMode=false; });
 
-  // Process Selection with mask -> run pipeline -> return to Upload with preview updated
+  // Fill the lasso polygon into the draw layer
+  function fillLassoIfAny(){
+    if (!lassoMode || lassoPts.length < 3) return;
+    dctx.save();
+    dctx.globalCompositeOperation='source-over';
+    dctx.fillStyle='#0f172a';
+    dctx.beginPath();
+    dctx.moveTo(lassoPts[0].x, lassoPts[0].y);
+    for (let i=1;i<lassoPts.length;i++) dctx.lineTo(lassoPts[i].x, lassoPts[i].y);
+    dctx.closePath();
+    dctx.fill();
+    dctx.restore();
+    lassoMode = false;
+    lassoPts = [];
+  }
+
+  // Process Selection with mask -> pipeline -> Upload tab with preview
   if (toolProcess) toolProcess.addEventListener('click', async ()=>{
     if(!App.image){ return; }
+
+    // ensure lasso is filled to create a solid interior
+    fillLassoIfAny();
 
     // build mask at image resolution from draw canvas
     const mask = document.createElement('canvas');
@@ -100,7 +127,7 @@
         const dy = Math.round(iy*scale + offsetY);
         let a = 0;
         if(dx>=0 && dy>=0 && dx<draw.width && dy<draw.height){
-          const di = (dy*draw.width + dx)*4 + 3;
+          const di = (dy*draw.width + dx)*4 + 3; // alpha from draw layer
           a = tmp[di];
         }
         const i = (iy*mask.width + ix)*4;
@@ -110,7 +137,7 @@
     mx.putImageData(mdata,0,0);
     App.mask = mask;
 
-    // show preview/progress while processing
+    // show preview area & progress
     const previewHost = document.getElementById('previewHost');
     const previewCard = document.getElementById('previewCard');
     const bar  = document.getElementById('progressBar');
@@ -121,15 +148,23 @@
     if (wrap) wrap.classList.remove('hidden');
 
     const progress = (p,l)=>{ if(bar) bar.style.transform=`scaleX(${Math.max(0,Math.min(1,p))})`; if(lab && l) lab.textContent=l; };
-    const bmp = await Processing.processImage(App.image, mask, {...App.options, noSubject:false}, progress);
+    const bmp = await Processing.processImage(App.image, mask, Object.assign({}, App.options, { noSubject:false }), progress);
 
     if (wrap) wrap.classList.add('hidden');
     App.lastResult = bmp;
 
     // switch back to Upload tab and update preview
-    document.querySelector('.tab-btn[data-tab="upload"]').click();
+    const btn = document.querySelector('.tab-btn[data-tab="upload"]');
+    if (btn) btn.click();
+    else switchTo('upload');
     App.emit('image:loaded', bmp);
   });
+
+  // Fallback tab switcher (if no .tab-btn click handler available)
+  function switchTo(name){
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active', p.dataset.panel===name));
+  }
 
   new ResizeObserver(()=>fitCanvases()).observe(host);
   window.addEventListener('resize', fitCanvases);

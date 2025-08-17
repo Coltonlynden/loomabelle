@@ -1,91 +1,126 @@
-/* Handles preview state, painting to the preview canvas, and palette UI */
-(() => {
-  const $ = s => document.querySelector(s);
+// Preview handling + tab switching + scroll helpers
+(function(){
+  const $ = (s, r=document)=>r.querySelector(s);
+  const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
+
   const previewHost = $('#previewHost');
   const previewCanvas = $('#previewCanvas');
-  const ctx = previewCanvas.getContext('2d');
-  const swatches = $('#swatches');
+  const processBtn = $('#btnProcess');
+  const pngBtn = $('#btnPng');
+  const highlightBtn = $('#btnHighlight');
+  const noSubjectChk = $('#noSubject');
 
-  // public state container for other scripts
-  window.LB = {
-    image: null,                 // ImageBitmap of uploaded photo
-    photoCanvas: null,           // scaled original
-    maskCanvas: null,            // from draw tab
-    previewCanvas,
-    options: { reduce:true, edge:true, density:25, tint:'#000000' }
+  const optPalette = $('#optPalette');
+  const optEdge = $('#optEdge');
+  const density = $('#density');
+
+  // global-ish state container
+  window.Looma = {
+    imageBitmap: null,      // original photo
+    maskCanvas: null,       // from draw tool
+    processedCanvas: null,  // last result
+    setMaskFrom(drawCanvas){
+      if (!drawCanvas) { this.maskCanvas = null; return; }
+      // Clone to same size as preview canvas
+      const c = document.createElement('canvas');
+      c.width = drawCanvas.width; c.height = drawCanvas.height;
+      c.getContext('2d').drawImage(drawCanvas,0,0);
+      this.maskCanvas = c;
+    }
   };
 
-  // simple thread colors
-  const COLORS = ['#ef4444','#f472b6','#a78bfa','#60a5fa','#38bdf8','#22c55e',
-                  '#f59e0b','#f97316','#fb7185','#10b981','#14b8a6','#3b82f6'];
-  COLORS.forEach(c=>{
-    const b=document.createElement('button');
-    b.className='sw'; b.style.background=c; b.title=c;
-    b.addEventListener('click',()=>{ LB.options.tint=c; repaint(); });
-    swatches.appendChild(b);
-  });
-
-  function sizeCanvasToHost(canvas, host){
-    const rect = host.getBoundingClientRect();
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = Math.max(1, Math.round(rect.width * dpr));
-    canvas.height = Math.max(1, Math.round(rect.height * dpr));
+  // Resize canvas to host size (CSS → backing pixels)
+  function fitCanvasToHost(canvas, host){
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const w = host.clientWidth;
+    const h = host.clientHeight;
+    canvas.width = Math.round(w*dpr);
+    canvas.height = Math.round(h*dpr);
+    canvas.style.width = w+'px';
+    canvas.style.height = h+'px';
+    return {w:canvas.width, h:canvas.height, dpr};
   }
 
-  function clearCanvas(c){
-    const x=c.getContext('2d');
-    x.clearRect(0,0,c.width,c.height);
-    x.fillStyle='#ffffff'; x.fillRect(0,0,c.width,c.height);
-  }
+  async function drawIntoPreview(bitmapOrCanvas){
+    previewHost.classList.remove('hidden');
+    const {w,h,dpr} = fitCanvasToHost(previewCanvas, previewHost);
+    const ctx = previewCanvas.getContext('2d');
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.clearRect(0,0,w,h);
 
-  // Repaint pipeline (no flicker; uses offscreen steps)
-  async function repaint(){
-    if (!LB.photoCanvas){ clearCanvas(previewCanvas); return; }
-    sizeCanvasToHost(previewCanvas, previewHost);
-
-    // start with scaled photo
-    let work = LB.photoCanvas;
-    // apply mask if present (highlight subject)
-    if (LB.maskCanvas && !$('#chkNoSubject').checked){
-      work = LoomaProc.applyMask(work, LB.maskCanvas);
-    }
-    // reduce colors
-    if ($('#optReduce')?.checked) {
-      LoomaProc.quantize(work, 8);
-    }
-    // edge overlay
-    if ($('#optEdge')?.checked){
-      const edge = LoomaProc.edgeOutline(work, 0.6);
-      const tctx = previewCanvas.getContext('2d');
-      tctx.clearRect(0,0,previewCanvas.width,previewCanvas.height);
-      tctx.drawImage(edge, 0, 0, previewCanvas.width, previewCanvas.height);
-      // subtle tint
-      tctx.globalCompositeOperation = 'multiply';
-      tctx.fillStyle = LB.options.tint;
-      tctx.fillRect(0,0,previewCanvas.width,previewCanvas.height);
-      tctx.globalCompositeOperation = 'source-over';
-    } else {
-      ctx.clearRect(0,0,previewCanvas.width,previewCanvas.height);
-      ctx.drawImage(work,0,0,previewCanvas.width,previewCanvas.height);
-    }
+    // letterbox fit
+    const srcW = bitmapOrCanvas.width;
+    const srcH = bitmapOrCanvas.height;
+    const scale = Math.min(w/srcW, h/srcH);
+    const dw = Math.round(srcW*scale);
+    const dh = Math.round(srcH*scale);
+    const dx = Math.round((w-dw)/2);
+    const dy = Math.round((h-dh)/2);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(bitmapOrCanvas, 0,0,srcW,srcH, dx,dy,dw,dh);
   }
 
   // Buttons
-  $('#btnProcess')?.addEventListener('click', repaint);
-  $('#btnHighlight')?.addEventListener('click', () => {
-    document.querySelector('[data-tab="draw"]').click();
-    document.querySelector('.tabs .muted').textContent = 'trace the subject, then Process Selection';
+  processBtn.addEventListener('click', async ()=>{
+    if (!window.Looma.imageBitmap) return;
+    processBtn.disabled = true;
+    try{
+      const useMask = !noSubjectChk.checked && window.Looma.maskCanvas;
+      const maskBitmap = useMask ? await createImageBitmap(window.Looma.maskCanvas) : null;
+      const out = await window.LoomaProcessing.process(
+        window.Looma.imageBitmap,
+        { palette: optPalette.checked, edge: optEdge.checked, density: +density.value, maskBitmap }
+      );
+      window.Looma.processedCanvas = out;
+      await drawIntoPreview(out);
+    }finally{
+      processBtn.disabled = false;
+    }
   });
-  $('#chkNoSubject')?.addEventListener('change', repaint);
-  $('#optReduce')?.addEventListener('change', repaint);
-  $('#optEdge')?.addEventListener('change', repaint);
-  $('#density')?.addEventListener('input', e => { LB.options.density=+e.target.value; });
 
-  // Expose for upload/draw scripts
-  window.LBRepaint = repaint;
-  window.LBSizePreview = () => sizeCanvasToHost(previewCanvas, previewHost);
-  window.LBShowPreview = (show=true) => previewHost.classList.toggle('hidden', !show);
+  pngBtn.addEventListener('click', ()=>{
+    const src = window.Looma.processedCanvas || previewCanvas;
+    window.LoomaProcessing.savePNG(src, 'loomabelle.png');
+  });
 
-  // init
-  window.addEventListener('resize', ()=>{ if(!previewHost.classList.contains('hidden')){LBSizePreview(); repaint();} });
+  // Highlight Subject → jump to drawing tab and overlay the photo as guide
+  highlightBtn.addEventListener('click', ()=>{
+    $('#tabDraw').click();
+    window.dispatchEvent(new CustomEvent('loom:draw:showGuide'));
+  });
+
+  // Expose helpers for other modules
+  window.addEventListener('loom:preview:showOriginal', async ()=>{
+    if (window.Looma.imageBitmap) await drawIntoPreview(window.Looma.imageBitmap);
+  });
+
+  window.addEventListener('loom:preview:showProcessed', async ()=>{
+    if (window.Looma.processedCanvas) await drawIntoPreview(window.Looma.processedCanvas);
+  });
+
+  // Tabs
+  function activate(panel){
+    $$('.panel').forEach(p=>p.classList.remove('active'));
+    $(`.panel[data-panel="${panel}"]`).classList.add('active');
+    $$('.tab-btn').forEach(b=>b.classList.remove('active'));
+    (panel==='upload' ? $('#tabUpload') : $('#tabDraw')).classList.add('active');
+  }
+  $('#tabUpload').addEventListener('click', ()=>activate('upload'));
+  $('#tabDraw').addEventListener('click', ()=>activate('draw'));
+
+  // Smooth scroll helpers
+  $$('[data-scroll]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const sel = btn.getAttribute('data-scroll');
+      const el = document.querySelector(sel);
+      if (el) el.scrollIntoView({behavior:'smooth', block:'start'});
+    });
+  });
+
+  // Year
+  const y = document.getElementById('year'); if (y) y.textContent = new Date().getFullYear();
+
+  // public for upload module
+  window.LoomaPreview = { drawIntoPreview, fitCanvasToHost, previewHost, previewCanvas };
 })();

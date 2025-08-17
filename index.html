@@ -95,8 +95,8 @@
             </div>
           </div>
 
-          <!-- Preview card (hidden by default until a file is loaded) -->
-          <div id="previewCard" class="col card rose hidden">
+          <!-- Preview card (hidden until a file is loaded) -->
+          <div id="previewCard" class="col card rose" style="display:none">
             <div class="card-head">
               <span class="icon" aria-hidden="true">🪡</span>
               <h3>Preview (stitched)</h3>
@@ -175,9 +175,9 @@
   <!-- App state (tiny event bus) -->
   <script>
     window.App = {
-      image: null,
-      lastResult: null,
-      mask: null,
+      image: null,          // ImageBitmap of the uploaded image
+      lastResult: null,     // ImageBitmap of last processed result
+      mask: null,           // HTMLCanvasElement from Draw tab (selection)
       options: { palette:true, edge:true, density:3 },
       emit(type, detail){ document.dispatchEvent(new CustomEvent(type,{detail})) },
       on(type, fn){ document.addEventListener(type, e=>fn(e.detail)) }

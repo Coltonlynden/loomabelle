@@ -1,164 +1,78 @@
-/* Global app namespace */
-window.LMB = window.LMB || {};
-
+// Renders into preview canvas, highlight subject → switches to draw
 (function(){
-  const qs = s => document.querySelector(s);
-  const qsa = s => [...document.querySelectorAll(s)];
+  const c = document.getElementById('previewCanvas');
+  const ctx = c.getContext('2d');
+  const host = document.getElementById('previewHost');
 
-  // Year
-  const yr = qs('#year'); if (yr) yr.textContent = new Date().getFullYear();
+  const btnProcess = document.getElementById('btnProcess');
+  const btnHighlight = document.getElementById('btnHighlight');
+  const chkNoSubject = document.getElementById('chkNoSubject');
 
-  // Smooth scroll + tab jump
-  qsa('[data-scroll]').forEach(btn=>{
-    btn.addEventListener('click', e=>{
-      const to = btn.getAttribute('data-scroll');
-      const target = document.querySelector(to);
-      if (target) target.scrollIntoView({behavior:'smooth', block:'start'});
-      const tab = btn.getAttribute('data-tab');
-      if (tab) switchTab(tab);
-    });
-  });
+  const pWrap = document.getElementById('progressWrap');
+  const pBar  = document.getElementById('progressBar');
+  const pLab  = document.getElementById('progressLabel');
 
-  // Tabs
-  const tabBtns = qsa('.tab-btn');
-  const panels = qsa('.panel');
-  function switchTab(name){
-    tabBtns.forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
-    panels.forEach(p=>p.classList.toggle('active', p.dataset.panel===name));
-  }
-  tabBtns.forEach(b=>b.addEventListener('click', ()=>switchTab(b.dataset.tab)));
-
-  // Preview canvas + state
-  const previewHost = qs('#preview-host');
-  const previewCanvas = qs('#preview-canvas');
-  const pctx = previewCanvas.getContext('2d', { willReadFrequently:true });
-
-  const state = {
-    imgBitmap: null,
-    imgAspect: 16/9,
-    options: {
-      palette: true,
-      edges: true,
-      density: 25,
-      noSubject: false
-    },
-    maskPNG: null // dataURL from draw tab (user trace)
-  };
-  window.LMB.state = state;
-
-  // Controls
-  const optPalette = qs('#optPalette');
-  const optEdges   = qs('#optEdges');
-  const density    = qs('#density');
-  const noSubject  = qs('#noSubject');
-  [optPalette,optEdges,density,noSubject].forEach(el=>{
-    if(!el) return;
-    el.addEventListener('input', ()=>{
-      state.options.palette  = !!optPalette.checked;
-      state.options.edges    = !!optEdges.checked;
-      state.options.density  = +density.value|0;
-      state.options.noSubject= !!noSubject.checked;
-    });
-  });
-
-  // Action buttons
-  const btnProcess   = qs('#btnProcess');
-  const btnHighlight = qs('#btnHighlight');
-  if (btnHighlight) btnHighlight.addEventListener('click', ()=>{
-    // Jump user to Draw tab to trace, then they hit "Process Selection"
-    switchTab('draw');
-    document.querySelector('#draw-host').scrollIntoView({behavior:'smooth', block:'start'});
-  });
-
-  // Minimal “export” buttons (stub to show UI is wired)
-  ['btnDst','btnExp','btnPng'].forEach(id=>{
-    const b = qs('#'+id);
-    if (b) b.addEventListener('click', ()=>{
-      if (!state.lastPNG) return alert('Process a photo first.');
-      const a = document.createElement('a');
-      a.href = state.lastPNG;
-      a.download = id==='btnPng' ? 'preview.png' : (id==='btnDst'?'preview.dst':'preview.exp'); // place-holder
-      a.click();
-    });
-  });
-
-  // Processing worker
-  const worker = new Worker('processing.js', { type:'classic' });
-
-  function drawFit(image){
-    // Fit image into previewCanvas while preserving aspect
-    const { width:W, height:H } = previewCanvas;
-    pctx.clearRect(0,0,W,H);
-
-    let iw = image.width, ih = image.height;
-    const s = Math.min(W/iw, H/ih);
-    const dw = Math.round(iw*s), dh = Math.round(ih*s);
-    const dx = Math.floor((W-dw)/2), dy = Math.floor((H-dh)/2);
-    pctx.drawImage(image, dx, dy, dw, dh);
+  // fit canvas to host
+  function fitCanvas(){
+    const r = host.getBoundingClientRect();
+    c.width = Math.floor(r.width * devicePixelRatio);
+    c.height= Math.floor(r.height* devicePixelRatio);
+    c.style.width = r.width+'px';
+    c.style.height= r.height+'px';
   }
 
-  // Public API for upload & draw modules
-  window.LMB.setImage = async function(imgBitmap){
-    state.imgBitmap = imgBitmap;
-    state.imgAspect = imgBitmap.width / imgBitmap.height;
-    previewHost.classList.remove('hidden');
-    drawFit(imgBitmap);
-    state.lastPNG = null;
-  };
-
-  window.LMB.setMask = function(dataURL){
-    state.maskPNG = dataURL; // used on next process
-    // Immediately process with mask for user feedback
-    processNow();
-  };
-
-  function processNow(){
-    if (!state.imgBitmap) { alert('Upload a photo first.'); return; }
-    btnProcess && (btnProcess.disabled = true, btnProcess.textContent = 'Processing…');
-
-    // Pack data for worker
-    const off = new OffscreenCanvas(previewCanvas.width, previewCanvas.height);
-    const octx = off.getContext('2d');
-    // Draw the fitted source the same way so worker gets consistent pixels
-    let iw = state.imgBitmap.width, ih = state.imgBitmap.height;
-    const W = off.width, H = off.height;
-    const s = Math.min(W/iw, H/ih);
-    const dw = Math.round(iw*s), dh = Math.round(ih*s);
-    const dx = Math.floor((W-dw)/2), dy = Math.floor((H-dh)/2);
-    octx.clearRect(0,0,W,H);
-    octx.drawImage(state.imgBitmap, dx, dy, dw, dh);
-
-    const src = octx.getImageData(0,0,W,H);
-
-    worker.postMessage({
-      type:'process',
-      image: src,
-      options: state.options,
-      maskPNG: state.maskPNG
-    }, [src.data.buffer]); // transfer pixels
+  // draw an ImageBitmap into preview canvas (letterbox)
+  function drawBitmap(bmp){
+    fitCanvas();
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.clearRect(0,0,c.width,c.height);
+    const scale = Math.min(c.width/bmp.width, c.height/bmp.height);
+    const w = Math.floor(bmp.width*scale), h = Math.floor(bmp.height*scale);
+    const x = (c.width - w)>>1, y = (c.height - h)>>1;
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(bmp, 0,0,bmp.width,bmp.height, x,y,w,h);
   }
 
-  btnProcess && btnProcess.addEventListener('click', processNow);
+  // Listen for new image
+  App.on('image:loaded', (bmp)=>drawBitmap(bmp));
+  window.addEventListener('resize', ()=>{ if(App.image || App.lastResult) drawBitmap(App.lastResult||App.image); });
 
-  worker.onmessage = (ev)=>{
-    const msg = ev.data;
-    if (msg.type==='result'){
-      const { width, height, dataURL } = msg;
-      const img = new Image();
-      img.onload = ()=>{
-        pctx.clearRect(0,0,previewCanvas.width,previewCanvas.height);
-        pctx.drawImage(img,0,0,previewCanvas.width,previewCanvas.height);
-        state.lastPNG = dataURL;
-        btnProcess && (btnProcess.disabled=false, btnProcess.textContent='Process Photo');
-      };
-      img.src = dataURL;
-    } else if (msg.type==='error'){
-      console.error(msg.error);
-      alert('Processing failed on this device.');
-      btnProcess && (btnProcess.disabled=false, btnProcess.textContent='Process Photo');
-    }
-  };
+  // Progress helpers
+  function showProgress(label){ pWrap.classList.remove('hidden'); setProgress(0,label); }
+  function setProgress(v,label){ pBar.style.transform = `scaleX(${Math.max(0,Math.min(1,v))})`; if(label) pLab.textContent = label; }
+  function hideProgress(){ pWrap.classList.add('hidden'); }
 
-  // Expose for upload/draw scripts
-  window.LMB._drawFit = drawFit;
+  // Process Photo
+  btnProcess.addEventListener('click', async ()=>{
+    if(!App.image){ toast('Upload a photo first.'); return; }
+    showProgress('Preparing…');
+    const opts = {...App.options, noSubject: chkNoSubject.checked };
+    const bmp = await Processing.processImage(App.image, null, opts, (p,l)=>setProgress(p,l));
+    hideProgress();
+    App.lastResult = bmp;
+    drawBitmap(bmp);
+  });
+
+  // Highlight Subject → open Draw tab and paint bgCanvas
+  btnHighlight.addEventListener('click', ()=>{
+    if(!App.image){ toast('Upload a photo first.'); return; }
+    // switch tab
+    document.querySelector('.tab-btn[data-tab="draw"]').click();
+    // tell draw module to load background
+    App.emit('draw:bg', {bmp: App.lastResult || App.image});
+  });
+
+  // export PNG quick demo (placeholders for DST/EXP buttons)
+  document.getElementById('btnPng').addEventListener('click', ()=>{
+    const url = c.toDataURL('image/png');
+    const a=document.createElement('a'); a.href=url; a.download='loomabelle.png'; a.click();
+  });
+
+  // tiny toast
+  function toast(msg){
+    pLab.textContent = msg;
+    pWrap.classList.remove('hidden');
+    setProgress(0);
+    setTimeout(()=>pWrap.classList.add('hidden'), 1500);
+  }
 })();

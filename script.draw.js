@@ -1,117 +1,136 @@
-/* Drawing tab: pen/eraser/clear + Process Selection */
+// Drawing canvas (pen/eraser), background image, Process Selection -> pipeline with mask
 (function(){
-  const host   = document.getElementById('draw-host');
-  const canvas = document.getElementById('draw-canvas');
-  const ctx = canvas.getContext('2d', { willReadFrequently:true });
+  const host = document.getElementById('drawHost');
+  const bg = document.getElementById('bgCanvas');
+  const draw = document.getElementById('drawCanvas');
+  const bctx = bg.getContext('2d');
+  const dctx = draw.getContext('2d');
 
-  let drawing = false;
-  let mode = 'pen';
-  let stroke = '#1f2937';
-  let lastX=0, lastY=0;
+  const toolPen = document.getElementById('toolPen');
+  const toolEraser = document.getElementById('toolEraser');
+  const toolClear = document.getElementById('toolClear');
+  const toolProcess = document.getElementById('toolProcessSel');
 
-  // tool buttons
-  const bPen = document.getElementById('toolPen');
-  const bErs = document.getElementById('toolErase');
-  const bClr = document.getElementById('toolClear');
-  const bProc= document.getElementById('toolProcessSel');
+  let tool='pen', drawing=false, lastX=0,lastY=0, scale=1, offsetX=0, offsetY=0, bmpForBg=null;
 
-  function setActive(btn){
-    [bPen,bErs,bClr,bProc].forEach(b=>b && b.classList.remove('active'));
-    btn && btn.classList.add('active');
+  function fitCanvases(){
+    const r = host.getBoundingClientRect();
+    [bg,draw].forEach(cv=>{
+      cv.width  = Math.floor(r.width * devicePixelRatio);
+      cv.height = Math.floor(r.height* devicePixelRatio);
+      cv.style.width  = r.width +'px';
+      cv.style.height = r.height+'px';
+    });
+    paintBackground(bmpForBg); // repaint with new fit
   }
 
-  bPen.addEventListener('click', ()=>{ mode='pen'; setActive(bPen); });
-  bErs.addEventListener('click', ()=>{ mode='erase'; setActive(bErs); });
-  bClr.addEventListener('click', ()=>{ clearMask(); setActive(bClr); });
-  bProc.addEventListener('click', ()=> exportMaskAndProcess());
+  function paintBackground(bmp){
+    if(!bmp) return;
+    bmpForBg = bmp;
+    bctx.setTransform(1,0,0,1,0,0);
+    bctx.clearRect(0,0,bg.width,bg.height);
+    // letterbox fit & remember transform for drawing coords
+    const s = Math.min(bg.width/bmp.width, bg.height/bmp.height);
+    const w = Math.floor(bmp.width*s), h = Math.floor(bmp.height*s);
+    offsetX = (bg.width - w)>>1; offsetY = (bg.height - h)>>1; scale=s;
+    bctx.drawImage(bmp, 0,0,bmp.width,bmp.height, offsetX,offsetY, w,h);
+  }
 
-  // Swatches set pen color
-  document.getElementById('swatches').addEventListener('click', (e)=>{
-    const b = e.target.closest('.sw'); if (!b) return;
-    stroke = b.dataset.color || '#1f2937';
-    setActive(bPen); mode='pen';
+  // external event from preview: set background image
+  App.on('draw:bg', ({bmp})=>{ fitCanvases(); paintBackground(bmp); clearDraw(); });
+
+  // drawing
+  function pointerXY(e){
+    const rect = draw.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * devicePixelRatio;
+    const y = (e.clientY - rect.top ) * devicePixelRatio;
+    return {x,y};
+  }
+  function drawLine(x,y){
+    dctx.lineCap='round'; dctx.lineJoin='round';
+    dctx.lineWidth = 16*devicePixelRatio;
+    if(tool==='pen'){
+      dctx.globalCompositeOperation='source-over';
+      dctx.strokeStyle='#0f172a';
+    }else{
+      dctx.globalCompositeOperation='destination-out';
+      dctx.strokeStyle='rgba(0,0,0,1)';
+    }
+    dctx.beginPath();
+    dctx.moveTo(lastX,lastY);
+    dctx.lineTo(x,y);
+    dctx.stroke();
+    lastX=x; lastY=y;
+  }
+  function onDown(e){ drawing=true; const p=pointerXY(e); lastX=p.x; lastY=p.y; e.preventDefault(); }
+  function onMove(e){ if(!drawing) return; drawLine(...Object.values(pointerXY(e))); e.preventDefault(); }
+  function onUp(){ drawing=false; dctx.globalCompositeOperation='source-over'; }
+
+  ['pointerdown'].forEach(ev=>draw.addEventListener(ev,onDown));
+  ['pointermove' ].forEach(ev=>draw.addEventListener(ev,onMove));
+  ['pointerup','pointercancel','pointerleave'].forEach(ev=>draw.addEventListener(ev,onUp));
+
+  function clearDraw(){ dctx.setTransform(1,0,0,1,0,0); dctx.clearRect(0,0,draw.width,draw.height); }
+  toolClear.addEventListener('click', clearDraw);
+
+  toolPen.addEventListener('click', ()=>{tool='pen'; toolPen.classList.add('active'); toolEraser.classList.remove('active');});
+  toolEraser.addEventListener('click', ()=>{tool='eraser'; toolEraser.classList.add('active'); toolPen.classList.remove('active');});
+
+  // Process Selection with mask
+  toolProcess.addEventListener('click', async ()=>{
+    if(!App.image){ return modal('Upload a photo first.'); }
+    // build a binary mask at the **image** resolution
+    const mask = document.createElement('canvas');
+    mask.width = App.image.width; mask.height = App.image.height;
+    const mx = mask.getContext('2d');
+
+    // un-letterbox & scale drawing back to image space
+    const sx = (App.image.width * scale) / (App.image.width); // scale used for background fit (not exact but OK)
+    // Simpler: read draw bitmap then map each pixel from draw space back to image space using the inverse of our placement
+    const tmp = dctx.getImageData(0,0,draw.width,draw.height).data;
+    const mdata = mx.getImageData(0,0,mask.width,mask.height);
+    const md = mdata.data;
+
+    // For each pixel in image space, find its location in draw space and copy alpha
+    for(let iy=0; iy<mask.height; iy++){
+      for(let ix=0; ix<mask.width; ix++){
+        const dx = Math.round(ix*scale + offsetX) |0;
+        const dy = Math.round(iy*scale + offsetY) |0;
+        let a = 0;
+        if(dx>=0 && dy>=0 && dx<draw.width && dy<draw.height){
+          const di = (dy*draw.width + dx)*4 + 3; // alpha
+          a = tmp[di];
+        }
+        const i = (iy*mask.width + ix)*4;
+        md[i]=md[i+1]=md[i+2]=255; md[i+3]=a; // white with alpha from drawing
+      }
+    }
+    mx.putImageData(mdata,0,0);
+    App.mask = mask;
+
+    // Run pipeline with progress bar and mask
+    const host = document.getElementById('previewHost');
+    const bar  = document.getElementById('progressBar');
+    const lab  = document.getElementById('progressLabel');
+    const wrap = document.getElementById('progressWrap');
+    host.classList.remove('hidden'); wrap.classList.remove('hidden');
+    const progress = (p,l)=>{ bar.style.transform=`scaleX(${p})`; if(l) lab.textContent=l; };
+
+    const bmp = await Processing.processImage(App.image, mask, {...App.options, noSubject:false}, progress);
+    wrap.classList.add('hidden');
+    App.lastResult = bmp;
+    // switch back to Upload/Preview and show it
+    document.querySelector('.tab-btn[data-tab="upload"]').click();
+    App.emit('image:loaded', bmp); // preview code will draw it
   });
 
-  // Keep canvas pixel size in sync with CSS box
-  function fitCanvas(){
-    const rect = host.getBoundingClientRect();
-    const w = Math.max(320, Math.floor(rect.width));
-    const h = Math.max(180, Math.floor(rect.height));
-    if (canvas.width!==w || canvas.height!==h){
-      const prev = ctx.getImageData(0,0,canvas.width,canvas.height);
-      canvas.width = w; canvas.height = h;
-      // repaint previous content scaled to new size
-      const tmp = document.createElement('canvas');
-      tmp.width = prev.width; tmp.height = prev.height;
-      tmp.getContext('2d').putImageData(prev,0,0);
-      ctx.drawImage(tmp,0,0,w,h);
-    }
-  }
-  new ResizeObserver(fitCanvas).observe(host);
-  fitCanvas();
+  // initial size
+  new ResizeObserver(fitCanvases).observe(host);
+  window.addEventListener('resize', fitCanvases);
+  fitCanvases();
 
-  function pointerPos(e){
-    const r = canvas.getBoundingClientRect();
-    const x = (e.clientX ?? e.touches?.[0]?.clientX) - r.left;
-    const y = (e.clientY ?? e.touches?.[0]?.clientY) - r.top;
-    return {x, y};
-  }
-
-  function begin(e){
-    drawing = true;
-    const {x,y} = pointerPos(e); lastX=x; lastY=y;
-    e.preventDefault();
-  }
-  function move(e){
-    if(!drawing) return;
-    const {x,y} = pointerPos(e);
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = 10; // feel like a marker
-    if (mode==='erase'){
-      ctx.globalCompositeOperation = 'destination-out';
-      ctx.strokeStyle = 'rgba(0,0,0,1)';
-    } else {
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.strokeStyle = stroke;
-    }
-    ctx.beginPath();
-    ctx.moveTo(lastX,lastY);
-    ctx.lineTo(x,y);
-    ctx.stroke();
-    lastX=x; lastY=y;
-    e.preventDefault();
-  }
-  function end(){ drawing=false; }
-
-  // Pointer + touch
-  canvas.addEventListener('pointerdown', begin);
-  canvas.addEventListener('pointermove', move);
-  window.addEventListener('pointerup', end);
-  canvas.addEventListener('touchstart', begin, {passive:false});
-  canvas.addEventListener('touchmove', move, {passive:false});
-  window.addEventListener('touchend', end);
-
-  function clearMask(){
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-  }
-
-  function exportMaskAndProcess(){
-    // Export a transparent PNG where drawn strokes mark the subject.
-    // Thicken the path into a filled region by drawing the current
-    // canvas onto itself with a fat shadow (simple “dilate”).
-    const work = document.createElement('canvas');
-    work.width = canvas.width; work.height = canvas.height;
-    const wctx = work.getContext('2d');
-    wctx.drawImage(canvas,0,0);
-    wctx.globalCompositeOperation='source-over';
-    wctx.filter='blur(6px)'; // soft dilate
-    wctx.drawImage(work,0,0);
-
-    const maskDataURL = work.toDataURL('image/png');
-    // Jump back to upload tab + process
-    document.querySelector('.tab-btn[data-tab="upload"]').click();
-    document.querySelector('#preview-host').scrollIntoView({behavior:'smooth', block:'start'});
-    window.LMB.setMask(maskDataURL);
-  }
+  // palette chips
+  const sw = document.getElementById('swatches');
+  const palette = ['#ef4444','#f472b6','#a78bfa','#60a5fa','#38bdf8','#22d3ee','#34d399','#fde047','#f59e0b','#fb7185','#10b981','#16a34a'];
+  sw.innerHTML = palette.map(c=>`<div class="chip" title="${c}" style="background:${c}"></div>`).join('');
 })();

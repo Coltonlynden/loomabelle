@@ -58,14 +58,22 @@ body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 'Quicksand',sy
 .upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer}
 .upload-inner{pointer-events:none;text-align:center;color:#6b7280}
 
+/* Preview host stays hidden until file is chosen */
+.hidden{display:none !important;}
+
 .preview{position:relative;border:2px dashed rgba(0,0,0,.12);background:#fff;border-radius:14px;min-height:220px;display:flex;align-items:center;justify-content:center;padding:10px}
+.preview{aspect-ratio:16/9;max-height:min(60vh,520px);overflow:hidden}
+.preview canvas{width:100%;height:100%;display:block}
+
+.canvas{position:relative;border:2px dashed rgba(0,0,0,.12);background:#fff;border-radius:14px;min-height:220px;padding:0;aspect-ratio:16/9;max-height:min(60vh,520px);overflow:hidden}
+.canvas canvas{width:100%;height:100%;display:block;position:absolute;left:0;top:0}
+
 .formats{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
 .opts{display:grid;gap:6px;margin-top:10px}
-
-.canvas{position:relative;border:2px dashed rgba(0,0,0,.12);background:#fff;border-radius:14px;min-height:220px;padding:0}
+.toolbar .btn.soft.active{outline:3px solid rgba(0,0,0,.25)}
 
 .swatches{display:flex;gap:8px;flex-wrap:wrap}
-.swatches .chip{width:28px;height:28px;border-radius:999px;border:3px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.08)}
+.swatches .chip{width:28px;height:28px;border-radius:999px;border:2px solid rgba(0,0,0,.08)}
 
 .sitefooter{margin-top:36px;background:#fff;border-top:1px solid var(--border)}
 .footcard{max-width:1100px;margin:0 auto;padding:20px}
@@ -73,22 +81,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 'Quicksand',sy
 .footlinks{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .dot{opacity:.5}
 
-/* utility */
-.hidden{ display:none !important; }
-
-/* Prevent canvas growth / keep aspect stable */
-.preview, .canvas{
-  position:relative;
-  aspect-ratio: 16/9;
-  height:auto;
-  max-height:min(60vh,520px);
-  overflow:hidden;
-}
-.preview > canvas,
-.canvas > canvas{ width:100%; height:100%; display:block; }
-
-/* Hide preview completely until there is an image */
-.preview[data-empty="1"]{ display:none; }
+body.loom-lock{overscroll-behavior:none}
 
 @media (max-width:900px){
   .hero-grid{grid-template-columns:1fr}

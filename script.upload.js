@@ -1,33 +1,35 @@
-// Handles file input & initial preview
+/* Handles file upload & reveals preview */
 (function(){
-  const $ = (s, r=document)=>r.querySelector(s);
-  const input = $('#fileInput');
+  const fileInput = document.getElementById('file-input');
+  const zone = document.getElementById('upload-zone');
 
-  input.addEventListener('change', async (e)=>{
-    const file = e.target.files && e.target.files[0];
-    if (!file) return;
-
-    // Load as ImageBitmap (fast)
-    const blobURL = URL.createObjectURL(file);
-    const img = await fetch(blobURL).then(r=>r.blob()).then(createImageBitmap);
-    URL.revokeObjectURL(blobURL);
-
-    window.Looma.imageBitmap = img;
-
-    // Reset mask & processed canvas
-    window.Looma.maskCanvas = null;
-    window.Looma.processedCanvas = null;
-
-    // Show original in preview and enable things
-    await window.LoomaPreview.drawIntoPreview(img);
+  // Click anywhere on the zone triggers file chooser
+  zone.addEventListener('click', (e)=>{
+    if (e.target !== fileInput) fileInput.click();
   });
 
-  // Also allow clicking hero buttons to scroll to tabs
-  document.querySelectorAll('[data-scroll]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const sel = btn.getAttribute('data-scroll');
-      const el = document.querySelector(sel);
-      if (el) el.scrollIntoView({behavior:'smooth'});
-    });
+  // Drag & drop
+  ;['dragenter','dragover','dragleave','drop'].forEach(ev=>{
+    zone.addEventListener(ev, e=>{ e.preventDefault(); e.stopPropagation(); }, false);
   });
+  zone.addEventListener('dragover', ()=> zone.classList.add('active'));
+  ;['dragleave','drop'].forEach(ev=> zone.addEventListener(ev, ()=> zone.classList.remove('active')));
+
+  zone.addEventListener('drop', (e)=>{
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  });
+
+  fileInput.addEventListener('change', ()=>{
+    const file = fileInput.files && fileInput.files[0];
+    if (file) handleFile(file);
+  });
+
+  async function handleFile(file){
+    if (!file.type.startsWith('image/')) { alert('Please choose an image.'); return; }
+    const url = URL.createObjectURL(file);
+    const img = await createImageBitmap(await (await fetch(url)).blob(), { premultiplyAlpha:'premultiply' });
+    URL.revokeObjectURL(url);
+    window.LMB.setImage(img);
+  }
 })();

@@ -1,115 +1,123 @@
-/* Lightweight in-browser "processing" helpers.
-   - scaleToFit
-   - quantize (median-cut-ish simple reducer)
-   - edgeOutline (Sobel)
-   - applyMask (remove background)
-*/
-window.LoomaProc = (() => {
-  const scaleToFit = (img, maxW, maxH) => {
-    const r = Math.min(maxW / img.width, maxH / img.height, 1);
-    const w = Math.max(1, Math.round(img.width * r));
-    const h = Math.max(1, Math.round(img.height * r));
-    const c = new OffscreenCanvas ? new OffscreenCanvas(w, h) : document.createElement('canvas');
-    c.width = w; c.height = h;
-    const ctx = c.getContext('2d', { willReadFrequently: true });
-    ctx.drawImage(img, 0, 0, w, h);
-    return c;
-  };
+// Lightweight image processing (client-only) with guardrails for memory.
+// Exposes window.LoomaProcessing with process() and savePNG()
 
-  // simple color key (k-means-ish with fixed seeds)
-  const quantize = (canvas, k = 8) => {
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    const { width:w, height:h } = canvas;
-    const img = ctx.getImageData(0,0,w,h);
+(function(){
+  const MAX_SIDE = 1280; // mobile-safe cap
+
+  function createCanvas(w,h){
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    return c;
+  }
+
+  function downscaleToSafe(bitmap){
+    let {width:w, height:h} = bitmap;
+    if (Math.max(w,h) > MAX_SIDE){
+      const scale = MAX_SIDE / Math.max(w,h);
+      w = Math.round(w*scale); h = Math.round(h*scale);
+    }
+    const c = createCanvas(w,h);
+    const ctx = c.getContext('2d');
+    ctx.drawImage(bitmap,0,0,w,h);
+    return c;
+  }
+
+  // Simple palette reduction (posterize) + optional Sobel edges + optional mask
+  function processCanvas(srcCanvas, {palette=true, edge=true, density=20, maskCanvas=null}={}){
+    const w = srcCanvas.width, h = srcCanvas.height;
+    const out = createCanvas(w,h);
+    const octx = out.getContext('2d');
+    octx.drawImage(srcCanvas,0,0);
+    let img = octx.getImageData(0,0,w,h);
     const d = img.data;
 
-    // init seeds by sampling
-    const seeds = [];
-    const step = Math.max(1, Math.floor((w*h)/k));
-    for (let i=0;i<k;i++){
-      const idx = (i*step*4) % d.length;
-      seeds.push([d[idx], d[idx+1], d[idx+2]]);
-    }
-
-    for (let iter=0; iter<3; iter++){
-      const sum = seeds.map(()=>[0,0,0,0]);
+    // Posterize
+    if (palette){
+      const steps = Math.max(2, Math.round(8 - (density/100)*6)); // 2..8
+      const stepSize = Math.floor(256/steps);
       for (let i=0;i<d.length;i+=4){
-        let best=0, bd=1e9;
-        for (let s=0;s<k;s++){
-          const [r,g,b]=seeds[s];
-          const dr=d[i]-r, dg=d[i+1]-g, db=d[i+2]-b;
-          const dist = dr*dr+dg*dg+db*db;
-          if (dist<bd){bd=dist;best=s;}
+        d[i]   = Math.floor(d[i]  /stepSize)*stepSize;
+        d[i+1] = Math.floor(d[i+1]/stepSize)*stepSize;
+        d[i+2] = Math.floor(d[i+2]/stepSize)*stepSize;
+      }
+    }
+
+    // Optional subject mask: keep drawn area, fade background
+    if (maskCanvas){
+      const mctx = maskCanvas.getContext('2d');
+      const m = mctx.getImageData(0,0,w,h).data;
+      for (let i=0;i<d.length;i+=4){
+        const a = m[i+3]; // alpha
+        if (a < 10){ // background
+          // fade toward fabric color (light)
+          d[i] = d[i]*0.1 + 245*0.9;
+          d[i+1] = d[i+1]*0.1 + 240*0.9;
+          d[i+2] = d[i+2]*0.1 + 235*0.9;
         }
-        const t=sum[best]; t[0]+=d[i];t[1]+=d[i+1];t[2]+=d[i+2];t[3]++;
-      }
-      for (let s=0;s<k;s++){
-        const t=sum[s]; if (t[3]) seeds[s]=[t[0]/t[3]|0,t[1]/t[3]|0,t[2]/t[3]|0];
       }
     }
 
-    // map to palette
-    for (let i=0;i<d.length;i+=4){
-      let best=0, bd=1e9;
-      for (let s=0;s<k;s++){
-        const [r,g,b]=seeds[s];
-        const dr=d[i]-r, dg=d[i+1]-g, db=d[i+2]-b;
-        const dist = dr*dr+dg*dg+db*db;
-        if (dist<bd){bd=dist;best=s;}
+    // Edge overlay (cheap)
+    if (edge){
+      const e = createCanvas(w,h);
+      const ex = e.getContext('2d');
+      ex.drawImage(srcCanvas,0,0);
+      const ei = ex.getImageData(0,0,w,h);
+      const ed = ei.data;
+      // Luma + 3x3 Sobel-ish
+      const gx = [-1,0,1,-2,0,2,-1,0,1];
+      const gy = [-1,-2,-1,0,0,0,1,2,1];
+      function lumAt(x,y){
+        const p=(y*w+x)*4;
+        return 0.2126*ed[p]+0.7152*ed[p+1]+0.0722*ed[p+2];
       }
-      const [r,g,b]=seeds[best];
-      d[i]=r;d[i+1]=g;d[i+2]=b;
-    }
-    ctx.putImageData(img,0,0);
-    return { canvas, palette: seeds };
-  };
-
-  const edgeOutline = (canvas, scale=1) => {
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    const { width:w, height:h } = canvas;
-    const src = ctx.getImageData(0,0,w,h);
-    const dst = ctx.createImageData(w,h);
-    const s = src.data, d = dst.data;
-    const gx = [-1,0,1,-2,0,2,-1,0,1];
-    const gy = [-1,-2,-1,0,0,0,1,2,1];
-    const at = (x,y,c)=>s[(y*w+x)*4+c];
-
-    for(let y=1;y<h-1;y++){
-      for(let x=1;x<w-1;x++){
-        let sx=0,sy=0;
-        let i=0;
-        for(let yy=-1;yy<=1;yy++){
-          for(let xx=-1;xx<=1;xx++){
-            const r = at(x+xx,y+yy,0)*0.3 + at(x+xx,y+yy,1)*0.59 + at(x+xx,y+yy,2)*0.11;
-            sx += r * gx[i]; sy += r * gy[i]; i++;
+      for (let y=1;y<h-1;y++){
+        for (let x=1;x<w-1;x++){
+          let sx=0,sy=0,k=0;
+          for (let j=-1;j<=1;j++){
+            for (let i=-1;i<=1;i++){
+              const L = lumAt(x+i,y+j);
+              sx += L*gx[k]; sy += L*gy[k]; k++;
+            }
           }
+          const mag = Math.min(255, Math.hypot(sx,sy));
+          const p=(y*w+x)*4;
+          const v = 255 - mag; // dark lines
+          d[p] = v; d[p+1]=v; d[p+2]=v;
         }
-        const g = Math.min(255, Math.hypot(sx,sy)*scale);
-        const o = (y*w+x)*4;
-        d[o]=d[o+1]=d[o+2]=255-g; d[o+3]=255;
       }
     }
-    ctx.putImageData(dst,0,0);
-    return canvas;
-  };
 
-  const applyMask = (photoCanvas, maskCanvas) => {
-    const w = photoCanvas.width, h = photoCanvas.height;
-    const out = new (window.OffscreenCanvas ? OffscreenCanvas : HTMLCanvasElement)(w,h);
-    if (!(out instanceof OffscreenCanvas)) out.width=w, out.height=h;
-    const ctx = out.getContext('2d', { willReadFrequently: true });
-    ctx.drawImage(photoCanvas,0,0);
-    const img = ctx.getImageData(0,0,w,h);
-    const mctx = maskCanvas.getContext('2d', { willReadFrequently: true });
-    const mask = mctx.getImageData(0,0,w,h);
-    for (let i=0;i<img.data.length;i+=4){
-      const a = mask.data[i+3]; // alpha of mask
-      if (a<20){ img.data[i+3] = 0; } // make background transparent
-    }
-    ctx.clearRect(0,0,w,h);
-    ctx.putImageData(img,0,0);
+    octx.putImageData(img,0,0);
     return out;
-  };
+  }
 
-  return { scaleToFit, quantize, edgeOutline, applyMask };
+  async function process(bitmap, opts){
+    const base = downscaleToSafe(bitmap);
+    let mask = null;
+    if (opts && opts.maskBitmap){
+      // Ensure mask matches size
+      mask = createCanvas(base.width, base.height);
+      mask.getContext('2d').drawImage(opts.maskBitmap,0,0,base.width,base.height);
+    }
+    const result = processCanvas(base, {
+      palette: !!opts.palette,
+      edge: !!opts.edge,
+      density: opts.density ?? 20,
+      maskCanvas: mask
+    });
+    return result;
+  }
+
+  function savePNG(canvas, name='loomabelle.png'){
+    canvas.toBlob((blob)=>{
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(blob);
+      a.download=name;
+      a.click();
+      setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+    }, 'image/png');
+  }
+
+  window.LoomaProcessing = { process, savePNG };
 })();

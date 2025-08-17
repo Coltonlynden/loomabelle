@@ -6,23 +6,19 @@
 
   async function handleFile(file){
     if(!file) return;
-    const bmp = await createImageBitmap(await blobFromFile(file));
+    const bmp = await createImageBitmap(file);
     App.image = bmp;
     App.lastResult = null;
     App.emit('image:loaded', bmp);
     previewHost.classList.remove('hidden');
-    // NEW: show the entire preview card (keeps design unchanged, only visibility)
-    const card = document.getElementById('previewCard'); if(card) card.style.display='';
+    const card=document.getElementById('previewCard'); if(card) card.style.display='';
   }
-
-  // helpers
-  function blobFromFile(file){ return new Promise(res=>{ const r=new FileReader(); r.onload=()=>res(new Blob([r.result])); r.readAsArrayBuffer(file); }); }
 
   // drag/drop
   ['dragenter','dragover'].forEach(ev=>dropZone.addEventListener(ev,e=>{e.preventDefault();}));
   dropZone.addEventListener('drop', e=>{
     e.preventDefault();
-    const f=e.dataTransfer.files?.[0];
+    const f=e.dataTransfer?.files?.[0];
     handleFile(f);
   });
 

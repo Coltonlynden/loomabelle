@@ -3,7 +3,6 @@
   const fileInput = document.getElementById('fileInput');
   const dropZone  = document.getElementById('dropZone');
   const previewHost = document.getElementById('previewHost');
-  const previewCard = document.getElementById('previewCard');
 
   async function handleFile(file){
     if(!file) return;
@@ -12,7 +11,7 @@
     App.lastResult = null;
     App.emit('image:loaded', bmp);
     previewHost.classList.remove('hidden');
-    previewCard.classList.remove('hidden');
+    document.getElementById('previewCard').style.display = '';
   }
 
   // helpers

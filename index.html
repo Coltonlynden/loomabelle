@@ -2,156 +2,222 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Loomabelle — photo → stitch files</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Quicksand:wght@400;500;600&family=Satisfy&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body class="page">
-  <!-- Top bar -->
-  <header class="topnav">
-    <div class="navwrap">
-      <a class="logo" href="#">
-        <span class="mark">🟡</span>
-        <div class="wordmark">
-          <div class="brand">Loomabelle</div>
-          <div class="tag">photo → stitch files</div>
+<body>
+  <div class="page">
+    <!-- Top bar (full-width gradient, no gaps on iOS) -->
+    <header class="topnav">
+      <div class="navwrap">
+        <div class="logo">
+          <div class="dot"></div>
+          <div class="wordmark">
+            <div class="brand">Loomabelle</div>
+            <div class="tag">photo → stitch files</div>
+          </div>
         </div>
-      </a>
-      <nav class="links">
-        <a href="#">Features</a>
-        <a href="#">How it works</a>
-        <a href="#">Gallery</a>
-      </nav>
-      <div class="actions">
-        <button class="btn soft">Sign in</button>
-        <button class="btn rainbow">Try it</button>
+        <nav class="links">
+          <a href="#features">Features</a>
+          <a href="#how">How it works</a>
+          <a href="#gallery">Gallery</a>
+        </nav>
+        <div class="actions">
+          <button class="btn ghost">Sign in</button>
+          <button class="btn rainbow" data-scroll="#tabs">Try it</button>
+        </div>
       </div>
-    </div>
-  </header>
+    </header>
 
-  <!-- Tabs -->
-  <div class="tabs-wrap">
-    <div class="tabs">
-      <button class="tab-btn active" data-tab="upload">Upload Photo</button>
-      <button class="tab-btn" data-tab="draw">Draw & Trace</button>
-      <span class="muted">ready to use</span>
-    </div>
-
-    <!-- Upload panel -->
-    <section class="panel active" id="panel-upload">
-      <div class="grid">
-        <!-- Upload card -->
-        <article class="card blue">
-          <div class="card-head">
-            <span class="icon">🧰</span>
-            <h2>Upload a photo</h2>
+    <!-- Hero (unchanged look) -->
+    <section class="hero">
+      <div class="hero-grid">
+        <div class="hero-copy">
+          <h1>Turn photos into <span class="fancy-underline">embroidery</span> files.</h1>
+          <p>A cozy in-browser tool. Upload a photo or trace by hand, then export a stitch file.</p>
+          <div class="cta">
+            <button class="btn rainbow" data-scroll="#tabs">Start with a photo</button>
+            <button class="btn soft" data-scroll="#tabs" data-tab="draw">Open the drawing tab</button>
           </div>
+          <ul class="bullets">
+            <li><span class="sparkle"></span> Auto color reduction</li>
+            <li><span class="sparkle"></span> Hoop presets</li>
+            <li><span class="sparkle"></span> Thread palette preview</li>
+            <li><span class="sparkle"></span> Offline — no server needed</li>
+          </ul>
+        </div>
+        <div class="hero-card colorful">
+          <div class="hero-blob"></div>
+        </div>
+      </div>
+    </section>
 
-          <label class="upload-zone" id="drop-zone">
-            <input id="file-input" type="file" accept="image/*" />
-            <div class="upload-inner">
-              <div class="folder">📁</div>
-              <div>Drag & drop or click to choose</div>
+    <!-- Main tool -->
+    <section id="tabs" class="tabs-wrap">
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="upload">Upload Photo</button>
+        <button class="tab-btn" data-tab="draw">Draw &amp; Trace</button>
+        <span class="muted">ready to use</span>
+      </div>
+
+      <!-- Upload panel -->
+      <div class="panel active" data-panel="upload">
+        <div class="grid">
+          <div class="col card blue">
+            <div class="card-head">
+              <span class="icon" aria-hidden="true">🧵</span>
+              <h3>Upload a photo</h3>
             </div>
-          </label>
 
-          <div class="opts">
-            <label><input id="opt-palette" type="checkbox" checked /> Reduce to stitch palette</label>
-            <label><input id="opt-outline" type="checkbox" checked /> Edge outline</label>
-            <div style="display:flex;align-items:center;gap:12px">
-              <input id="opt-density" type="range" min="1" max="7" value="2" />
-              <span class="muted">Density</span>
-            </div>
-          </div>
-        </article>
-
-        <!-- Preview card (HIDDEN by default) -->
-        <article class="card rose" id="preview-card" hidden>
-          <div class="card-head">
-            <span class="icon">🧵</span>
-            <h2>Preview (stitched)</h2>
-          </div>
-
-          <div class="preview" id="preview-host">
-            <!-- the preview canvas is injected here -->
-          </div>
-
-          <div class="formats">
-            <button class="btn soft" id="btn-dst">DST</button>
-            <button class="btn soft" id="btn-exp">EXP</button>
-            <button class="btn soft" id="btn-png">PNG</button>
-            <button class="btn" id="btn-process">Process Photo</button>
-            <button class="btn ghost" id="btn-highlight">Highlight Subject</button>
-            <label class="muted" style="display:flex;align-items:center;gap:6px;">
-              <input type="checkbox" id="chk-nosubj" />
-              No subject
+            <!-- Drop / pick -->
+            <label class="upload-zone" id="dropZone">
+              <div class="upload-inner">
+                <svg width="56" height="56" viewBox="0 0 24 24"><path fill="currentColor" d="M12 16v-6m0 0l-3 3m3-3l3 3M6 20h12a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2h-1.5M6 20a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2h3l2-2h2l2 2h3"/></svg>
+                <p>Drag &amp; drop or click to choose</p>
+              </div>
+              <input id="fileInput" type="file" accept="image/*" />
             </label>
+
+            <!-- Options -->
+            <div class="opts">
+              <label><input id="optPalette" type="checkbox" checked> Reduce to stitch palette</label>
+              <label><input id="optEdge" type="checkbox" checked> Edge outline</label>
+              <label class="slider">
+                <input id="optDensity" type="range" min="1" max="8" value="3" />
+                <span>Density</span>
+              </label>
+            </div>
           </div>
-        </article>
+
+          <div class="col card rose">
+            <div class="card-head">
+              <span class="icon" aria-hidden="true">🪡</span>
+              <h3>Preview (stitched)</h3>
+            </div>
+
+            <!-- Hidden until a file arrives -->
+            <div id="previewHost" class="preview hidden">
+              <canvas id="previewCanvas"></canvas>
+
+              <!-- progress -->
+              <div id="progressWrap" class="progress hidden" role="status" aria-live="polite">
+                <div id="progressBar"></div>
+                <div id="progressLabel">Preparing…</div>
+              </div>
+            </div>
+
+            <div class="formats">
+              <button id="btnDst" class="btn soft">DST</button>
+              <button id="btnExp" class="btn soft">EXP</button>
+              <button id="btnPng" class="btn soft">PNG</button>
+
+              <button id="btnProcess" class="btn soft strong">Process Photo</button>
+              <button id="btnHighlight" class="btn soft">Highlight Subject</button>
+              <label class="check"><input id="chkNoSubject" type="checkbox"> No subject</label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Draw panel -->
+      <div class="panel" data-panel="draw">
+        <div class="grid">
+          <div class="col card violet">
+            <div class="card-head">
+              <span class="icon" aria-hidden="true">✂️</span>
+              <h3>Draw &amp; Trace</h3>
+            </div>
+
+            <div id="drawHost" class="canvas">
+              <!-- the background image is painted into bgCanvas; overlay is the pen -->
+              <canvas id="bgCanvas" aria-hidden="true"></canvas>
+              <canvas id="drawCanvas"></canvas>
+            </div>
+
+            <div class="toolbar">
+              <button id="toolPen" class="btn soft active">Pen</button>
+              <button id="toolEraser" class="btn soft">Eraser</button>
+              <button id="toolClear" class="btn soft">Clear</button>
+              <button id="toolProcessSel" class="btn soft strong">Process Selection</button>
+            </div>
+          </div>
+
+          <div class="col card green">
+            <div class="card-head">
+              <span class="icon" aria-hidden="true">🎨</span>
+              <h3>Thread Palette</h3>
+            </div>
+            <div id="swatches" class="swatches"></div>
+            <div class="formats">
+              <button class="btn soft" disabled>Suggest Stitch Types</button>
+              <button class="btn soft" disabled>Export Embroidery</button>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
-    <!-- Draw panel (unchanged layout) -->
-    <section class="panel" id="panel-draw">
-      <article class="card violet">
-        <div class="card-head">
-          <span class="icon">✂️</span>
-          <h2>Draw & Trace</h2>
+    <!-- Footer (unchanged look) -->
+    <footer class="sitefooter">
+      <div class="footcard">
+        <div class="footgrid">
+          <div>
+            <h4>Join the list</h4>
+            <p>Be first to hear when the converter goes live.</p>
+          </div>
+          <form class="sub">
+            <input placeholder="Email address" disabled />
+            <button class="btn rainbow" disabled>Subscribe</button>
+          </form>
         </div>
-
-        <div class="canvas" id="draw-host">
-          <!-- drawing canvas injected here -->
-        </div>
-
-        <div class="formats">
-          <button class="btn soft" id="tool-pen">Pen</button>
-          <button class="btn soft" id="tool-eraser">Eraser</button>
-          <button class="btn soft" id="tool-clear">Clear</button>
-          <button class="btn" id="tool-process">Process Selection</button>
-        </div>
-      </article>
-
-      <article class="card green">
-        <div class="card-head">
-          <span class="icon">🎨</span>
-          <h2>Thread Palette</h2>
-        </div>
-        <div class="swatches" id="thread-swatches">
-          <div class="swatch" style="--c:#ef4444"></div>
-          <div class="swatch" style="--c:#f472b6"></div>
-          <div class="swatch" style="--c:#a78bfa"></div>
-          <div class="swatch" style="--c:#60a5fa"></div>
-          <div class="swatch" style="--c:#38bdf8"></div>
-          <div class="swatch" style="--c:#34d399"></div>
-          <div class="swatch" style="--c:#84cc16"></div>
-          <div class="swatch" style="--c:#f59e0b"></div>
-          <div class="swatch" style="--c:#fb7185"></div>
-          <div class="swatch" style="--c:#10b981"></div>
-        </div>
-        <div class="formats">
-          <button class="btn soft" id="btn-suggest">Suggest Stitch Types</button>
-          <button class="btn soft" id="btn-export" disabled>Export Embroidery</button>
-        </div>
-      </article>
-    </section>
-  </div>
-
-  <footer class="sitefooter">
-    <div class="footcard">
-      <div class="footgrid">
         <div class="footlinks">
-          <a href="#">Brand</a><span class="dot">•</span>
-          <a href="#">FAQ</a><span class="dot">•</span>
+          <span>© <span id="year"></span> Loomabelle</span>
+          <span class="dot">•</span>
+          <a href="#">Brand</a>
+          <a href="#">FAQ</a>
           <a href="#">Contact</a>
         </div>
-        <div class="muted">© 2025 Loomabelle</div>
       </div>
-    </div>
-  </footer>
+    </footer>
+  </div>
 
-  <script src="script.upload.js" defer></script>
-  <script src="script.draw.js" defer></script>
-  <script src="script.preview.js" defer></script>
-  <script src="processing.js" defer></script>
+  <!-- App state (tiny event bus) -->
+  <script>
+    window.App = {
+      image: null,          // ImageBitmap of the uploaded image
+      lastResult: null,     // ImageBitmap of last processed result
+      mask: null,           // HTMLCanvasElement from Draw tab (selection)
+      options: { palette:true, edge:true, density:3 },
+      emit(type, detail){ document.dispatchEvent(new CustomEvent(type,{detail})) },
+      on(type, fn){ document.addEventListener(type, e=>fn(e.detail)) }
+    };
+  </script>
+
+  <!-- Modules -->
+  <script src="processing.js"></script>
+  <script src="script.upload.js"></script>
+  <script src="script.preview.js"></script>
+  <script src="script.draw.js"></script>
+  <script>
+    // Tabs + smooth scroll
+    document.querySelectorAll('[data-scroll]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        document.querySelector(btn.dataset.scroll).scrollIntoView({behavior:'smooth'});
+        if (btn.dataset.tab) switchTab(btn.dataset.tab);
+      });
+    });
+
+    const tabBtns=[...document.querySelectorAll('.tab-btn')];
+    function switchTab(name){
+      tabBtns.forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
+      document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active', p.dataset.panel===name));
+    }
+    tabBtns.forEach(b=>b.addEventListener('click', ()=>switchTab(b.dataset.tab)));
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
 </body>
 </html>

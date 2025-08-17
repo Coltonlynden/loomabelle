@@ -1,3 +1,4 @@
+/* Loomabelle styles (kept from your look, with fixes) */
 :root{
   --bg:#fffaf3; --ink:#111827; --muted:#6b7280;
   --rose:#fde2e7; --blue:#e0f2fe; --violet:#ede9fe; --green:#dcfce7;
@@ -5,34 +6,51 @@
 }
 *{box-sizing:border-box}
 html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Quicksand",system-ui,-apple-system,Segoe UI,Roboto,Arial}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 'Quicksand',system-ui,-apple-system,Segoe UI,Roboto,Arial}
 .page{min-height:100%}
 
-/* header */
-.topnav{position:sticky;top:0;background:linear-gradient(90deg,#fbe7f0,#e2f0ff,#fef9c3);border-bottom:1px solid var(--border);z-index:10}
+/* full-width sticky header (prevents iOS gap/snaps) */
+.topnav{position:sticky;top:0;z-index:10;
+  background:linear-gradient(90deg,#fbe7f0,#e2f0ff,#fef9c3);border-bottom:1px solid var(--border);
+  backface-visibility:hidden;will-change:transform}
 .navwrap{max-width:1100px;margin:0 auto;display:flex;align-items:center;gap:16px;padding:10px 20px}
-.logo{display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit}
+.logo{display:flex;align-items:center;gap:10px}
+.logo .dot{width:28px;height:28px;border-radius:50%;background:#fff;box-shadow:inset 0 0 0 3px #93c5fd}
 .wordmark .brand{font-family:'Satisfy',cursive;font-size:28px}
 .wordmark .tag{font-size:12px;color:var(--muted);margin-top:-6px}
 .links{margin-left:auto;display:flex;gap:16px}
-.links a{color:var(--ink);text-decoration:none;opacity:.85}
+.links a{color:var(--ink);text-decoration:none;opacity:.8}
 .actions{display:flex;gap:8px}
+
 .btn{appearance:none;border:none;border-radius:999px;padding:10px 16px;background:#111827;color:#fff;cursor:pointer;box-shadow:0 2px 0 rgba(0,0,0,.06)}
 .btn.soft{background:#fff;border:1px solid var(--border);color:var(--ink)}
 .btn.ghost{background:transparent;border:1px solid var(--border);color:var(--ink)}
 .btn.rainbow{background:linear-gradient(90deg,#f9a8d4,#93c5fd,#fde68a);color:#111827;font-weight:600}
-.btn[disabled]{opacity:.5;pointer-events:none}
+.btn.soft.strong{font-weight:600}
+.btn.soft.active{outline:3px solid rgba(0,0,0,.25)}
 
-/* tabs & panels */
+.hero{position:relative;padding:48px 20px}
+.hero-grid{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:1.2fr 1fr;gap:24px;align-items:center}
+.hero-copy h1{font-family:'Fraunces',serif;font-weight:700;font-size:44px;margin:0 0 10px}
+.hero-copy p{margin:0 0 16px}
+.fancy-underline{background:linear-gradient(180deg,transparent 65%, #fde2e7 0)}
+.cta{display:flex;gap:10px;margin:10px 0 18px}
+.bullets{margin:0;padding:0;list-style:none;display:grid;gap:6px}
+.bullets .sparkle{display:inline-block;width:10px;height:10px;background:#fde68a;border-radius:50%;margin-right:6px}
+
+.hero-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:10px;min-height:220px}
+.hero-blob{width:100%;height:100%;border-radius:12px;background:linear-gradient(180deg,#e0f2fe 0,#fde2e7 100%)}
+
 .tabs-wrap{max-width:1100px;margin:10px auto 0;padding:0 20px}
 .tabs{display:flex;align-items:center;gap:10px}
 .tab-btn{border:1px solid var(--border);background:#fff;border-radius:999px;padding:8px 14px;cursor:pointer}
 .tab-btn.active{background:#111827;color:#fff}
 .muted{color:var(--muted);font-size:12px;margin-left:10px}
+
 .panel{display:none;margin-top:14px}
 .panel.active{display:block}
-
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+
 .card{position:relative;background:#fff;border:1px solid var(--border);border-radius:16px;padding:14px}
 .card.blue{background:var(--blue)}
 .card.rose{background:var(--rose)}
@@ -41,30 +59,36 @@ body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Quicksand",sy
 .card-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
 .icon{font-size:20px}
 
-/* upload */
 .upload-zone{position:relative;border:2px dashed rgba(0,0,0,.15);border-radius:14px;min-height:150px;background:#fff;display:flex;align-items:center;justify-content:center;padding:16px;cursor:pointer}
 .upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer}
 .upload-inner{pointer-events:none;text-align:center;color:#6b7280}
 
-/* preview + canvas sizing */
-.preview,.canvas{position:relative;border:2px dashed rgba(0,0,0,.12);background:#fff;border-radius:14px;min-height:220px;display:flex;align-items:center;justify-content:center;padding:10px}
-.preview{aspect-ratio:16/9;height:auto;max-height:min(60vh,520px);overflow:hidden}
-.preview canvas,.canvas canvas{width:100%;height:100%;display:block}
+.preview{position:relative;border:2px dashed rgba(0,0,0,.12);background:#fff;border-radius:14px;min-height:220px;display:flex;align-items:center;justify-content:center;padding:10px}
+.canvas{position:relative;border:2px dashed rgba(0,0,0,.12);background:#fff;border-radius:14px;min-height:220px;padding:0}
+.preview.hidden{display:none}
 
-.formats{display:flex;gap:8px;margin-top:10px}
+.formats{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.opts{display:grid;gap:6px;margin-top:10px}
+.slider{display:flex;gap:10px;align-items:center}
+
 .swatches{display:flex;gap:8px;flex-wrap:wrap}
-.swatch{width:28px;height:28px;border-radius:999px;border:1px solid var(--border);background:var(--c)}
+.swatches .chip{width:28px;height:28px;border-radius:50%;border:1px solid var(--border)}
 
-/* footer */
+.progress{position:absolute;left:12px;right:12px;bottom:12px;background:#fff;border:1px solid var(--border);border-radius:10px;padding:6px 10px;display:flex;gap:10px;align-items:center}
+.progress.hidden{display:none}
+.progress #progressBar{height:8px;flex:1;border-radius:6px;background:linear-gradient(90deg,#93c5fd,#f9a8d4);transform:scaleX(0);transform-origin:left;transition:transform .15s ease}
+
 .sitefooter{margin-top:36px;background:#fff;border-top:1px solid var(--border)}
 .footcard{max-width:1100px;margin:0 auto;padding:20px}
 .footgrid{display:flex;align-items:center;justify-content:space-between;gap:14px}
 .footlinks{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .dot{opacity:.5}
 
-/* critical: hide when hidden attribute present */
-[hidden]{display:none !important;}
-
 @media (max-width:900px){
+  .hero-grid{grid-template-columns:1fr}
   .grid{grid-template-columns:1fr}
 }
+
+/* Host sizing that stays stable */
+.preview, .canvas { aspect-ratio: 16/9; max-height: min(60vh,520px); overflow:hidden }
+.preview canvas, .canvas canvas { width:100%; height:100%; display:block; }

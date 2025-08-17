@@ -70,20 +70,20 @@
   function onMove(e){ if(!drawing) return; const p=pointerXY(e); drawLine(p.x,p.y); e.preventDefault(); }
   function onUp(){ drawing=false; dctx.globalCompositeOperation='source-over'; }
 
-  draw.addEventListener('pointerdown', onDown);
-  draw.addEventListener('pointermove',  onMove);
-  draw.addEventListener('pointerup',    onUp);
-  draw.addEventListener('pointercancel',onUp);
-  draw.addEventListener('pointerleave', onUp);
+  draw.addEventListener('pointerdown', onDown, {passive:false});
+  draw.addEventListener('pointermove',  onMove, {passive:false});
+  draw.addEventListener('pointerup',    onUp,   {passive:false});
+  draw.addEventListener('pointercancel',onUp,   {passive:false});
+  draw.addEventListener('pointerleave', onUp,   {passive:false});
 
   function clearDraw(){ dctx.setTransform(1,0,0,1,0,0); dctx.clearRect(0,0,draw.width,draw.height); }
-  toolClear.addEventListener('click', clearDraw);
+  if (toolClear) toolClear.addEventListener('click', clearDraw);
 
-  toolPen.addEventListener('click', ()=>{tool='pen'; toolPen.classList.add('active'); toolEraser.classList.remove('active');});
-  toolEraser.addEventListener('click', ()=>{tool='eraser'; toolEraser.classList.add('active'); toolPen.classList.remove('active');});
+  if (toolPen)    toolPen.addEventListener('click', ()=>{tool='pen';    toolPen.classList.add('active'); toolEraser.classList.remove('active');});
+  if (toolEraser) toolEraser.addEventListener('click', ()=>{tool='eraser'; toolEraser.classList.add('active'); toolPen.classList.remove('active');});
 
   // Process Selection with mask
-  toolProcess.addEventListener('click', async ()=>{
+  if (toolProcess) toolProcess.addEventListener('click', async ()=>{
     if(!App.image){ return; }
     const mask = document.createElement('canvas');
     mask.width = App.image.width; mask.height = App.image.height;
@@ -136,3 +136,4 @@
     sw.innerHTML = palette.map(c=>`<div class="chip" title="${c}" style="background:${c}"></div>`).join('');
   }
 })();
+

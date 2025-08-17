@@ -1,135 +1,136 @@
-// Drawing & highlight subject
-(() => {
-  const $ = s => document.querySelector(s);
-  const state = window.__loom = (window.__loom||{});
+// Drawing canvas (pen/eraser), background image, Process Selection -> pipeline with mask
+(function(){
+  const host = document.getElementById('drawHost');
+  const bg = document.getElementById('bgCanvas');
+  const draw = document.getElementById('drawCanvas');
+  const bctx = bg.getContext('2d');
+  const dctx = draw.getContext('2d');
 
-  const drawHost = $('#drawHost');
-  const penBtn = $('#penBtn');
-  const eraserBtn = $('#eraserBtn');
-  const clearBtn = $('#clearBtn');
-  const processSelectionBtn = $('#processSelectionBtn');
-  const highlightBtn = $('#btnHighlight');
+  const toolPen = document.getElementById('toolPen');
+  const toolEraser = document.getElementById('toolEraser');
+  const toolClear = document.getElementById('toolClear');
+  const toolProcess = document.getElementById('toolProcessSel');
 
-  // build layers
-  const bg = document.createElement('canvas'); bg.className = 'canvas-layer canvas-bg';
-  const pen = document.createElement('canvas'); pen.className = 'canvas-layer canvas-pen';
-  drawHost.append(bg, pen);
-  const bgx = bg.getContext('2d');
-  const px = pen.getContext('2d');
-  let drawing=false, erasing=false, last=null;
+  let tool='pen', drawing=false, lastX=0,lastY=0, scale=1, offsetX=0, offsetY=0, bmpForBg=null;
 
-  function resizeLayers(){
-    const rect = drawHost.getBoundingClientRect();
-    const w = Math.max(10, Math.floor(rect.width));
-    const h = Math.max(10, Math.floor(rect.height));
-    [bg,pen].forEach(c=>{
-      const data = (c===pen)? c.toDataURL() : null;
-      c.width = w; c.height = h;
-      if (c===pen && data){
-        const img = new Image(); img.onload = ()=>px.drawImage(img,0,0,w,h); img.src = data;
-      }
+  function fitCanvases(){
+    const r = host.getBoundingClientRect();
+    [bg,draw].forEach(cv=>{
+      cv.width  = Math.floor(r.width * devicePixelRatio);
+      cv.height = Math.floor(r.height* devicePixelRatio);
+      cv.style.width  = r.width +'px';
+      cv.style.height = r.height+'px';
     });
-    if (state.image) paintBgFromUpload();
-  }
-  window.addEventListener('resize', resizeLayers);
-  setTimeout(resizeLayers, 0);
-
-  function paintBgFromUpload(){
-    if (!state.image) return;
-    const {image} = state;
-    const wr = bg.width / image.width, hr = bg.height / image.height;
-    const r = Math.min(wr, hr);
-    const w = Math.round(image.width * r), h = Math.round(image.height * r);
-    const x = Math.round((bg.width - w)/2), y = Math.round((bg.height - h)/2);
-    bgx.clearRect(0,0,bg.width,bg.height);
-    bgx.fillStyle='#fff'; bgx.fillRect(0,0,bg.width,bg.height);
-    bgx.drawImage(image, x, y, w, h);
-    state.drawBgRect = {x,y,w,h};
-    // dim outside pen later
+    paintBackground(bmpForBg); // repaint with new fit
   }
 
-  // Highlight Subject -> switch tab and show image to trace
-  highlightBtn.addEventListener('click', ()=>{
-    if (!state.image){
-      toast('Upload a photo first.');
-      return;
+  function paintBackground(bmp){
+    if(!bmp) return;
+    bmpForBg = bmp;
+    bctx.setTransform(1,0,0,1,0,0);
+    bctx.clearRect(0,0,bg.width,bg.height);
+    // letterbox fit & remember transform for drawing coords
+    const s = Math.min(bg.width/bmp.width, bg.height/bmp.height);
+    const w = Math.floor(bmp.width*s), h = Math.floor(bmp.height*s);
+    offsetX = (bg.width - w)>>1; offsetY = (bg.height - h)>>1; scale=s;
+    bctx.drawImage(bmp, 0,0,bmp.width,bmp.height, offsetX,offsetY, w,h);
+  }
+
+  // external event from preview: set background image
+  App.on('draw:bg', ({bmp})=>{ fitCanvases(); paintBackground(bmp); clearDraw(); });
+
+  // drawing
+  function pointerXY(e){
+    const rect = draw.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * devicePixelRatio;
+    const y = (e.clientY - rect.top ) * devicePixelRatio;
+    return {x,y};
+  }
+  function drawLine(x,y){
+    dctx.lineCap='round'; dctx.lineJoin='round';
+    dctx.lineWidth = 16*devicePixelRatio;
+    if(tool==='pen'){
+      dctx.globalCompositeOperation='source-over';
+      dctx.strokeStyle='#0f172a';
+    }else{
+      dctx.globalCompositeOperation='destination-out';
+      dctx.strokeStyle='rgba(0,0,0,1)';
     }
-    // switch to draw tab
-    document.querySelector('.tab-btn[data-tab="draw"]').click();
-    paintBgFromUpload();
-    document.querySelector('[data-panel="draw"]').scrollIntoView({behavior:'smooth',block:'start'});
-  });
-
-  // Pen / Eraser
-  function begin(e){
-    drawing = true;
-    erasing = penBtn.classList.contains('active') ? false : true;
-    last = pos(e);
-    px.lineCap='round';
-    px.lineJoin='round';
-    px.lineWidth = Math.max(4, Math.floor(pen.width/120));
-    px.globalCompositeOperation = erasing? 'destination-out' : 'source-over';
+    dctx.beginPath();
+    dctx.moveTo(lastX,lastY);
+    dctx.lineTo(x,y);
+    dctx.stroke();
+    lastX=x; lastY=y;
   }
-  function move(e){
-    if (!drawing) return;
-    const p = pos(e);
-    px.beginPath();
-    px.moveTo(last.x,last.y);
-    px.lineTo(p.x,p.y);
-    px.strokeStyle = '#0f172a';
-    px.stroke();
-    last = p;
-  }
-  function end(){ drawing=false; last=null; }
-  const ev = (el, m, fn, opt)=>el.addEventListener(m, fn, opt);
-  const P = ['mousedown','touchstart'], M=['mousemove','touchmove'], E=['mouseup','mouseleave','touchend','touchcancel'];
-  P.forEach(m=>ev(pen,m, e=>{e.preventDefault(); begin(e.touches?.[0]||e);},{passive:false}));
-  M.forEach(m=>ev(pen,m, e=>{e.preventDefault(); move(e.touches?.[0]||e);},{passive:false}));
-  E.forEach(m=>ev(pen,m, e=>{e.preventDefault(); end();},{passive:false}));
+  function onDown(e){ drawing=true; const p=pointerXY(e); lastX=p.x; lastY=p.y; e.preventDefault(); }
+  function onMove(e){ if(!drawing) return; drawLine(...Object.values(pointerXY(e))); e.preventDefault(); }
+  function onUp(){ drawing=false; dctx.globalCompositeOperation='source-over'; }
 
-  function pos(e){
-    const r = pen.getBoundingClientRect();
-    return {x:(e.clientX - r.left) * (pen.width/r.width), y:(e.clientY - r.top) * (pen.height/r.height)};
-  }
+  ['pointerdown'].forEach(ev=>draw.addEventListener(ev,onDown));
+  ['pointermove' ].forEach(ev=>draw.addEventListener(ev,onMove));
+  ['pointerup','pointercancel','pointerleave'].forEach(ev=>draw.addEventListener(ev,onUp));
 
-  penBtn.addEventListener('click', ()=>{penBtn.classList.add('active'); eraserBtn.classList.remove('active');});
-  eraserBtn.addEventListener('click', ()=>{eraserBtn.classList.add('active'); penBtn.classList.remove('active');});
-  clearBtn.addEventListener('click', ()=>{px.clearRect(0,0,pen.width,pen.height);});
+  function clearDraw(){ dctx.setTransform(1,0,0,1,0,0); dctx.clearRect(0,0,draw.width,draw.height); }
+  toolClear.addEventListener('click', clearDraw);
 
-  // Process only inside the drawn outline (simple mask)
-  processSelectionBtn.addEventListener('click', async ()=>{
-    const stateGlobal = window.__loom;
-    if (!stateGlobal.image){ toast('Upload a photo first.'); return; }
-    const mask = pen; // use drawn strokes as mask
-    await window.__processWithWorker({
-      kind:'process',
-      image: stateGlobal.image,
-      hostCanvas: stateGlobal.previewCanvas,
-      rect: stateGlobal.drawRect,
-      density: +document.getElementById('density').value,
-      edges: document.getElementById('optEdges').checked,
-      posterize: document.getElementById('optPosterize').checked,
-      removeBg:true,
-      maskCanvas: mask
-    });
+  toolPen.addEventListener('click', ()=>{tool='pen'; toolPen.classList.add('active'); toolEraser.classList.remove('active');});
+  toolEraser.addEventListener('click', ()=>{tool='eraser'; toolEraser.classList.add('active'); toolPen.classList.remove('active');});
+
+  // Process Selection with mask
+  toolProcess.addEventListener('click', async ()=>{
+    if(!App.image){ return modal('Upload a photo first.'); }
+    // build a binary mask at the **image** resolution
+    const mask = document.createElement('canvas');
+    mask.width = App.image.width; mask.height = App.image.height;
+    const mx = mask.getContext('2d');
+
+    // un-letterbox & scale drawing back to image space
+    const sx = (App.image.width * scale) / (App.image.width); // scale used for background fit (not exact but OK)
+    // Simpler: read draw bitmap then map each pixel from draw space back to image space using the inverse of our placement
+    const tmp = dctx.getImageData(0,0,draw.width,draw.height).data;
+    const mdata = mx.getImageData(0,0,mask.width,mask.height);
+    const md = mdata.data;
+
+    // For each pixel in image space, find its location in draw space and copy alpha
+    for(let iy=0; iy<mask.height; iy++){
+      for(let ix=0; ix<mask.width; ix++){
+        const dx = Math.round(ix*scale + offsetX) |0;
+        const dy = Math.round(iy*scale + offsetY) |0;
+        let a = 0;
+        if(dx>=0 && dy>=0 && dx<draw.width && dy<draw.height){
+          const di = (dy*draw.width + dx)*4 + 3; // alpha
+          a = tmp[di];
+        }
+        const i = (iy*mask.width + ix)*4;
+        md[i]=md[i+1]=md[i+2]=255; md[i+3]=a; // white with alpha from drawing
+      }
+    }
+    mx.putImageData(mdata,0,0);
+    App.mask = mask;
+
+    // Run pipeline with progress bar and mask
+    const host = document.getElementById('previewHost');
+    const bar  = document.getElementById('progressBar');
+    const lab  = document.getElementById('progressLabel');
+    const wrap = document.getElementById('progressWrap');
+    host.classList.remove('hidden'); wrap.classList.remove('hidden');
+    const progress = (p,l)=>{ bar.style.transform=`scaleX(${p})`; if(l) lab.textContent=l; };
+
+    const bmp = await Processing.processImage(App.image, mask, {...App.options, noSubject:false}, progress);
+    wrap.classList.add('hidden');
+    App.lastResult = bmp;
+    // switch back to Upload/Preview and show it
     document.querySelector('.tab-btn[data-tab="upload"]').click();
-    document.getElementById('previewHost').classList.remove('hidden');
-    document.querySelector('[data-panel="upload"]').scrollIntoView({behavior:'smooth', block:'start'});
+    App.emit('image:loaded', bmp); // preview code will draw it
   });
 
-  // swatches (visual only)
+  // initial size
+  new ResizeObserver(fitCanvases).observe(host);
+  window.addEventListener('resize', fitCanvases);
+  fitCanvases();
+
+  // palette chips
   const sw = document.getElementById('swatches');
-  const colors = ['#ef4444','#f472b6','#a78bfa','#60a5fa','#93c5fd','#67e8f9','#22d3ee','#86efac','#84cc16','#fde047','#fb923c','#fda4af','#34d399'];
-  colors.forEach(c=>{
-    const d = document.createElement('button');
-    d.className='sw'; d.style.background=c; d.title=c; d.type='button';
-    sw.appendChild(d);
-  });
-
-  function toast(msg){
-    alert(msg);
-  }
-
-  // expose for upload tab to call when image loads
-  window.__loom_draw_resize = resizeLayers;
+  const palette = ['#ef4444','#f472b6','#a78bfa','#60a5fa','#38bdf8','#22d3ee','#34d399','#fde047','#f59e0b','#fb7185','#10b981','#16a34a'];
+  sw.innerHTML = palette.map(c=>`<div class="chip" title="${c}" style="background:${c}"></div>`).join('');
 })();

@@ -6,7 +6,8 @@
   <title>Loomabelle — photo → stitch files</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:...:wght@400;500;600&family=Satisfy&display=swap" rel="stylesheet">
+  <!-- ADDED to match styles.css font-family -->
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600&family=Fraunces:wght@500;600;700&family=Satisfy&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -28,7 +29,7 @@
         </nav>
         <div class="actions">
           <button class="btn ghost">Sign in</button>
-          <button class="btn rainbow" data-scroll="#tabs">Try it</button>
+          <button class="btn rainbow" data-scroll="#tabs" data-tab="upload">Try it</button>
         </div>
       </div>
     </header>
@@ -40,7 +41,8 @@
           <h1>Turn photos into <span class="fancy-underline">embroidery</span> files.</h1>
           <p>A cozy in-browser tool. Upload a photo or trace by hand, then export a stitch file.</p>
           <div class="cta">
-            <button class="btn rainbow" data-scroll="#tabs">Start with a photo</button>
+            <!-- ADDED data-tab so it switches back to Upload -->
+            <button class="btn rainbow" data-scroll="#tabs" data-tab="upload">Start with a photo</button>
             <button class="btn soft" data-scroll="#tabs" data-tab="draw">Open the drawing tab</button>
           </div>
           <ul class="bullets">
@@ -75,11 +77,11 @@
 
             <!-- Drop / pick -->
             <label class="upload-zone" id="dropZone">
-              <div class="upload-inner">
-                <svg width="56" height="56" viewBox="0 0 24 24"><path fill="currentColor" d="M12 16v-6m0 0l-3 3m3-3l3 3M6 20h12a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2h-1.5M6 20a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2h3l2-2h2l2 2h3"/></svg>
-                <p>Drag &amp; drop or click to choose</p>
-              </div>
               <input id="fileInput" type="file" accept="image/*" />
+              <div class="upload-inner">
+                <div class="folder" aria-hidden="true"></div>
+                <div class="big">Drag &amp; drop or click to choose</div>
+              </div>
             </label>
 
             <!-- Options -->
@@ -93,17 +95,16 @@
             </div>
           </div>
 
+          <!-- Preview (stitched) — hidden until a file is loaded -->
           <div id="previewCard" class="col card rose" style="display:none">
             <div class="card-head">
               <span class="icon" aria-hidden="true">🪡</span>
               <h3>Preview (stitched)</h3>
             </div>
 
-            <!-- Hidden until a file arrives -->
             <div id="previewHost" class="preview hidden">
               <canvas id="previewCanvas"></canvas>
 
-              <!-- progress -->
               <div id="progressWrap" class="progress hidden" role="status" aria-live="polite">
                 <div id="progressBar"></div>
                 <div id="progressLabel">Preparing…</div>
@@ -131,13 +132,10 @@
               <span class="icon" aria-hidden="true">✂️</span>
               <h3>Draw &amp; Trace</h3>
             </div>
-
             <div id="drawHost" class="canvas">
-              <!-- the background image is painted into bgCanvas; overlay is the pen -->
               <canvas id="bgCanvas" aria-hidden="true"></canvas>
               <canvas id="drawCanvas"></canvas>
             </div>
-
             <div class="toolbar">
               <button id="toolPen" class="btn soft active">Pen</button>
               <button id="toolEraser" class="btn soft">Eraser</button>
@@ -161,7 +159,7 @@
       </div>
     </section>
 
-    <!-- Footer (unchanged look) -->
+    <!-- Footer -->
     <footer class="sitefooter">
       <div class="footcard">
         <div class="footgrid">
@@ -188,9 +186,9 @@
   <!-- App state (tiny event bus) -->
   <script>
     window.App = {
-      image: null,          // ImageBitmap of the uploaded image
-      lastResult: null,     // ImageBitmap of last processed result
-      mask: null,           // HTMLCanvasElement from Draw tab (selection)
+      image: null,
+      lastResult: null,
+      mask: null,
       options: { palette:true, edge:true, density:3 },
       emit(type, detail){ document.dispatchEvent(new CustomEvent(type,{detail})) },
       on(type, fn){ document.addEventListener(type, e=>fn(e.detail)) }
@@ -203,7 +201,7 @@
   <script src="script.preview.js"></script>
   <script src="script.draw.js"></script>
   <script>
-    // Tabs + smooth scroll
+    // smooth scroll + tab switch
     document.querySelectorAll('[data-scroll]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         document.querySelector(btn.dataset.scroll).scrollIntoView({behavior:'smooth'});

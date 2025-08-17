@@ -93,7 +93,7 @@
             </div>
           </div>
 
-          <!-- Preview card: HIDDEN until an image is loaded -->
+          <!-- Preview (stitched) — hidden until file is loaded -->
           <div id="previewCard" class="col card rose" style="display:none">
             <div class="card-head">
               <span class="icon" aria-hidden="true">🪡</span>
@@ -219,14 +219,6 @@
     }
     tabBtns.forEach(b=>b.addEventListener('click', ()=>switchTab(b.dataset.tab)));
     document.getElementById('year').textContent = new Date().getFullYear();
-
-    /* NEW (minimal): reveal preview card once an image is loaded */
-    App.on('image:loaded', ()=>{
-      const card = document.getElementById('previewCard');
-      if (card) card.style.display = '';
-      const host = document.getElementById('previewHost');
-      if (host) host.classList.remove('hidden');
-    });
   </script>
 </body>
 </html>

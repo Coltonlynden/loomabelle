@@ -55,7 +55,7 @@
     dctx.lineCap='round'; dctx.lineJoin='round';
     dctx.lineWidth = 16 * DPR();
     dctx.globalCompositeOperation = (tool==='pen' ? 'source-over' : 'destination-out');
-    dctx.strokeStyle = (tool==='pen' ? '#0f172a' : 'rgba(0,0,0,1)';
+    dctx.strokeStyle = (tool==='pen' ? '#0f172a' : 'rgba(0,0,0,1)'); // <-- fixed
     dctx.beginPath(); dctx.moveTo(lastX,lastY); dctx.lineTo(x,y); dctx.stroke();
     lastX=x; lastY=y;
   }
@@ -80,7 +80,6 @@
   if (toolPen)    toolPen.addEventListener('click', ()=>{ setTool('pen'); lassoMode=false; });
   if (toolEraser) toolEraser.addEventListener('click', ()=>{ setTool('eraser'); lassoMode=false; });
 
-  // Fill the lasso polygon into the draw layer
   function fillLassoIfAny(){
     if (!lassoMode || lassoPts.length < 3) return;
     dctx.save();
@@ -96,7 +95,6 @@
     lassoPts = [];
   }
 
-  // Build mask in image space from draw layer
   function makeMaskFromDraw(targetW, targetH){
     const mask = document.createElement('canvas');
     mask.width = targetW; mask.height = targetH;
@@ -121,32 +119,25 @@
     return mask;
   }
 
-  // If there is no uploaded image, treat the user's drawing as the source image
   async function sourceFromDrawing(){
     const off = document.createElement('canvas');
     off.width = draw.width; off.height = draw.height;
     const o = off.getContext('2d');
-    // background (white or whatever is on bg canvas), then strokes
     if (bg.width && bg.height) o.drawImage(bg,0,0);
     else { o.fillStyle='#ffffff'; o.fillRect(0,0,off.width,off.height); }
     o.drawImage(draw,0,0);
     return await createImageBitmap(off);
   }
 
-  // Process Selection -> pipeline -> Upload tab + preview
   if (toolProcess) toolProcess.addEventListener('click', async ()=>{
-    // make a source image:
     const srcBmp = App.image || await sourceFromDrawing();
-    if (!App.image) App.image = srcBmp; // so later actions work consistently
+    if (!App.image) App.image = srcBmp;
 
-    // ensure lasso region becomes solid interior
     fillLassoIfAny();
 
-    // mask follows the drawn alpha (scaled to src size)
     const mask = makeMaskFromDraw(srcBmp.width, srcBmp.height);
     App.mask = mask;
 
-    // make preview visible first
     const previewCard = document.getElementById('previewCard');
     const previewHost = document.getElementById('previewHost');
     if (previewCard) previewCard.style.display='';
@@ -163,7 +154,6 @@
     if (wrap) wrap.classList.add('hidden');
     App.lastResult = bmp;
 
-    // hard switch to Upload tab and update preview
     document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab==='upload'));
     document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active', p.dataset.panel==='upload'));
     App.emit('image:loaded', bmp);
@@ -173,7 +163,6 @@
   window.addEventListener('resize', fitCanvases);
   fitCanvases();
 
-  // palette chips
   const sw = document.getElementById('swatches');
   if(sw){
     const palette = ['#ef4444','#f472b6','#a78bfa','#60a5fa','#38bdf8','#22d3ee','#34d399','#fde047','#f59e0b','#fb7185','#10b981','#16a34a'];

@@ -1,20 +1,15 @@
-/* Loomabelle styles – v45 */
-
+/* Loomabelle styles */
 :root{
   --bg:#fffaf3; --ink:#111827; --muted:#6b7280;
   --rose:#fde2e7; --blue:#e0f2fe; --violet:#ede9fe; --green:#dcfce7;
   --card:#ffffff; --border:rgba(0,0,0,.08);
 }
-
 *{box-sizing:border-box}
 html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--ink);
-  font:16px/1.5 'Quicksand',system-ui,-apple-system,Segoe UI,Roboto,Arial}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 'Quicksand',system-ui,-apple-system,Segoe UI,Roboto,Arial}
 .page{min-height:100%}
 
-/* Top bar (unchanged look; smoother on iOS) */
-.topnav{position:sticky;top:0;background:linear-gradient(90deg,#fbe7f0,#e2f0ff,#fef9c3);
-  border-bottom:1px solid var(--border);z-index:10;will-change:transform;backface-visibility:hidden}
+.topnav{position:sticky;top:0;background:linear-gradient(90deg,#fbe7f0,#e2f0ff,#fef9c3);border-bottom:1px solid var(--border);z-index:10;will-change:transform;backface-visibility:hidden}
 .navwrap{max-width:1100px;margin:0 auto;display:flex;align-items:center;gap:16px;padding:10px 20px}
 .logo{display:flex;align-items:center;gap:10px}
 .wordmark .brand{font-family:'Satisfy',cursive;font-size:28px}
@@ -37,6 +32,7 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .cta{display:flex;gap:10px;margin:10px 0 18px}
 .bullets{margin:0;padding:0;list-style:none;display:grid;gap:6px}
 .bullets .sparkle{display:inline-block;width:10px;height:10px;background:#fde68a;border-radius:50%;margin-right:6px}
+
 .hero-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:10px}
 .hero-card svg{width:100%;height:auto;display:block}
 
@@ -58,41 +54,41 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .card-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
 .icon{font-size:20px}
 
-/* Upload */
 .upload-zone{position:relative;border:2px dashed rgba(0,0,0,.15);border-radius:14px;min-height:150px;background:#fff;display:flex;align-items:center;justify-content:center;padding:16px;cursor:pointer}
 .upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer}
 .upload-inner{pointer-events:none;text-align:center;color:#6b7280}
-.opts{display:grid;gap:6px;margin-top:10px}
+
+.preview{position:relative;border:2px dashed rgba(0,0,0,.12);background:#fff;border-radius:14px;min-height:220px;display:flex;align-items:center;justify-content:center;padding:10px}
 .formats{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.opts{display:grid;gap:6px;margin-top:10px}
 
-/* Preview card */
-.preview{
-  position:relative;border:2px dashed rgba(0,0,0,.12);background:#fff;border-radius:14px;
-  display:flex;align-items:center;justify-content:center;padding:10px;overflow:hidden;
-  aspect-ratio:16/9;max-height:min(60vh,520px)
-}
-.preview[data-empty="1"]{visibility:hidden}
-.preview[data-empty="1"]::before{content:'Your stitched preview appears here';visibility:visible;color:#6b7280}
-.preview > canvas{width:100%;height:100%;display:block}
+.canvas{position:relative;border:2px dashed rgba(0,0,0,.12);background:#fff;border-radius:14px;min-height:220px;padding:0}
 
-/* Draw & Trace */
-.canvas{position:relative;border:2px dashed rgba(0,0,0,.12);background:#fff;border-radius:14px;min-height:220px;padding:0;aspect-ratio:16/9;max-height:min(60vh,520px);overflow:hidden}
-.canvas > canvas{width:100%;height:100%;display:block;touch-action:none}
-.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
-
-/* Thread palette */
 .swatches{display:flex;gap:8px;flex-wrap:wrap}
-.swatches > button{width:28px;height:28px;border-radius:50%;border:2px solid rgba(0,0,0,.1);cursor:pointer}
+.swatches .chip{width:28px;height:28px;border-radius:999px;border:3px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.08)}
 
-/* Footer */
 .sitefooter{margin-top:36px;background:#fff;border-top:1px solid var(--border)}
 .footcard{max-width:1100px;margin:0 auto;padding:20px}
 .footgrid{display:flex;align-items:center;justify-content:space-between;gap:14px}
 .footlinks{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .dot{opacity:.5}
 
-.hidden{display:none!important}
-body.loom-lock{overscroll-behavior:none}
+/* utility */
+.hidden{ display:none !important; }
+
+/* Prevent canvas growth / keep aspect stable */
+.preview, .canvas{
+  position:relative;
+  aspect-ratio: 16/9;
+  height:auto;
+  max-height:min(60vh,520px);
+  overflow:hidden;
+}
+.preview > canvas,
+.canvas > canvas{ width:100%; height:100%; display:block; }
+
+/* Hide preview completely until there is an image */
+.preview[data-empty="1"]{ display:none; }
 
 @media (max-width:900px){
   .hero-grid{grid-template-columns:1fr}

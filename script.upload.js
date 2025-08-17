@@ -3,6 +3,7 @@
   const fileInput = document.getElementById('fileInput');
   const dropZone  = document.getElementById('dropZone');
   const previewHost = document.getElementById('previewHost');
+  const previewCard = document.getElementById('previewCard');
 
   async function handleFile(file){
     if(!file) return;
@@ -11,10 +12,13 @@
     App.lastResult = null;
     App.emit('image:loaded', bmp);
     previewHost.classList.remove('hidden');
+    previewCard.classList.remove('hidden');
   }
 
   // helpers
-  function blobFromFile(file){ return new Promise(res=>{ const r=new FileReader(); r.onload=()=>res(new Blob([r.result])); r.readAsArrayBuffer(file); }); }
+  async function blobFromFile(file){
+    return await file.slice(0,file.size, file.type||'image/*');
+  }
 
   // drag/drop
   ['dragenter','dragover'].forEach(ev=>dropZone.addEventListener(ev,e=>{e.preventDefault();}));

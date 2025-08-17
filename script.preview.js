@@ -1,4 +1,4 @@
-// Renders into preview canvas, highlight subject → switches to draw
+// Preview: show image/result, process, and enable lasso highlighting
 (function(){
   const c    = document.getElementById('previewCanvas');
   const ctx  = c.getContext('2d');
@@ -18,7 +18,7 @@
     const dpr = window.devicePixelRatio || 1;
     const w = Math.max(1, Math.floor(r.width  * dpr));
     const h = Math.max(1, Math.floor(r.height * dpr));
-    if (c.width !== w || c.height !== h){
+    if (c.width!==w || c.height!==h){
       c.width = w; c.height = h;
       c.style.width  = r.width  + 'px';
       c.style.height = r.height + 'px';
@@ -48,37 +48,50 @@
   // Progress helpers
   function showProgress(label){ pWrap.classList.remove('hidden'); setProgress(0,label); }
   function setProgress(v,label){
-    pBar.style.transform = 'scaleX(' + Math.max(0, Math.min(1, v)) + ')';
-    if(label) pLab.textContent = label;
+    if (pBar) pBar.style.transform = 'scaleX(' + Math.max(0, Math.min(1, v)) + ')';
+    if(label && pLab) pLab.textContent = label;
   }
   function hideProgress(){ pWrap.classList.add('hidden'); }
 
-  // Process Photo
-  btnProcess.addEventListener('click', async ()=>{
+  // Process Photo (no mask)
+  if (btnProcess) btnProcess.addEventListener('click', async ()=>{
     if(!App.image){ toast('Upload a photo first.'); return; }
     showProgress('Preparing…');
-    const opts = Object.assign({}, App.options, { noSubject: chkNoSubject.checked });
+    const opts = Object.assign({}, App.options, { noSubject: chkNoSubject && chkNoSubject.checked });
     const bmp = await Processing.processImage(App.image, null, opts, (p,l)=>setProgress(p,l));
     hideProgress();
     App.lastResult = bmp;
     drawBitmap(bmp);
   });
 
-  // Highlight Subject → open Draw tab and paint bgCanvas
-  btnHighlight.addEventListener('click', ()=>{
+  // Highlight Subject → open Draw in LASSO mode
+  if (btnHighlight) btnHighlight.addEventListener('click', ()=>{
     if(!App.image){ toast('Upload a photo first.'); return; }
-    document.querySelector('.tab-btn[data-tab="draw"]').click();
-    App.emit('draw:bg', { bmp: App.lastResult || App.image });
+    // switch tab
+    const btn = document.querySelector('.tab-btn[data-tab="draw"]');
+    if (btn) btn.click();
+    else switchTo('draw');
+    // tell draw module to load background and enter lasso mode
+    App.emit('draw:bg', {bmp: App.lastResult || App.image});
+    App.emit('draw:lasso', true);
   });
 
-  // Export PNG (placeholder for DST/EXP)
-  document.getElementById('btnPng').addEventListener('click', ()=>{
+  // Export PNG
+  const pngBtn = document.getElementById('btnPng');
+  if(pngBtn) pngBtn.addEventListener('click', ()=>{
     const url = c.toDataURL('image/png');
-    const a = document.createElement('a'); a.href = url; a.download = 'loomabelle.png'; a.click();
+    const a=document.createElement('a'); a.href=url; a.download='loomabelle.png'; a.click();
   });
+
+  // Fallback tab switcher (if no .tab-btn click handler available)
+  function switchTo(name){
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active', p.dataset.panel===name));
+  }
 
   function toast(msg){
-    pLab.textContent = msg;
+    if(!pWrap) return;
+    if(pLab) pLab.textContent = msg;
     pWrap.classList.remove('hidden');
     setProgress(0);
     setTimeout(()=>pWrap.classList.add('hidden'), 1500);

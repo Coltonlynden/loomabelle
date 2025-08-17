@@ -1,4 +1,4 @@
-// Drawing: pen/eraser, optional LASSO fill, Process -> back to Upload with preview updated
+// Drawing canvas (pen/eraser), optional LASSO fill, Process -> back to Upload with preview updated
 (function(){
   const host = document.getElementById('drawHost');
   const bg   = document.getElementById('bgCanvas');
@@ -14,7 +14,7 @@
   let tool='pen', drawing=false, lastX=0,lastY=0, scale=1, offsetX=0, offsetY=0, bmpForBg=null;
   let lassoMode=false, lassoPts=[];
 
-  function DPR(){ return window.devicePixelRatio || 1; }
+  const DPR = () => window.devicePixelRatio || 1;
 
   function fitCanvases(){
     const r = host.getBoundingClientRect();
@@ -55,7 +55,7 @@
     dctx.lineCap='round'; dctx.lineJoin='round';
     dctx.lineWidth = 16 * DPR();
     dctx.globalCompositeOperation = (tool==='pen' ? 'source-over' : 'destination-out');
-    dctx.strokeStyle = (tool==='pen' ? '#0f172a' : 'rgba(0,0,0,1)');
+    dctx.strokeStyle = (tool==='pen' ? '#0f172a' : 'rgba(0,0,0,1)';
     dctx.beginPath(); dctx.moveTo(lastX,lastY); dctx.lineTo(x,y); dctx.stroke();
     lastX=x; lastY=y;
   }
@@ -80,7 +80,7 @@
   if (toolPen)    toolPen.addEventListener('click', ()=>{ setTool('pen'); lassoMode=false; });
   if (toolEraser) toolEraser.addEventListener('click', ()=>{ setTool('eraser'); lassoMode=false; });
 
-  // Fill the lasso polygon into the draw layer (so "anything within area drawn" becomes selected)
+  // Fill the lasso polygon into the draw layer
   function fillLassoIfAny(){
     if (!lassoMode || lassoPts.length < 3) return;
     dctx.save();
@@ -96,10 +96,10 @@
     lassoPts = [];
   }
 
-  // Build mask in image space from draw layer (device-pixel correct)
-  function makeMaskFromDraw(){
+  // Build mask in image space from draw layer
+  function makeMaskFromDraw(targetW, targetH){
     const mask = document.createElement('canvas');
-    mask.width = App.image.width; mask.height = App.image.height;
+    mask.width = targetW; mask.height = targetH;
     const mx = mask.getContext('2d', {willReadFrequently:true});
     const tmp = dctx.getImageData(0,0,draw.width,draw.height).data;
     const mdata = mx.createImageData(mask.width, mask.height);
@@ -121,11 +121,30 @@
     return mask;
   }
 
-  // Process Selection -> pipeline -> switch to Upload + show preview
+  // If there is no uploaded image, treat the user's drawing as the source image
+  async function sourceFromDrawing(){
+    const off = document.createElement('canvas');
+    off.width = draw.width; off.height = draw.height;
+    const o = off.getContext('2d');
+    // background (white or whatever is on bg canvas), then strokes
+    if (bg.width && bg.height) o.drawImage(bg,0,0);
+    else { o.fillStyle='#ffffff'; o.fillRect(0,0,off.width,off.height); }
+    o.drawImage(draw,0,0);
+    return await createImageBitmap(off);
+  }
+
+  // Process Selection -> pipeline -> Upload tab + preview
   if (toolProcess) toolProcess.addEventListener('click', async ()=>{
-    if(!App.image){ return; }
+    // make a source image:
+    const srcBmp = App.image || await sourceFromDrawing();
+    if (!App.image) App.image = srcBmp; // so later actions work consistently
+
+    // ensure lasso region becomes solid interior
     fillLassoIfAny();
-    const mask = makeMaskFromDraw();
+
+    // mask follows the drawn alpha (scaled to src size)
+    const mask = makeMaskFromDraw(srcBmp.width, srcBmp.height);
+    App.mask = mask;
 
     // make preview visible first
     const previewCard = document.getElementById('previewCard');
@@ -139,16 +158,14 @@
     if (wrap) wrap.classList.remove('hidden');
     const progress = (p,l)=>{ if(bar) bar.style.transform=`scaleX(${Math.max(0,Math.min(1,p))})`; if(lab && l) lab.textContent=l; };
 
-    const bmp = await Processing.processImage(App.image, mask, Object.assign({}, App.options, { noSubject:false }), progress);
+    const bmp = await Processing.processImage(srcBmp, mask, Object.assign({}, App.options, { noSubject:false }), progress);
 
     if (wrap) wrap.classList.add('hidden');
     App.lastResult = bmp;
 
-    // hard switch to Upload tab (independent of button handlers)
+    // hard switch to Upload tab and update preview
     document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab==='upload'));
     document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active', p.dataset.panel==='upload'));
-
-    // update preview
     App.emit('image:loaded', bmp);
   });
 

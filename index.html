@@ -1,193 +1,38 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Loomabelle — photo → stitch files</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Quicksand:wght@400;500;600&family=Satisfy&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Loomabelle</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="page">
-    <header class="topnav">
-      <div class="navwrap">
-        <div class="logo">
-          <!-- Inline SVG so the logo always shows; replace with <img src="logo.svg"> if you want -->
-          <svg width="40" height="40" viewBox="0 0 64 64" aria-hidden="true">
-            <circle cx="32" cy="32" r="22" stroke="#93c5fd" stroke-width="3" fill="#fffaf3" />
-            <circle cx="32" cy="32" r="18" stroke="#93c5fd" stroke-dasharray="2 6" stroke-width="2" fill="none" />
-            <g transform="translate(32 32)">
-              <circle r="2.2" fill="#f59eb7" />
-              <circle r="1.4" fill="#fde68a" transform="translate(0 -5)"/>
-              <circle r="1.4" fill="#fde68a" transform="rotate(60) translate(0 -5)"/>
-              <circle r="1.4" fill="#fde68a" transform="rotate(120) translate(0 -5)"/>
-              <circle r="1.4" fill="#fde68a" transform="rotate(180) translate(0 -5)"/>
-              <circle r="1.4" fill="#fde68a" transform="rotate(240) translate(0 -5)"/>
-              <circle r="1.4" fill="#fde68a" transform="rotate(300) translate(0 -5)"/>
-            </g>
-          </svg>
-          <div class="wordmark">
-            <div class="brand">Loomabelle</div>
-            <div class="tag">photo → stitch files</div>
-          </div>
-        </div>
-        <nav class="links">
-          <a href="#features">Features</a>
-          <a href="#how">How it works</a>
-          <a href="#gallery">Gallery</a>
-        </nav>
-        <div class="actions">
-          <button class="btn ghost">Sign in</button>
-          <button class="btn rainbow" data-scroll="#tabs">Try it</button>
-        </div>
-      </div>
-    </header>
-
-    <section class="hero" id="features">
-      <div class="hero-grid">
-        <div class="hero-copy">
-          <h1>Turn photos into <span class="fancy-underline">embroidery</span> files.</h1>
-          <p>A cozy in-browser tool. Upload a photo or trace by hand, then export a stitch file.</p>
-          <div class="cta">
-            <button class="btn rainbow" data-scroll="#tabs">Start with a photo</button>
-            <button class="btn soft" data-scroll="#tabs" data-tab="draw">Open the drawing tab</button>
-          </div>
-          <ul class="bullets">
-            <li><span class="sparkle"></span> Auto color reduction</li>
-            <li><span class="sparkle"></span> Hoop presets</li>
-            <li><span class="sparkle"></span> Thread palette preview</li>
-            <li><span class="sparkle"></span> Offline — no server needed</li>
-          </ul>
-        </div>
-        <div class="hero-card colorful" aria-hidden="true">
-          <svg viewBox="0 0 520 380">
-            <defs>
-              <pattern id="stitchPattern" width="24" height="24" patternUnits="userSpaceOnUse" patternTransform="rotate(22)">
-                <line x1="0" y1="0" x2="0" y2="24" stroke="#93c5fd" stroke-width="2" stroke-dasharray="1 7"/>
-              </pattern>
-            </defs>
-            <circle cx="260" cy="190" r="140" fill="#fffaf3" stroke="#f9a8d4" stroke-width="10" />
-            <circle cx="260" cy="190" r="120" fill="url(#stitchPattern)" stroke="#a5b4fc" stroke-width="3" stroke-dasharray="4 10" />
-          </svg>
-        </div>
-      </div>
+  <header class="topbar">
+    <div class="logo">
+      <img src="logo.png" alt="Loomabelle Logo">
+      <span>Loomabelle</span>
+    </div>
+    <nav>
+      <a href="#">Features</a>
+      <a href="#">How it works</a>
+      <a href="#">Gallery</a>
+      <a href="#" class="signin">Sign in</a>
+      <a href="#" class="tryit">Try it</a>
+    </nav>
+  </header>
+  <main>
+    <section class="hero">
+      <h1>Turn photos into embroidery files.</h1>
+      <p>A cozy in-browser tool. Upload a photo or trace by hand, then export a stitch file.</p>
+      <button id="start-photo">Start with a photo</button>
+      <button id="start-draw">Open the drawing tab</button>
     </section>
-
-    <section id="tabs" class="tabs-wrap">
-      <div class="tabs">
-        <button class="tab-btn active" data-tab="upload">Upload Photo</button>
-        <button class="tab-btn" data-tab="draw">Draw &amp; Trace</button>
-        <span class="muted" id="readyFlag">ready to use</span>
-      </div>
-
-      <!-- Upload -->
-      <div class="panel active" data-panel="upload">
-        <div class="grid">
-          <div class="col card blue">
-            <div class="card-head">
-              <span class="icon">🧵</span><h3>Upload a photo</h3>
-            </div>
-
-            <label class="upload-zone" id="uploadZone">
-              <div class="upload-inner">
-                <svg width="56" height="56" viewBox="0 0 24 24"><path fill="currentColor" d="M12 16v-6m0 0l-3 3m3-3l3 3M6 20h12a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2h-1.5M6 20a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2h3l2-2h2l2 2h3"/></svg>
-                <p>Drag &amp; drop or tap to choose</p>
-              </div>
-              <input id="fileInput" type="file" accept="image/*,.heic,.heif" />
-            </label>
-
-            <div class="opts">
-              <label><input id="optPalette" type="checkbox" checked> Reduce to stitch palette</label>
-              <label><input id="optOutline" type="checkbox" checked> Edge outline</label>
-              <div class="range">
-                <input id="optDensity" type="range" min="0.3" max="0.8" step="0.01" value="0.45">
-                <span>Density</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="col card rose">
-            <div class="card-head">
-              <span class="icon">🪡</span><h3>Preview (stitched)</h3>
-            </div>
-            <div class="preview hidden" id="previewHost"></div>
-            <div class="formats">
-              <button class="btn soft" id="btnDst" disabled>DST</button>
-              <button class="btn soft" id="btnExp" disabled>EXP</button>
-              <button class="btn soft" id="btnPng" disabled>PNG</button>
-              <button class="btn soft" id="btnProcess" disabled>Process Photo</button>
-            </div>
-            <div class="formats">
-              <button class="btn soft" id="btnHighlight" disabled>Highlight Subject</button>
-              <label class="check"><input id="optNoSubject" type="checkbox"> No subject</label>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Draw -->
-      <div class="panel" data-panel="draw">
-        <div class="grid">
-          <div class="col card violet">
-            <div class="card-head">
-              <span class="icon">✂️</span><h3>Draw &amp; Trace</h3>
-            </div>
-            <div class="canvas" id="drawHost">
-              <!-- draw.js injects a canvas -->
-            </div>
-            <div class="toolbar">
-              <button class="btn soft" id="toolPen">Pen</button>
-              <button class="btn soft" id="toolErase">Eraser</button>
-              <button class="btn soft" id="toolClear">Clear</button>
-              <button class="btn soft" id="toolProcess" disabled>Process Selection</button>
-            </div>
-          </div>
-
-          <div class="col card green">
-            <div class="card-head">
-              <span class="icon">🎨</span><h3>Thread Palette</h3>
-            </div>
-            <div class="swatches" id="swatches">
-              <!-- preview.js populates swatches -->
-            </div>
-            <div class="formats">
-              <button class="btn soft" id="btnSuggest">Suggest Stitch Types</button>
-              <button class="btn soft" id="btnExport" disabled>Export Embroidery</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <footer class="sitefooter">
-      <div class="footcard">
-        <div class="footgrid">
-          <div>
-            <h4>Join the list</h4>
-            <p>Be first to hear when the converter goes live.</p>
-          </div>
-          <form class="sub">
-            <input disabled placeholder="Email address" />
-            <button disabled class="btn rainbow">Subscribe</button>
-          </form>
-        </div>
-        <div class="footlinks">
-          <span>© <span id="year"></span> Loomabelle</span>
-          <span class="dot">•</span>
-          <a href="#">Brand</a>
-          <a href="#">FAQ</a>
-          <a href="#">Contact</a>
-        </div>
-      </div>
-    </footer>
-  </div>
-
-  <!-- App modules (globals under window.App) -->
-  <script defer src="scripts/preview.js"></script>
-  <script defer src="scripts/processing.js"></script>
-  <script defer src="scripts/draw.js"></script>
-  <script defer src="scripts/upload.js"></script>
+    <section id="upload-section"></section>
+    <section id="draw-section"></section>
+  </main>
+  <script src="processing.js"></script>
+  <script src="script.upload.js"></script>
+  <script src="script.draw.js"></script>
+  <script src="script.preview.js"></script>
 </body>
 </html>

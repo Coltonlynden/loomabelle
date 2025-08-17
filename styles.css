@@ -1,100 +1,33 @@
-/* Loomabelle styles — v1.0 */
-
-:root{
-  --bg:#fffaf3; --ink:#111827; --muted:#6b7280;
-  --rose:#fde2e7; --blue:#e0f2fe; --violet:#ede9fe; --green:#dcfce7;
-  --card:#ffffff; --border:rgba(0,0,0,.08);
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #fffdf9;
 }
-*{box-sizing:border-box}
-html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 'Quicksand',system-ui,-apple-system,Segoe UI,Roboto,Arial}
-.page{min-height:100%}
-
-.topnav{
-  position:sticky;top:0;z-index:10;width:100%;
-  background:linear-gradient(90deg,#fbe7f0,#e2f0ff,#fef9c3);
-  border-bottom:1px solid var(--border);
-  will-change:transform;backface-visibility:hidden;
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(to right, #fddde6, #d6f3ff);
+  padding: 10px 20px;
 }
-.navwrap{max-width:1100px;margin:0 auto;padding:10px 20px;display:flex;align-items:center;gap:16px}
-.logo{display:flex;align-items:center;gap:10px}
-.wordmark .brand{font-family:'Satisfy',cursive;font-size:28px}
-.wordmark .tag{font-size:12px;color:var(--muted);margin-top:-6px}
-.links{margin-left:auto;display:flex;gap:16px}
-.links a{color:var(--ink);text-decoration:none;opacity:.8}
-.actions{display:flex;gap:8px}
-
-.btn{appearance:none;border:none;border-radius:999px;padding:10px 16px;background:#111827;color:#fff;cursor:pointer;box-shadow:0 2px 0 rgba(0,0,0,.06)}
-.btn.soft{background:#fff;border:1px solid var(--border);color:var(--ink)}
-.btn.ghost{background:transparent;border:1px solid var(--border);color:var(--ink)}
-.btn.rainbow{background:linear-gradient(90deg,#f9a8d4,#93c5fd,#fde68a);color:#111827;font-weight:600}
-.btn.soft.active{outline:3px solid rgba(0,0,0,.25)}
-.btn:disabled{opacity:.5;cursor:not-allowed}
-
-.hero{padding:48px 20px}
-.hero-grid{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:1.2fr 1fr;gap:24px;align-items:center}
-.hero-copy h1{font-family:'Fraunces',serif;font-weight:700;font-size:44px;margin:0 0 10px}
-.hero-copy p{margin:0 0 16px}
-.fancy-underline{background:linear-gradient(180deg,transparent 65%, #fde2e7 0)}
-.cta{display:flex;gap:10px;margin:10px 0 18px}
-.bullets{margin:0;padding:0;list-style:none;display:grid;gap:6px}
-.bullets .sparkle{display:inline-block;width:10px;height:10px;background:#fde68a;border-radius:50%;margin-right:6px}
-.hero-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:10px}
-.hero-card svg{width:100%;height:auto;display:block}
-
-.tabs-wrap{max-width:1100px;margin:10px auto 0;padding:0 20px}
-.tabs{display:flex;align-items:center;gap:10px}
-.tab-btn{border:1px solid var(--border);background:#fff;border-radius:999px;padding:8px 14px;cursor:pointer}
-.tab-btn.active{background:#111827;color:#fff}
-.muted{color:var(--muted);font-size:12px;margin-left:10px}
-
-.panel{display:none;margin-top:14px}
-.panel.active{display:block}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-
-.card{background:#fff;border:1px solid var(--border);border-radius:16px;padding:14px}
-.card.blue{background:var(--blue)}
-.card.rose{background:var(--rose)}
-.card.violet{background:var(--violet)}
-.card.green{background:var(--green)}
-.card-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-.icon{font-size:20px}
-
-.upload-zone{position:relative;border:2px dashed rgba(0,0,0,.15);border-radius:14px;min-height:150px;background:#fff;display:flex;align-items:center;justify-content:center;padding:16px;cursor:pointer}
-.upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer}
-.upload-inner{pointer-events:none;text-align:center;color:#6b7280}
-
-.preview{position:relative;border:2px dashed rgba(0,0,0,.12);background:#fff;border-radius:14px;min-height:220px;display:flex;align-items:center;justify-content:center;padding:10px}
-.canvas{position:relative;border:2px dashed rgba(0,0,0,.12);background:#fff;border-radius:14px;min-height:220px;padding:0}
-
-.formats{display:flex;gap:8px;margin-top:10px}
-.opts{display:grid;gap:6px;margin-top:10px}
-.range{display:flex;align-items:center;gap:10px}
-.range input{width:180px}
-
-.swatches{display:flex;gap:8px;flex-wrap:wrap}
-.swatches .chip{width:28px;height:28px;border-radius:50%;border:1px solid rgba(0,0,0,.15)}
-
-.sitefooter{margin-top:36px;background:#fff;border-top:1px solid var(--border)}
-.footcard{max-width:1100px;margin:0 auto;padding:20px}
-.footgrid{display:flex;align-items:center;justify-content:space-between;gap:14px}
-.footlinks{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-.dot{opacity:.5}
-
-.hidden{display:none !important}
-
-/* Stable preview sizing: host controls height, canvas fills it */
-#previewHost{aspect-ratio:16/9; height:auto; max-height:min(60vh,520px); overflow:hidden}
-#previewHost canvas{width:100%;height:100%;display:block}
-
-/* Draw canvas rules */
-#drawHost{aspect-ratio:16/9; height:auto; max-height:min(60vh,520px); overflow:hidden}
-#drawHost canvas{width:100%;height:100%;display:block; touch-action:none;}
-
-/* Keep sticky header from visually shrinking on iOS */
-.topnav{will-change:transform; backface-visibility:hidden}
-
-@media (max-width:900px){
-  .hero-grid{grid-template-columns:1fr}
-  .grid{grid-template-columns:1fr}
+.topbar .logo img {
+  height: 40px;
+}
+.topbar nav a {
+  margin: 0 10px;
+  text-decoration: none;
+  color: #333;
+  font-weight: bold;
+}
+.hero {
+  text-align: center;
+  padding: 50px 20px;
+}
+button {
+  padding: 10px 20px;
+  margin: 5px;
+  border: none;
+  border-radius: 5px;
+  background: linear-gradient(to right, #ffd6f3, #d6f3ff);
+  cursor: pointer;
 }

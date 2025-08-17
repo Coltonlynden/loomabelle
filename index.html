@@ -6,7 +6,7 @@
   <title>Loomabelle — photo → stitch files</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:...:wght@400;500;600&family=Satisfy&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Quicksand:wght@400;500;600&family=Satisfy&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -44,9 +44,7 @@
             <button class="btn soft" data-scroll="#tabs" data-tab="draw">Open the drawing tab</button>
           </div>
           <ul class="bullets">
-            <li><span class="sparkle"></span> Works in your browser</li>
-            <li><span class="sparkle"></span> Privacy friendly — no uploads</li>
-            <li><span class="sparkle"></span> Supports DST, EXP, PNG</li>
+            <li><span class="sparkle"></span> Auto color reduction</li>
             <li><span class="sparkle"></span> Hoop presets</li>
             <li><span class="sparkle"></span> Thread palette preview</li>
             <li><span class="sparkle"></span> Offline — no server needed</li>
@@ -77,17 +75,17 @@
 
             <!-- Drop / pick -->
             <label class="upload-zone" id="dropZone">
-              <input id="fileInput" type="file" accept="image/*" hidden />
               <div class="upload-inner">
-                <div class="folder" aria-hidden="true"></div>
-                <div class="big">Drag &amp; drop or click to choose</div>
+                <svg width="56" height="56" viewBox="0 0 24 24"><path fill="currentColor" d="M12 16v-6m0 0l-3 3m3-3l3 3M6 20h12a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2h-1.5M6 20a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2h3l2-2h2l2 2h3"/></svg>
+                <p>Drag &amp; drop or click to choose</p>
               </div>
+              <input id="fileInput" type="file" accept="image/*" />
             </label>
 
             <!-- Options -->
             <div class="opts">
-              <label class="check"><input id="optPalette" type="checkbox" checked /> Reduce to stitch palette</label>
-              <label class="check"><input id="optEdge" type="checkbox" checked /> Edge outline</label>
+              <label><input id="optPalette" type="checkbox" checked> Reduce to stitch palette</label>
+              <label><input id="optEdge" type="checkbox" checked> Edge outline</label>
               <label class="slider">
                 <input id="optDensity" type="range" min="1" max="8" value="3" />
                 <span>Density</span>
@@ -95,7 +93,7 @@
             </div>
           </div>
 
-          <!-- Preview card (hidden until a file is loaded) -->
+          <!-- Preview card: HIDDEN until an image is loaded -->
           <div id="previewCard" class="col card rose" style="display:none">
             <div class="card-head">
               <span class="icon" aria-hidden="true">🪡</span>
@@ -134,21 +132,37 @@
               <span class="icon" aria-hidden="true">✂️</span>
               <h3>Draw &amp; Trace</h3>
             </div>
-            <div class="draw-wrap">
+
+            <div id="drawHost" class="canvas">
+              <!-- the background image is painted into bgCanvas; overlay is the pen -->
+              <canvas id="bgCanvas" aria-hidden="true"></canvas>
               <canvas id="drawCanvas"></canvas>
             </div>
-            <div class="draw-actions">
-              <button id="btnDrawBrush" class="btn soft">Brush</button>
-              <button id="btnDrawErase" class="btn soft">Erase</button>
-              <button id="btnDrawClear" class="btn soft">Clear</button>
-              <button id="btnDrawUse" class="btn rainbow">Use on Photo</button>
+
+            <div class="toolbar">
+              <button id="toolPen" class="btn soft active">Pen</button>
+              <button id="toolEraser" class="btn soft">Eraser</button>
+              <button id="toolClear" class="btn soft">Clear</button>
+              <button id="toolProcessSel" class="btn soft strong">Process Selection</button>
+            </div>
+          </div>
+
+          <div class="col card green">
+            <div class="card-head">
+              <span class="icon" aria-hidden="true">🎨</span>
+              <h3>Thread Palette</h3>
+            </div>
+            <div id="swatches" class="swatches"></div>
+            <div class="formats">
+              <button class="btn soft" disabled>Suggest Stitch Types</button>
+              <button class="btn soft" disabled>Export Embroidery</button>
             </div>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Footer -->
+    <!-- Footer (unchanged look) -->
     <footer class="sitefooter">
       <div class="footcard">
         <div class="footgrid">
@@ -184,13 +198,13 @@
     };
   </script>
 
-  <!-- Behavior -->
+  <!-- Modules -->
   <script src="processing.js"></script>
   <script src="script.upload.js"></script>
   <script src="script.preview.js"></script>
   <script src="script.draw.js"></script>
   <script>
-    // smooth scroll + tab switch
+    // Tabs + smooth scroll
     document.querySelectorAll('[data-scroll]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         document.querySelector(btn.dataset.scroll).scrollIntoView({behavior:'smooth'});
@@ -205,6 +219,14 @@
     }
     tabBtns.forEach(b=>b.addEventListener('click', ()=>switchTab(b.dataset.tab)));
     document.getElementById('year').textContent = new Date().getFullYear();
+
+    /* NEW (minimal): reveal preview card once an image is loaded */
+    App.on('image:loaded', ()=>{
+      const card = document.getElementById('previewCard');
+      if (card) card.style.display = '';
+      const host = document.getElementById('previewHost');
+      if (host) host.classList.remove('hidden');
+    });
   </script>
 </body>
 </html>

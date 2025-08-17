@@ -1,141 +1,144 @@
-// v1 — Draw / highlight subject
+// draw.js — v1.0
+(function(){
+  const App = (window.App = window.App || {});
+  const host = document.getElementById('drawHost');
+  const toolPen = document.getElementById('toolPen');
+  const toolErase = document.getElementById('toolErase');
+  const toolClear = document.getElementById('toolClear');
+  const toolProcess = document.getElementById('toolProcess');
 
-const S = window.Looma;
-const { getWorker, showTab } = window.LoomaAPI;
+  let canvas, ctx, bgCanvas;
+  let drawing=false, erase=false, size=16, lastX=0, lastY=0;
 
-const bg = document.getElementById('lb-draw-bg');
-const cnv = document.getElementById('lb-draw');
+  function ensureCanvases(){
+    if (canvas) return;
+    // drawing canvas
+    canvas = document.createElement('canvas');
+    canvas.width = 960; canvas.height = 540;
+    canvas.style.touchAction = 'none';
+    host.innerHTML = '';
+    host.appendChild(canvas);
+    ctx = canvas.getContext('2d', { willReadFrequently:true });
+    ctx.lineCap = 'round'; ctx.lineJoin='round';
 
-let tool = 'pen';
-let size = 18;
-let drawing = false, lx=0, ly=0;
+    // background image layer (rendered beneath)
+    bgCanvas = document.createElement('canvas');
+    bgCanvas.width = canvas.width; bgCanvas.height = canvas.height;
+    bgCanvas.style.display = 'none'; // not added to DOM
+  }
 
-function pointerXY(ev){
-  const r = cnv.getBoundingClientRect();
-  const px = (ev.touches?ev.touches[0].clientX:ev.clientX) - r.left;
-  const py = (ev.touches?ev.touches[0].clientY:ev.clientY) - r.top;
-  return { x: px * (cnv.width / r.width), y: py * (cnv.height / r.height) };
-}
+  function toCanvasXY(ev){
+    const r = canvas.getBoundingClientRect();
+    const x = (ev.touches?ev.touches[0].clientX:ev.clientX) - r.left;
+    const y = (ev.touches?ev.touches[0].clientY:ev.clientY) - r.top;
+    const sx = x * (canvas.width/r.width);
+    const sy = y * (canvas.height/r.height);
+    return {x:sx, y:sy};
+  }
 
-function begin(ev){
-  if (!S.img) return;
-  drawing = true;
-  document.body.style.overscrollBehavior = 'none';
-  const {x,y} = pointerXY(ev); lx=x; ly=y;
-  drawDot(x,y);
-  ev.preventDefault();
-}
-function move(ev){
-  if (!drawing) return;
-  const {x,y} = pointerXY(ev);
-  const c = cnv.getContext('2d');
-  c.lineWidth = size;
-  c.lineCap = 'round';
-  c.globalCompositeOperation = (tool==='eraser') ? 'destination-out' : 'source-over';
-  c.strokeStyle = (tool==='eraser') ? '#000' : 'rgba(0,0,0,0.95)';
-  c.beginPath(); c.moveTo(lx,ly); c.lineTo(x,y); c.stroke();
-  lx=x; ly=y; ev.preventDefault();
-}
-function end(){ drawing=false; document.body.style.overscrollBehavior='auto'; }
-function drawDot(x,y){
-  const c = cnv.getContext('2d');
-  c.globalCompositeOperation = (tool==='eraser') ? 'destination-out' : 'source-over';
-  c.fillStyle = 'rgba(0,0,0,0.95)';
-  c.beginPath(); c.arc(x,y,size/2,0,Math.PI*2); c.fill();
-}
+  function start(ev){
+    if (!App.state.img) return;
+    drawing=true;
+    const p = toCanvasXY(ev);
+    lastX=p.x; lastY=p.y;
+    drawDot(p.x,p.y);
+    ev.preventDefault();
+  }
+  function move(ev){
+    if(!drawing) return;
+    const p = toCanvasXY(ev);
+    ctx.globalCompositeOperation = erase ? 'destination-out':'source-over';
+    ctx.strokeStyle = erase ? 'rgba(0,0,0,1)' : '#101828';
+    ctx.lineWidth = size;
+    ctx.beginPath();
+    ctx.moveTo(lastX,lastY);
+    ctx.lineTo(p.x,p.y);
+    ctx.stroke();
+    lastX=p.x; lastY=p.y;
+    ev.preventDefault();
+  }
+  function end(){ drawing=false; }
 
-cnv.addEventListener('mousedown', begin);
-window.addEventListener('mouseup', end);
-cnv.addEventListener('mousemove', move);
-cnv.addEventListener('touchstart', begin, {passive:false});
-window.addEventListener('touchend', end);
-cnv.addEventListener('touchmove', move, {passive:false});
+  function drawDot(x,y){
+    ctx.globalCompositeOperation = erase ? 'destination-out':'source-over';
+    ctx.fillStyle = erase ? '#000' : '#101828';
+    ctx.beginPath(); ctx.arc(x,y,size/2,0,Math.PI*2); ctx.fill();
+  }
 
-document.getElementById('tool-pen').addEventListener('click', ()=>{
-  tool='pen';
-  document.getElementById('tool-pen').classList.add('active');
-  document.getElementById('tool-eraser').classList.remove('active');
-});
-document.getElementById('tool-eraser').addEventListener('click', ()=>{
-  tool='eraser';
-  document.getElementById('tool-eraser').classList.add('active');
-  document.getElementById('tool-pen').classList.remove('active');
-});
-document.getElementById('btn-clear').addEventListener('click', ()=>{
-  cnv.getContext('2d').clearRect(0,0,cnv.width,cnv.height);
-});
+  // Public: called when highlight subject is tapped (image already loaded)
+  App.prepareDrawSurface = function(){
+    ensureCanvases();
+    // paint faint background photo beneath the strokes
+    const g = bgCanvas.getContext('2d');
+    g.clearRect(0,0,bgCanvas.width,bgCanvas.height);
+    const iw = App.state.imgW, ih = App.state.imgH;
+    const s = Math.min(bgCanvas.width/iw, bgCanvas.height/ih);
+    const w = Math.round(iw*s), h = Math.round(ih*s);
+    const x = (bgCanvas.width - w)>>1, y = (bgCanvas.height - h)>>1;
+    g.globalAlpha = 0.35;
+    g.drawImage(App.state.img, x, y, w, h);
 
-document.getElementById('btn-process-selection').addEventListener('click', async ()=>{
-  if (!S.img) return;
-  // collect mask
-  const id = cnv.getContext('2d').getImageData(0,0,cnv.width,cnv.height).data;
-  const mask = new Uint8Array(cnv.width*cnv.height);
-  for(let i=0;i<mask.length;i++){ mask[i] = id[i*4+3] > 8 ? 1 : 0; }
+    const hctx = host.getContext?.('2d'); // not a canvas; ignore
 
-  const worker = getWorker();
-  runProgress(true, 'Processing selection…');
+    // clear previous mask drawing
+    ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  const msg = {
-    type:'process',
-    image: S.work.getContext('2d').getImageData(0,0,S.work.width,S.work.height),
-    mask, options: S.options
+    toolProcess.disabled = false;
   };
-  worker.onmessage = (e)=>{
-    const m = e.data;
-    if (m.type==='progress'){ updateProgress(m.value, m.note); }
-    if (m.type==='result'){
-      S.previewImage = m.preview;
-      S.stitches = m.dst || null;
-      paintPreview();
-      runProgress(false);
-      // go back to upload/preview tab
-      showTab('upload');
-      // enable exports
-      document.getElementById('btn-png').disabled = false;
-      document.getElementById('btn-dst').disabled = !S.stitches;
-      document.getElementById('btn-exp').disabled = true;
+
+  // export mask back to App.state.mask (Uint8Array at image resolution)
+  function commitMaskToState(){
+    // scale the drawn mask back to the original image size
+    const tmp = document.createElement('canvas');
+    tmp.width = App.state.imgW; tmp.height = App.state.imgH;
+    const t = tmp.getContext('2d');
+    // draw strokes onto tmp while keeping alignment with the photo we showed
+    const iw = App.state.imgW, ih = App.state.imgH;
+    const s = Math.min(canvas.width/iw, canvas.height/ih);
+    const w = Math.round(iw*s), h = Math.round(ih*s);
+    const x = (canvas.width - w)>>1, y = (canvas.height - h)>>1;
+
+    // composite: start blank, draw mask area from canvas ROI stretched to original size
+    const roi = ctx.getImageData(x, y, w, h);
+    const tmpMask = document.createElement('canvas');
+    tmpMask.width = w; tmpMask.height = h;
+    tmpMask.getContext('2d').putImageData(roi, 0, 0);
+    t.drawImage(tmpMask, 0, 0, iw, ih); // scale into original size
+
+    const id = t.getImageData(0,0,iw,ih).data;
+    const out = new Uint8Array(iw*ih);
+    let count = 0;
+    for (let i=0;i<out.length;i++){
+      const a = id[i*4+3];
+      if (a>10){ out[i]=1; count++; }
     }
-  };
-  worker.postMessage(msg, [msg.image.data.buffer, mask.buffer]);
-});
+    App.state.mask = (count<50) ? null : out;
+  }
 
-/* palette swatches */
-const THREADS = [
-  '#ef4444','#f472b6','#a78bfa','#60a5fa','#38bdf8','#22d3ee',
-  '#34d399','#a3e635','#facc15','#fb923c','#f87171','#16a34a'
-];
-const palWrap = document.getElementById('palette');
-THREADS.forEach(c=>{
-  const b = document.createElement('button');
-  b.style.background = c;
-  b.title = c;
-  palWrap.appendChild(b);
-});
-/* util shared with preview */
-function paintPreview(){
-  const host = document.getElementById('preview-host');
-  const cv = document.getElementById('lb-preview');
-  host.classList.remove('hidden');
-  cv.width = S.previewImage.width;
-  cv.height = S.previewImage.height;
-  const ctx = cv.getContext('2d');
-  const id = new ImageData(new Uint8ClampedArray(S.previewImage.data), S.previewImage.width, S.previewImage.height);
-  ctx.putImageData(id,0,0);
-}
+  // events
+  toolPen.addEventListener('click', ()=>{ erase=false; toolPen.classList.add('active'); toolErase.classList.remove('active'); });
+  toolErase.addEventListener('click', ()=>{ erase=true; toolErase.classList.add('active'); toolPen.classList.remove('active'); });
+  toolClear.addEventListener('click', ()=>{ ensureCanvases(); ctx.clearRect(0,0,canvas.width,canvas.height); App.state.mask=null; });
 
-function runProgress(on, note){
-  const box = document.getElementById('progress');
-  const bar = document.getElementById('pbar');
-  const txt = document.getElementById('ptext');
-  if (on){ box.classList.remove('hidden'); bar.style.width='6%'; txt.textContent = note||''; }
-  else   { box.classList.add('hidden');  bar.style.width='0'; txt.textContent=''; }
-}
-function updateProgress(v,note){
-  const bar = document.getElementById('pbar');
-  const txt = document.getElementById('ptext');
-  bar.style.width = Math.max(6, Math.min(100, v)) + '%';
-  if (note) txt.textContent = note;
-}
+  ['mousedown','touchstart'].forEach(e=>canvas?.addEventListener(e,start,{passive:false}));
+  ['mousemove','touchmove'].forEach(e=>canvas?.addEventListener(e,move,{passive:false}));
+  ['mouseup','mouseleave','touchend','touchcancel'].forEach(e=>canvas?.addEventListener(e,end,{passive:false}));
 
-/* expose */
-window.LoomaDraw = { paintPreview, runProgress, updateProgress };
+  // late-bind after canvas creation
+  function bindPointer(){
+    ['mousedown','touchstart'].forEach(e=>canvas.addEventListener(e,start,{passive:false}));
+    ['mousemove','touchmove'].forEach(e=>canvas.addEventListener(e,move,{passive:false}));
+    ['mouseup','mouseleave','touchend','touchcancel'].forEach(e=>canvas.addEventListener(e,end,{passive:false}));
+  }
+
+  toolProcess.addEventListener('click', ()=>{
+    commitMaskToState();
+    // jump back to Upload panel so user can Process Photo with the mask
+    (window.App && App.switchTab) && App.switchTab('upload');
+    document.getElementById('btnHighlight').classList.remove('active');
+  });
+
+  // Expose for upload module to prepare drawing when needed
+  App._draw_bindPointers = () => { ensureCanvases(); bindPointer(); };
+
+})();

@@ -46,16 +46,16 @@
 
     <section class="hero">
       <div class="hero-blobs" aria-hidden="true"></div>
-      <div class="decor decor-flower" aria-hidden="true"></div>
-      <div class="decor decor-scallop" aria-hidden="true"></div>
+      <div class="decor decor-flower"></div>
+      <div class="decor decor-scallop"></div>
 
       <div class="hero-grid">
         <div class="hero-copy">
           <h1>Turn photos into <span class="fancy-underline">embroidery</span> files.</h1>
           <p>A colorful, cozy tool to convert images into stitch-ready formats. Upload a photo or doodle in our cute stitch canvas.</p>
           <div class="cta">
-            <button class="btn rainbow" data-scroll="#tabs">Start with a photo</button>
-            <button class="btn soft" data-scroll="#tabs">Open the drawing tab</button>
+            <button class="btn rainbow" data-scroll="#tabs" data-tab-target="upload">Start with a photo</button>
+            <button class="btn soft" data-scroll="#tabs" data-tab-target="draw">Open the drawing tab</button>
           </div>
           <ul class="bullets">
             <li><span class="sparkle"></span> Auto color reduction</li>
@@ -64,8 +64,8 @@
             <li><span class="sparkle"></span> Light & dark fabric modes</li>
           </ul>
         </div>
-        <div class="hero-art hero-card colorful">
-          <svg viewBox="0 0 520 420" aria-hidden="true">
+        <div class="hero-art hero-card colorful" aria-hidden="true">
+          <svg viewBox="0 0 520 420">
             <defs>
               <pattern id="stitchPattern" width="24" height="24" patternUnits="userSpaceOnUse" patternTransform="rotate(22)">
                 <line x1="0" y1="0" x2="0" y2="24" stroke="#93c5fd" stroke-width="2" stroke-dasharray="1 7"/>
@@ -83,85 +83,78 @@
 
     <section id="tabs" class="tabs-wrap">
       <div class="tabs">
-        <button class="tab-btn active" data-tab="upload">Upload Photo</button>
-        <button class="tab-btn" data-tab="draw">Draw &amp; Trace</button>
-        <span class="muted">ready to use</span>
+        <button class="tab-btn active" data-tab="upload" id="tabUpload">Upload Photo</button>
+        <button class="tab-btn" data-tab="draw" id="tabDraw">Draw &amp; Trace</button>
+        <span class="muted" id="tabHint">ready to use</span>
       </div>
 
-      <div class="panel active" data-panel="upload">
+      <!-- Upload tab -->
+      <div class="panel active" data-panel="upload" id="panelUpload">
         <div class="grid">
           <div class="col card blue">
-            <div class="card-head">
-              <span class="icon" aria-hidden="true">🧵</span>
-              <h3>Upload a photo</h3>
-            </div>
-            <div class="upload-zone">
+            <div class="card-head"><span class="icon">🧵</span><h3>Upload a photo</h3></div>
+
+            <div class="upload-zone" id="uploadZone">
               <div class="upload-inner">
                 <svg width="56" height="56" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 16v-6m0 0l-3 3m3-3l3 3M6 20h12a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2h-1.5M6 20a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2h3l2-2h2l2 2h3"/></svg>
                 <p>Drag &amp; drop or click to choose</p>
               </div>
-              <input type="file" />
+              <input type="file" id="fileInput" accept="image/*,.heic,.heif" />
             </div>
 
             <div class="opts">
-              <label><input type="checkbox" id="autoColors" checked> Reduce to stitch palette</label>
-              <label><input type="checkbox" id="outline" checked> Edge outline</label>
-              <label><input type="range" id="density" min="0.3" max="0.8" value="0.4" step="0.05"> Density</label>
+              <label><input type="checkbox" id="optReduce" checked> Reduce to stitch palette</label>
+              <label><input type="checkbox" id="optEdge" checked> Edge outline</label>
+              <label style="display:flex;align-items:center;gap:10px">
+                <input type="range" id="optDensity" min="0.3" max="0.8" step="0.05" value="0.4" style="flex:1">
+                <span>Density</span>
+              </label>
             </div>
           </div>
 
           <div class="col card rose">
-            <div class="card-head">
-              <span class="icon" aria-hidden="true">🪡</span>
-              <h3>Preview (stitched)</h3>
+            <div class="card-head"><span class="icon">🪡</span><h3>Preview (stitched)</h3></div>
+            <div class="preview" id="previewHost" data-empty="1">
+              <canvas id="preview" width="640" height="360" aria-label="Embroidery preview"></canvas>
             </div>
-            <div class="preview">Your stitched preview appears here</div>
             <div class="formats">
-              <button class="btn soft">DST</button>
-              <button class="btn soft">EXP</button>
-              <button class="btn soft">PES</button>
-              <button class="btn soft">JEF</button>
+              <button class="btn soft" id="btnDST">DST</button>
+              <button class="btn soft" id="btnEXP">EXP</button>
+              <button class="btn soft" id="btnPES">PES</button>
+              <button class="btn soft" id="btnJEF">JEF</button>
+              <button class="btn soft" id="btnProcess">Process Photo</button>
+              <button class="btn soft" id="btnHighlight">Highlight Subject</button>
             </div>
           </div>
         </div>
       </div>
 
-      <div class="panel" data-panel="draw">
+      <!-- Draw tab -->
+      <div class="panel" data-panel="draw" id="panelDraw">
         <div class="grid">
           <div class="col card violet">
-            <div class="card-head">
-              <span class="icon" aria-hidden="true">✂️</span>
-              <h3>Draw &amp; Trace</h3>
-            </div>
-            <div class="canvas">Cute stitch canvas</div>
+            <div class="card-head"><span class="icon">✂️</span><h3>Draw &amp; Trace</h3></div>
+            <div class="canvas"><canvas id="drawCanvas" width="960" height="540" aria-label="Trace canvas"></canvas></div>
             <div class="toolbar">
-              <button class="btn soft">Pen</button>
-              <button class="btn soft">Eraser</button>
+              <button class="btn soft" id="btnPen">Pen</button>
+              <button class="btn soft" id="btnEraser">Eraser</button>
+              <button class="btn soft loom-process-selection" id="btnProcessSelection">Process Selection</button>
             </div>
           </div>
 
           <div class="col card green">
-            <div class="card-head">
-              <span class="icon" aria-hidden="true">🎨</span>
-              <h3>Thread Palette</h3>
-            </div>
-            <div class="swatches"></div>
+            <div class="card-head"><span class="icon">🎨</span><h3>Thread Palette</h3></div>
+            <div class="swatches" id="swatches" aria-label="Thread palette"></div>
             <div class="formats">
-              <button class="btn soft" id="suggest">Suggest Stitch Types</button>
-              <button class="btn soft" id="exportEmb">Export Embroidery</button>
+              <button class="btn soft" id="btnSuggest" disabled>Suggest Stitch Types</button>
+              <button class="btn soft" id="btnExport" disabled>Export Embroidery</button>
             </div>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="break">
-      <div class="pattern-strip">
-        <div class="thread"></div>
-        <div class="sticker heart"></div>
-        <div class="sticker flower"></div>
-      </div>
-    </section>
+    <section class="break"><div class="pattern-strip"><div class="thread"></div><div class="sticker heart"></div><div class="sticker flower"></div></div></section>
 
     <section id="gallery" class="inspo">
       <div class="inspo-inner">
@@ -179,15 +172,14 @@
 
     <footer class="sitefooter">
       <div class="footcard">
-        <div class="decor-bigflower"></div>
         <div class="footgrid">
           <div>
             <h4>Join the list</h4>
             <p>Be first to hear when the converter goes live.</p>
           </div>
           <form class="sub" onsubmit="return false;">
-            <input placeholder="Email address" />
-            <button class="btn rainbow">Subscribe</button>
+            <input placeholder="Email address" disabled />
+            <button class="btn rainbow" disabled>Subscribe</button>
           </form>
         </div>
         <div class="footlinks">
@@ -200,6 +192,7 @@
       </div>
     </footer>
   </div>
-  <script src="script.js" defer></script>
+
+  <script src="./script.js" defer></script>
 </body>
 </html>

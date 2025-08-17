@@ -1,196 +1,142 @@
-/* processing.js — runs in a Worker thread
-   - color quantization (k-means lite)
-   - Sobel edges (density controls strength)
-   - background removal (border flood region)
-   - optional subject mask (from Draw tab)
-   Returns a PNG dataURL sized to the preview canvas.
-*/
-self.onmessage = async (ev)=>{
-  const msg = ev.data;
-  if (msg.type!=='process') return;
+// Very lightweight, device-safe “stitch look” pipeline with progress reporting.
+// - If mask is provided: background is removed (outside mask becomes transparent)
+// - Palette reduction + edge outline + cross-hatch shading preview
+// - Returns an ImageBitmap to keep memory lower across iOS
 
-  try{
-    const { image, options, maskPNG } = msg;
-    const W = image.width, H = image.height;
+const Processing = (()=>{
 
-    // Build a work canvas inside the worker
-    const canvas = new OffscreenCanvas(W,H);
-    const ctx = canvas.getContext('2d', { willReadFrequently:true });
-    const src = new ImageData(new Uint8ClampedArray(image.data), W, H);
-    ctx.putImageData(src,0,0);
-
-    // Optional subject mask (user trace)
-    let mask = null;
-    if (maskPNG){
-      const b = await (await fetch(maskPNG)).blob();
-      const bmp = await createImageBitmap(b);
-      const mCan = new OffscreenCanvas(W,H);
-      const mCtx = mCan.getContext('2d');
-      mCtx.drawImage(bmp,0,0,W,H);
-      mask = mCtx.getImageData(0,0,W,H).data; // RGBA
-    }
-
-    // Get pixels
-    let img = ctx.getImageData(0,0,W,H);
-    let data = img.data;
-
-    // Background remove by border sampling + flood
-    if (!options?.noSubject){
-      const bg = sampleBorderColors(data,W,H);
-      floodRemove(data,W,H,bg, 28); // tolerance
-    }
-
-    // Color quantization (ke-means-ish)
-    if (options?.palette){
-      quantizeKMeans(data, 8, 6); // k, iterations
-    }
-
-    // Optional edges overlay
-    if (options?.edges){
-      const strength = Math.max(1, Math.round((options.density||25)/10));
-      overlayEdges(data, W, H, strength);
-    }
-
-    // Apply subject mask if provided: keep only drawn region
-    if (mask){
-      for (let i=0;i<data.length;i+=4){
-        const a = mask[i+3]; // alpha from mask
-        if (a<16){ data[i+3]=0; } // transparent outside
-      }
-    }
-
-    // Write back and export PNG
-    ctx.putImageData(new ImageData(data, W, H),0,0);
-    const blob = await canvas.convertToBlob({ type:'image/png' });
-    const dataURL = await blobToDataURL(blob);
-    self.postMessage({ type:'result', width:W, height:H, dataURL });
-  }catch(err){
-    self.postMessage({ type:'error', error: String(err?.message||err) });
+  // utils
+  function createCanvas(w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; return c; }
+  function drawToFit(srcBmp, w, h){
+    const c=createCanvas(w,h), x=c.getContext('2d', {willReadFrequently:true});
+    // scale to fit (no letterbox: fill)
+    const s = Math.min(w/srcBmp.width, h/srcBmp.height);
+    const dw = Math.round(srcBmp.width*s), dh=Math.round(srcBmp.height*s);
+    const dx=(w-dw)>>1, dy=(h-dh)>>1;
+    x.drawImage(srcBmp,0,0,srcBmp.width,srcBmp.height, dx,dy,dw,dh);
+    return c;
   }
-};
 
-/* Helpers */
+  function report(cb, p, label){ if(cb) cb(p,label); }
 
-function blobToDataURL(blob){
-  return new Promise(res=>{
-    const r = new FileReader();
-    r.onload = ()=>res(r.result);
-    r.readAsDataURL(blob);
-  });
-}
-
-function sampleBorderColors(data,W,H){
-  // average of a 1px frame around image
-  let r=0,g=0,b=0,n=0;
-  function add(x,y){
-    const i=(y*W+x)*4; r+=data[i]; g+=data[i+1]; b+=data[i+2]; n++;
-  }
-  for (let x=0;x<W;x++){ add(x,0); add(x,H-1); }
-  for (let y=1;y<H-1;y++){ add(0,y); add(W-1,y); }
-  return { r:r/n, g:g/n, b:b/n };
-}
-function dist2(r1,g1,b1,r2,g2,b2){
-  const dr=r1-r2,dg=g1-g2,db=b1-b2;
-  return dr*dr+dg*dg+db*db;
-}
-function floodRemove(data,W,H,bg,tol){
-  // Simple boundary fill to mark background by similarity to border mean color
-  const th = (tol||24)**2;
-  const mark = new Uint8Array(W*H);
-  const q = [];
-  // enqueue border
-  for (let x=0;x<W;x++){ q.push(x,0, x,H-1); }
-  for (let y=1;y<H-1;y++){ q.push(0,y, W-1,y); }
-  while(q.length){
-    const y=q.pop(); const x=q.pop();
-    const idx = y*W + x;
-    if (mark[idx]) continue;
-    const i = idx*4;
-    if (data[i+3]<10){ mark[idx]=1; continue; } // already transparent
-    if (dist2(data[i],data[i+1],data[i+2],bg.r,bg.g,bg.b) > th) continue;
-    mark[idx]=1;
-    if (x>0) q.push(x-1,y);
-    if (x<W-1) q.push(x+1,y);
-    if (y>0) q.push(x,y-1);
-    if (y<H-1) q.push(x,y+1);
-  }
-  // make marked pixels transparent
-  for (let i=0;i<mark.length;i++){
-    if (mark[i]) data[i*4+3]=0;
-  }
-}
-
-function quantizeKMeans(data, K=8, iters=6){
-  // Initialize centroids by sampling
-  const cents = new Array(K).fill(0).map((_,k)=>{
-    const i = ((Math.random()*((data.length/4)|0))|0)*4;
-    return [data[i],data[i+1],data[i+2]];
-  });
-  const asn = new Uint8Array(data.length/4);
-
-  for (let it=0;it<iters;it++){
-    // assign
-    for (let p=0, i=0; p<asn.length; p++, i+=4){
-      let best=0, bd=1e12;
-      for (let c=0;c<K;c++){
-        const d = dist2(data[i],data[i+1],data[i+2], ...cents[c]);
-        if (d<bd){ bd=d; best=c; }
-      }
-      asn[p]=best;
+  // naive palette reduce (bucketize)
+  function paletteReduce(img, levels){
+    const {width:w,height:h}=img;
+    const ctx=img.getContext('2d'); const id=ctx.getImageData(0,0,w,h); const d=id.data;
+    const step = Math.max(2, Math.floor(256/levels));
+    for(let i=0;i<d.length;i+=4){
+      d[i]  = Math.min(255, Math.floor(d[i]/step)*step);
+      d[i+1]= Math.min(255, Math.floor(d[i+1]/step)*step);
+      d[i+2]= Math.min(255, Math.floor(d[i+2]/step)*step);
     }
-    // update
-    const sum = new Array(K).fill(0).map(()=>[0,0,0,0]);
-    for (let p=0, i=0; p<asn.length; p++, i+=4){
-      const c = asn[p]; const s = sum[c];
-      s[0]+=data[i]; s[1]+=data[i+1]; s[2]+=data[i+2]; s[3]++;
-    }
-    for (let c=0;c<K;c++){
-      const s=sum[c]; if (!s[3]) continue;
-      cents[c]=[s[0]/s[3], s[1]/s[3], s[2]/s[3]];
-    }
+    ctx.putImageData(id,0,0); return img;
   }
-  // paint
-  for (let p=0, i=0; p<asn.length; p++, i+=4){
-    const c = cents[asn[p]];
-    data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
-  }
-}
 
-function overlayEdges(data,W,H,strength){
-  // Sobel
-  const gray = new Uint8ClampedArray(W*H);
-  for (let i=0,j=0;i<data.length;i+=4,j++){
-    gray[j] = (data[i]*0.299 + data[i+1]*0.587 + data[i+2]*0.114)|0;
-  }
-  const out = new Uint8ClampedArray(W*H);
-  const sx = [-1,0,1,-2,0,2,-1,0,1];
-  const sy = [-1,-2,-1,0,0,0,1,2,1];
-  for (let y=1;y<H-1;y++){
-    for (let x=1;x<W-1;x++){
-      let gx=0, gy=0, k=0;
-      for (let yy=-1;yy<=1;yy++){
-        for (let xx=-1;xx<=1;xx++){
-          const g = gray[(y+yy)*W + (x+xx)];
-          gx += g * sx[k];
-          gy += g * sy[k];
-          k++;
+  // Sobel edge (grayscale)
+  function sobelEdges(img){
+    const {width:w,height:h}=img;
+    const c=createCanvas(w,h), ctx=c.getContext('2d');
+    ctx.drawImage(img,0,0);
+    const src=ctx.getImageData(0,0,w,h); const d=src.data;
+    // grayscale
+    const g=new Uint8ClampedArray(w*h);
+    for(let i=0,j=0;i<d.length;i+=4,j++){ g[j]=(d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114)|0; }
+    const out=createCanvas(w,h); const octx=out.getContext('2d'); const oid=octx.createImageData(w,h); const od=oid.data;
+    const kx=[-1,0,1,-2,0,2,-1,0,1], ky=[-1,-2,-1,0,0,0,1,2,1];
+    for(let y=1;y<h-1;y++){
+      for(let x=1;x<w-1;x++){
+        let ix=y*w+x, sx=0, sy=0, n=0;
+        for(let j=-1;j<=1;j++) for(let i=-1;i<=1;i++){
+          const v=g[(y+j)*w+(x+i)];
+          sx+=v*kx[++n-1]; sy+=v*ky[n-1];
         }
-      }
-      const mag = Math.min(255, Math.hypot(gx,gy)|0);
-      out[y*W+x] = mag;
-    }
-  }
-  // draw darker lines where edges are strong
-  for (let y=0;y<H;y++){
-    for (let x=0;x<W;x++){
-      const idx = y*W + x;
-      const e = out[idx];
-      if (e>40){
-        const i = idx*4;
-        data[i]   = Math.max(0, data[i]   - e/strength);
-        data[i+1] = Math.max(0, data[i+1] - e/strength);
-        data[i+2] = Math.max(0, data[i+2] - e/strength);
+        const mag=Math.min(255, Math.hypot(sx,sy)|0);
+        const p=(ix<<2); od[p]=od[p+1]=od[p+2]=mag; od[p+3]=255;
       }
     }
+    octx.putImageData(oid,0,0); return out;
   }
-}
+
+  // hatch overlay (angle based on density)
+  function hatch(img, density=3){
+    const {width:w,height:h}=img;
+    const ctx=img.getContext('2d');
+    ctx.save();
+    ctx.globalAlpha = 0.25;
+    ctx.strokeStyle='#0f172a';
+    ctx.lineWidth = Math.max(1, Math.floor(Math.max(w,h)/800));
+    const step = Math.max(6, 18 - density*2);
+    for(let y=-h; y<h; y+=step){
+      ctx.beginPath();
+      ctx.moveTo(0,y);
+      ctx.lineTo(w, y+h);
+      ctx.stroke();
+    }
+    ctx.restore();
+    return img;
+  }
+
+  // apply mask: outside transparent
+  function applyMask(img, mask){
+    const {width:w,height:h}=img;
+    const ctx=img.getContext('2d'); const id=ctx.getImageData(0,0,w,h); const d=id.data;
+    const mx = mask.getContext('2d'); const md = mx.getImageData(0,0,mask.width,mask.height).data;
+    // assume same size; if not, scale mask
+    if(mask.width!==w || mask.height!==h){
+      const scaled=createCanvas(w,h); const sx=scaled.getContext('2d'); sx.drawImage(mask,0,0,w,h); mask=scaled;
+    }
+    const mscaled = mask.getContext('2d').getImageData(0,0,w,h).data;
+    for(let i=0;i<d.length;i+=4){
+      const a = mscaled[i+3]; // alpha from drawing
+      if(a<10){ d[i+3]=0; } // hide outside
+    }
+    ctx.putImageData(id,0,0); return img;
+  }
+
+  async function toBitmap(canvas){
+    // convert to ImageBitmap to lighten memory on iOS when re-drawing
+    return await createImageBitmap(canvas);
+  }
+
+  // Public
+  async function processImage(srcBmp, maskCanvas, opts, onProgress){
+    const density = Math.max(1, Math.min(8, opts?.density ?? 3));
+    const W = Math.min(1600, srcBmp.width);
+    const H = Math.round(srcBmp.height * (W/srcBmp.width));
+    report(onProgress, 0.05, 'Scaling…');
+    let work = drawToFit(srcBmp, W, H);
+
+    if(maskCanvas && !opts?.noSubject){
+      report(onProgress, 0.15, 'Applying selection…');
+      work = applyMask(work, maskCanvas);
+    }
+
+    if(opts?.palette){
+      report(onProgress, 0.35, 'Reducing colors…');
+      work = paletteReduce(work, 12 - density); // fewer levels at higher density
+    }
+
+    let edgeLayer=null;
+    if(opts?.edge){
+      report(onProgress, 0.55, 'Finding edges…');
+      edgeLayer = sobelEdges(work);
+    }
+
+    report(onProgress, 0.7, 'Adding stitches…');
+    work = hatch(work, density);
+
+    if(edgeLayer){
+      const ctx = work.getContext('2d');
+      ctx.globalAlpha = 0.75; ctx.globalCompositeOperation='multiply';
+      ctx.drawImage(edgeLayer,0,0);
+      ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over';
+    }
+
+    report(onProgress, 0.95, 'Finalizing…');
+    const bmp = await toBitmap(work);
+    report(onProgress, 1, 'Done');
+    return bmp;
+  }
+
+  return { processImage };
+})();

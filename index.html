@@ -7,34 +7,37 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+  <!-- Top frame with stitched flowers -->
+  <div class="garland garland--top" aria-hidden="true"></div>
+
   <header class="site-header">
+    <nav class="site-nav">
+      <a class="nav-link" href="#">Home</a>
+      <a class="nav-link" href="#">Features</a>
+      <a class="nav-link" href="#">Pricing</a>
+    </nav>
     <div class="brand">
       <img src="logo.png" alt="Easbroidery logo" class="logo" />
-      <span class="wordmark">Easbroidery</span>
+      <span class="wordmark">EASBROIDERY</span>
     </div>
-    <nav class="tabs" role="tablist" aria-label="Main tabs">
-      <button id="tab-upload" class="tab active" data-target="panel-upload">Upload</button>
-      <button id="tab-draw" class="tab" data-target="panel-draw">Draw</button>
-      <button id="tab-preview" class="tab" data-target="panel-preview">Preview</button>
-    </nav>
   </header>
 
-  <main>
-    <!-- Upload panel -->
-    <section id="panel-upload" class="panel" role="tabpanel" aria-labelledby="tab-upload">
-      <div class="hero">
-        <h1>Digitize photos into embroidery files</h1>
-        <p class="sub">Convert photos to stitch‑ready designs. Fully in your browser.</p>
-      </div>
+  <main class="hero">
+    <section class="hero__content">
+      <h1 class="hero__title">Digitize photos into<br/>embroidery files</h1>
+      <p class="hero__sub">Use AI to convert your photos into embroidery designs with ease.</p>
+      <p class="hero__body">
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis congue aliquam laoreet.
+        Ut eleifend leo non lacinia rutrum. Vestibulum blandit eros vel lorem pretium aliquam.
+      </p>
 
       <div class="uploader">
         <input id="file" type="file" accept="image/*" />
-        <button id="btn-upload" class="primary">Choose image</button>
-        <div class="tips">PNG or JPG recommended. Large photos are auto‑downsampled for speed.</div>
+        <button id="btn-upload" class="btn btn--primary">Upload photo</button>
       </div>
 
       <div class="auto-controls">
-        <button id="btn-auto" disabled>Auto highlight subject</button>
+        <button id="btn-auto" class="btn" disabled>Auto highlight subject</button>
         <label class="inline">
           Detail
           <input id="auto-detail" type="range" min="1" max="6" step="1" value="3" />
@@ -42,7 +45,29 @@
       </div>
     </section>
 
-    <!-- Draw/refine panel -->
+    <section class="hero__visual">
+      <!-- round photo area -->
+      <div class="circle">
+        <canvas id="preview" width="1024" height="1024" class="circle__canvas"></canvas>
+        <img src="sample.jpg" alt="" class="circle__placeholder" />
+      </div>
+      <!-- small callout bubble for before/after -->
+      <div class="bubble" id="mini-bubble" aria-hidden="true"></div>
+    </section>
+  </main>
+
+  <!-- Work area (hidden until upload) -->
+  <section id="work" class="work">
+    <nav class="tabs" role="tablist" aria-label="Editor tabs">
+      <button id="tab-upload" class="tab active" data-target="panel-upload">Upload</button>
+      <button id="tab-draw" class="tab" data-target="panel-draw">Draw</button>
+      <button id="tab-preview" class="tab" data-target="panel-preview">Preview</button>
+    </nav>
+
+    <section id="panel-upload" class="panel" role="tabpanel" aria-labelledby="tab-upload">
+      <div class="tips">PNG or JPG recommended. Large photos are auto‑downsampled for speed.</div>
+    </section>
+
     <section id="panel-draw" class="panel hidden" role="tabpanel" aria-labelledby="tab-draw">
       <div class="canvas-wrap">
         <canvas id="canvas" width="1024" height="1024"></canvas>
@@ -69,22 +94,19 @@
       </div>
     </section>
 
-    <!-- Preview/export panel -->
     <section id="panel-preview" class="panel hidden" role="tabpanel" aria-labelledby="tab-preview">
-      <div class="preview-wrap">
-        <canvas id="preview" width="1024" height="1024"></canvas>
-      </div>
-
       <div class="export">
-        <button id="btn-make-stitches" class="primary" disabled>Generate stitches</button>
-        <button id="btn-dl-png" disabled>Download PNG</button>
-        <button id="btn-dl-svg" disabled>Download SVG</button>
-        <button id="btn-dl-json" disabled>Download stitches JSON</button>
-        <!-- PES/DST will be added in worker in next step -->
+        <button id="btn-make-stitches" class="btn btn--primary" disabled>Generate stitches</button>
+        <button id="btn-dl-png" class="btn" disabled>Download PNG</button>
+        <button id="btn-dl-svg" class="btn" disabled>Download SVG</button>
+        <button id="btn-dl-json" class="btn" disabled>Download stitches JSON</button>
       </div>
       <div class="note">Preview stays hidden until an image is loaded.</div>
     </section>
-  </main>
+  </section>
+
+  <!-- Bottom stitched wave + flowers -->
+  <div class="garland garland--bottom" aria-hidden="true"></div>
 
   <footer class="site-footer">
     <small>© Easbroidery</small>

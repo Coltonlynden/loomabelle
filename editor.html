@@ -21,8 +21,8 @@
     </div>
   </header>
 
-  <main class="editor editor--dock">
-    <!-- Left rail remains for steps + upload -->
+  <main class="editor editor--stack">
+    <!-- left: steps + upload -->
     <aside class="rail">
       <ol class="steps">
         <li class="steps__item steps__item--done">1. Upload</li>
@@ -42,9 +42,9 @@
       </details>
     </aside>
 
-    <!-- Work surface column -->
-    <section class="stage stage--dock">
-      <!-- view toolbar at the top of the image box -->
+    <!-- right: work surface -->
+    <section class="stage stage--stack">
+      <!-- View bar sits on top of the image box -->
       <div class="viewbar">
         <div class="row">
           <button id="zoom-out" class="btn btn--small">−</button>
@@ -54,70 +54,73 @@
         </div>
       </div>
 
-      <!-- canvas + docked brush tools -->
-      <div class="workarea">
-        <div class="canvas-shell" id="shell">
-          <canvas id="canvas" width="1024" height="1024"></canvas>
-          <canvas id="mask"   width="1024" height="1024"></canvas>
-          <canvas id="overlay" width="1024" height="1024"></canvas>
-          <canvas id="edges" width="1024" height="1024"></canvas>
-          <canvas id="dir"   width="1024" height="1024"></canvas>
-        </div>
-
-        <!-- docked brush panel, attached to image box -->
-        <aside class="brush-dock">
-          <div class="dock-header">Brush</div>
-
-          <div class="row m-b8">
-            <button id="mode-mask" class="chip chip--active">Mask</button>
-            <button id="mode-text" class="chip">Text</button>
-            <button id="mode-dir"  class="chip">Direction</button>
-          </div>
-
-          <div id="panel-mask" class="stack">
-            <label class="row"><span>Size</span><input id="brush-size" type="range" min="4" max="80" value="26" /></label>
-            <div class="row">
-              <button id="tool-brush" class="btn btn--small btn--primary">Paint</button>
-              <button id="tool-erase" class="btn btn--small">Erase</button>
-              <button id="tool-wand"  class="btn btn--small">Wand</button>
-            </div>
-            <div class="row">
-              <button id="btn-undo" class="btn btn--small">Undo</button>
-              <button id="btn-redo" class="btn btn--small">Redo</button>
-              <button id="btn-clear-mask" class="btn btn--small">Clear</button>
-              <button id="btn-fill-mask" class="btn btn--small">Fill</button>
-            </div>
-            <div class="row">
-              <label class="switch"><input id="toggle-mask" type="checkbox" checked><span>Show mask</span></label>
-              <label class="switch"><input id="toggle-edge" type="checkbox"><span>Show edges</span></label>
-            </div>
-          </div>
-
-          <div id="panel-text" class="stack hidden">
-            <input id="text-input" type="text" placeholder="Add text" />
-            <button id="btn-add-text" class="btn w100">Apply</button>
-            <label class="row"><span>Curve</span><input id="text-curve" type="range" min="-100" max="100" value="0" /></label>
-            <label class="row"><span>Size</span><input id="text-size" type="range" min="10" max="200" value="56" /></label>
-            <small>Drag on Live preview to move the text.</small>
-          </div>
-
-          <div id="panel-dir" class="stack hidden">
-            <label class="row"><span>Angle</span><input id="dir-angle" type="range" min="0" max="180" value="45" /></label>
-            <div class="row"><span id="dir-angle-value">45°</span></div>
-            <label class="row">
-              <span>Pattern</span>
-              <select id="dir-pattern">
-                <option value="fill" selected>Fill (running)</option>
-                <option value="satin">Satin (zig‑zag)</option>
-                <option value="cross">Cross hatch</option>
-              </select>
-            </label>
-            <label class="switch"><input id="toggle-dir-overlay" type="checkbox" checked><span>Show direction overlay</span></label>
-          </div>
-        </aside>
+      <!-- Canvas box -->
+      <div class="canvas-shell" id="shell">
+        <canvas id="canvas" width="1024" height="1024"></canvas>
+        <canvas id="mask"   width="1024" height="1024"></canvas>
+        <canvas id="overlay" width="1024" height="1024"></canvas>
+        <canvas id="edges" width="1024" height="1024"></canvas>
+        <canvas id="dir"   width="1024" height="1024"></canvas>
       </div>
 
-      <!-- live preview to the right on desktop, below on mobile -->
+      <!-- Brush panel now BELOW the image -->
+      <section class="brush-panel box">
+        <div class="box__summary">Brush</div>
+
+        <div class="panel-row">
+          <button id="mode-mask" class="chip chip--active">Mask</button>
+          <button id="mode-text" class="chip">Text</button>
+          <button id="mode-dir"  class="chip">Direction</button>
+        </div>
+
+        <!-- Mask tools -->
+        <div id="panel-mask" class="panel-grid">
+          <label><span>Size</span><input id="brush-size" type="range" min="4" max="80" value="26" /></label>
+
+          <div class="tool-group">
+            <button id="tool-brush" class="btn btn--small btn-toggle active">Paint</button>
+            <button id="tool-erase" class="btn btn--small btn-toggle">Erase</button>
+            <button id="tool-wand"  class="btn btn--small btn-toggle">Wand</button>
+          </div>
+
+          <div class="tool-group">
+            <button id="btn-undo" class="btn btn--small">Undo</button>
+            <button id="btn-redo" class="btn btn--small">Redo</button>
+            <button id="btn-clear-mask" class="btn btn--small">Clear</button>
+            <button id="btn-fill-mask" class="btn btn--small">Fill</button>
+          </div>
+
+          <div class="tool-group">
+            <label class="switch"><input id="toggle-mask" type="checkbox" checked><span>Show mask</span></label>
+            <label class="switch"><input id="toggle-edge" type="checkbox"><span>Show edges</span></label>
+          </div>
+        </div>
+
+        <!-- Text tools -->
+        <div id="panel-text" class="panel-grid hidden">
+          <label><span>Text</span><input id="text-input" type="text" placeholder="Add text" /></label>
+          <button id="btn-add-text" class="btn">Apply</button>
+          <label><span>Curve</span><input id="text-curve" type="range" min="-100" max="100" value="0" /></label>
+          <label><span>Size</span><input id="text-size" type="range" min="10" max="200" value="56" /></label>
+          <small class="muted">Drag in Live preview to move the text.</small>
+        </div>
+
+        <!-- Direction tools -->
+        <div id="panel-dir" class="panel-grid hidden">
+          <label><span>Angle</span><input id="dir-angle" type="range" min="0" max="180" value="45" /></label>
+          <div><span id="dir-angle-value">45°</span></div>
+          <label><span>Pattern</span>
+            <select id="dir-pattern">
+              <option value="fill" selected>Fill (running)</option>
+              <option value="satin">Satin (zig‑zag)</option>
+              <option value="cross">Cross hatch</option>
+            </select>
+          </label>
+          <label class="switch"><input id="toggle-dir-overlay" type="checkbox" checked><span>Show direction overlay</span></label>
+        </div>
+      </section>
+
+      <!-- Preview -->
       <div class="stage__preview">
         <h4>Live preview</h4>
         <div class="preview-stack">
@@ -128,7 +131,7 @@
     </section>
   </main>
 
-  <!-- fixed stitch bar at bottom -->
+  <!-- Fixed stitches bar -->
   <div class="stitch-bar" role="region" aria-label="Stitches">
     <div class="stitch-bar__row">
       <div class="row">

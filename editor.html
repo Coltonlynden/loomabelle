@@ -7,8 +7,7 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="garland garland--top" aria-hidden="true"></div>
-
+  <div class="floral floral--top" aria-hidden="true"></div>
   <header class="site-header">
     <nav class="site-nav">
       <a class="nav-link" href="index.html">Home</a>
@@ -21,59 +20,89 @@
     </div>
   </header>
 
-  <main class="work">
-    <section class="panel">
-      <div class="uploader">
+  <main class="editor">
+    <!-- Left rail: steps + tools -->
+    <aside class="rail">
+      <ol class="steps">
+        <li class="steps__item steps__item--done">1. Upload</li>
+        <li class="steps__item steps__item--active">2. Select subject</li>
+        <li class="steps__item">3. Add text</li>
+        <li class="steps__item">4. Export</li>
+      </ol>
+
+      <section class="box">
+        <h3>Image</h3>
         <input id="file" type="file" accept="image/*" />
-        <button id="btn-upload" class="btn btn--primary">Choose image</button>
-        <span class="tips">PNG/JPG. Large photos auto‑downsampled.</span>
-      </div>
-      <div class="auto-controls">
-        <button id="btn-auto" class="btn" disabled>Auto highlight subject</button>
-        <label class="inline">Detail <input id="auto-detail" type="range" min="1" max="6" step="1" value="3" /></label>
-      </div>
-    </section>
+        <button id="btn-upload" class="btn btn--primary w100">Choose image</button>
+        <button id="btn-auto" class="btn w100" disabled>Auto highlight</button>
+        <label class="row">Detail <input id="auto-detail" type="range" min="1" max="6" value="3"></label>
+      </section>
 
-    <section class="panel">
-      <div class="canvas-wrap">
+      <section class="box">
+        <h3>Brush</h3>
+        <div class="row">
+          <button id="tool-brush" class="chip chip--active">Paint</button>
+          <button id="tool-erase" class="chip">Erase</button>
+          <button id="tool-wand"  class="chip">Wand</button>
+        </div>
+        <label class="row">Size <input id="brush-size" type="range" min="2" max="64" value="24"></label>
+        <div class="row">
+          <button id="btn-undo" class="btn">Undo</button>
+          <button id="btn-redo" class="btn">Redo</button>
+          <button id="btn-clear-mask" class="btn">Clear</button>
+          <button id="btn-fill-mask" class="btn">Fill</button>
+        </div>
+        <div class="row">
+          <label class="switch"><input id="toggle-mask" type="checkbox" checked><span>Show mask</span></label>
+          <label class="switch"><input id="toggle-edge" type="checkbox"><span>Show edges</span></label>
+        </div>
+      </section>
+
+      <section class="box">
+        <h3>Text</h3>
+        <input id="text-input" type="text" placeholder="Add text">
+        <div class="row"><button id="btn-add-text" class="btn w100">Apply</button></div>
+        <label class="row">Curve <input id="text-curve" type="range" min="-100" max="100" value="0"></label>
+        <label class="row">Size <input id="text-size" type="range" min="10" max="200" value="56"></label>
+        <small>Drag text on the preview to position.</small>
+      </section>
+
+      <section class="box">
+        <h3>View</h3>
+        <div class="row">
+          <button id="zoom-out" class="btn">−</button>
+          <button id="zoom-reset" class="btn">100%</button>
+          <button id="zoom-in" class="btn">＋</button>
+        </div>
+      </section>
+
+      <section class="box">
+        <h3>Export</h3>
+        <button id="btn-make-stitches" class="btn btn--primary w100" disabled>Generate stitches</button>
+        <div class="row">
+          <button id="btn-dl-png"  class="btn" disabled>PNG</button>
+          <button id="btn-dl-svg"  class="btn" disabled>SVG</button>
+          <button id="btn-dl-json" class="btn" disabled>Stitches JSON</button>
+        </div>
+      </section>
+    </aside>
+
+    <!-- Work surface -->
+    <section class="stage">
+      <div class="canvas-shell" id="shell">
         <canvas id="canvas" width="1024" height="1024"></canvas>
-        <canvas id="mask"   width="1024" height="1024"></canvas>
+        <canvas id="mask" width="1024" height="1024"></canvas>
         <canvas id="overlay" width="1024" height="1024"></canvas>
+        <canvas id="edges" width="1024" height="1024"></canvas>
       </div>
-
-      <div class="tools">
-        <div class="tool-group">
-          <button id="tool-brush" class="tool active">Brush</button>
-          <button id="tool-erase" class="tool">Erase</button>
-          <button id="tool-wand"  class="tool">Wand</button>
-          <label>Size <input id="brush-size" type="range" min="2" max="64" value="24" /></label>
-          <button id="btn-clear-mask">Clear mask</button>
-          <button id="btn-fill-mask">Fill largest area</button>
-        </div>
-        <div class="tool-group">
-          <button id="btn-add-text">Add text</button>
-          <input id="text-input" type="text" placeholder="Your text" />
-          <label>Curve <input id="text-curve" type="range" min="-100" max="100" value="0" /></label>
-          <label>Size <input id="text-size" type="range" min="10" max="200" value="56" /></label>
-        </div>
-      </div>
-    </section>
-
-    <section class="panel">
-      <div class="preview-wrap">
+      <div class="stage__preview">
+        <h4>Live preview</h4>
         <canvas id="preview" width="1024" height="1024"></canvas>
       </div>
-      <div class="export">
-        <button id="btn-make-stitches" class="btn btn--primary" disabled>Generate stitches</button>
-        <button id="btn-dl-png"  class="btn" disabled>Download PNG</button>
-        <button id="btn-dl-svg"  class="btn" disabled>Download SVG</button>
-        <button id="btn-dl-json" class="btn" disabled>Download stitches JSON</button>
-      </div>
-      <div class="note">Preview stays disabled until an image is loaded.</div>
     </section>
   </main>
 
-  <div class="garland garland--bottom" aria-hidden="true"></div>
+  <div class="floral floral--bottom" aria-hidden="true"></div>
   <footer class="site-footer"><small>© Easbroidery</small></footer>
 
   <script src="colors.js"></script>
@@ -81,6 +110,5 @@
   <script src="processing.js"></script>
   <script src="script.upload.js"></script>
   <script src="script.draw.js"></script>
-  <script src="script.preview.js"></script>
 </body>
 </html>

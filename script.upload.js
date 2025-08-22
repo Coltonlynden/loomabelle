@@ -1,38 +1,26 @@
-// Handles file input, reads into ImageBitmap, reveals preview
 (function(){
-  const fileInput  = document.getElementById('fileInput');
-  const dropZone   = document.getElementById('dropZone');
-  const previewHost= document.getElementById('previewHost');
-  const previewCard= document.getElementById('previewCard');
+  const file = document.getElementById("file");
+  const btn  = document.getElementById("btn-upload");
 
-  async function handleFile(file){
-    if(!file) return;
-    // Create an ImageBitmap directly from the File (no FileReader needed)
-    const bmp = await createImageBitmap(file);
-    App.image = bmp;
-    App.lastResult = null;
+  btn.addEventListener("click", ()=>file.click());
 
-    // reveal preview (card + canvas host)
-    if (previewCard) previewCard.style.display = '';
-    if (previewHost) previewHost.classList.remove('hidden');
-
-    // notify listeners (preview/draw modules)
-    App.emit('image:loaded', bmp);
-  }
-
-  // drag/drop
-  ['dragenter','dragover'].forEach(ev=>dropZone.addEventListener(ev,e=>{e.preventDefault();}));
-  dropZone.addEventListener('drop', e=>{
-    e.preventDefault();
-    const f = e.dataTransfer?.files?.[0];
-    handleFile(f);
+  file.addEventListener("change", async (e)=>{
+    const f = e.target.files[0];
+    if(!f) return;
+    const url = URL.createObjectURL(f);
+    const img = new Image();
+    img.onload = async ()=>{
+      window.EAS.state.img = img;
+      await window.EAS_processing.placeImage(img);
+      URL.revokeObjectURL(url);
+      // show preview panel but keep hidden until user clicks "Preview"
+      document.getElementById("tab-draw").click();
+    };
+    img.src = url;
   });
 
-  // file picker
-  fileInput.addEventListener('change', e=>handleFile(e.target.files && e.target.files[0]));
-
-  // tie options to App.options
-  document.getElementById('optPalette').addEventListener('change', e=>App.options.palette = e.target.checked);
-  document.getElementById('optEdge').addEventListener('change', e=>App.options.edge = e.target.checked);
-  document.getElementById('optDensity').addEventListener('input', e=>App.options.density = +e.target.value);
+  document.getElementById("btn-auto").addEventListener("click", ()=>{
+    const d = +document.getElementById("auto-detail").value;
+    window.EAS_processing.autoSubject(d);
+  });
 })();

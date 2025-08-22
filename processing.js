@@ -1,24 +1,31 @@
-// Rendering, auto-mask, preview, and export
 (function(){
   const S=EAS.state;
+  const shell = ()=> document.getElementById("shell");
+  const setShellTransform = ()=>{
+    const el=shell(); if(!el) return;
+    el.style.transform=`translate(${S.panX}px,${S.panY}px) scale(${S.zoom})`;
+  };
+
   const getCtx=c=>c.getContext("2d",{willReadFrequently:true});
 
   async function placeImage(img){
-    const base=document.getElementById("canvas");
-    const ctx=getCtx(base);
+    const base=document.getElementById("canvas"); const ctx=getCtx(base);
     ctx.clearRect(0,0,base.width,base.height);
 
     const w=img.naturalWidth, h=img.naturalHeight;
     const scale=Math.min(base.width/w, base.height/h);
     const dw=Math.round(w*scale), dh=Math.round(h*scale);
     const ox=(base.width-dw)>>1, oy=(base.height-dh)>>1;
-
     ctx.imageSmoothingQuality="high";
     ctx.drawImage(img,0,0,w,h, ox,oy,dw,dh);
 
     // reset mask
     const m=document.getElementById("mask");
     getCtx(m).clearRect(0,0,m.width,m.height);
+
+    // reset edges
+    const e=document.getElementById("edges");
+    getCtx(e).clearRect(0,0,e.width,e.height);
 
     S.scale=scale; S.hasImage=true; S.hasMask=false;
     document.getElementById("btn-auto").disabled=false;
@@ -28,7 +35,7 @@
     document.getElementById("btn-dl-json").disabled=true;
   }
 
-  // K-means subject pick + center component
+  // Auto subject (k-means + center component)
   function autoSubject(detail=3){
     if(!S.hasImage) return;
     const base=document.getElementById("canvas");
@@ -39,13 +46,12 @@
     const id=t.getImageData(0,0,W,H), d=id.data;
 
     const K=Math.max(2,Math.min(6,detail));
-    const cents=[];
-    for(let k=0;k<K;k++){ const i=((Math.random()*W*H)|0)*4; cents.push([d[i],d[i+1],d[i+2]]); }
+    const cents=[]; for(let k=0;k<K;k++){ const i=((Math.random()*W*H)|0)*4; cents.push([d[i],d[i+1],d[i+2]]); }
     const label=new Uint8Array(W*H);
     for(let it=0;it<8;it++){
       for(let p=0;p<W*H;p++){
         const i=p*4, r=d[i],g=d[i+1],b=d[i+2];
-        let bi=0,bd=1e12; for(let k=0;k<K;k++){ const c=cents[k], L=(r-c[0])**2+(g-c[1])**2+(b-c[2])**2; if(L<bd){bd=L;bi=k;} }
+        let bi=0,bd=1e12; for(let k=0;k<K;k++){ const c=cents[k]; const L=(r-c[0])**2+(g-c[1])**2+(b-c[2])**2; if(L<bd){bd=L;bi=k;} }
         label[p]=bi;
       }
       const acc=Array.from({length:K},()=>[0,0,0,0]);
@@ -53,32 +59,31 @@
       for(let k=0;k<K;k++){ const a=acc[k]; if(a[3]) cents[k]=[a[0]/a[3],a[1]/a[3],a[2]/a[3]]; }
     }
     const cx=(W/2)|0, cy=(H/2)|0;
-    const mask=new Uint8Array(W*H); for(let i=0;i<W*H;i++) mask[i]=0;
-
     function flood(which){
-      const m=new Uint8Array(W*H); for(let i=0;i<W*H;i++) if(label[i]===which) m[i]=1;
+      const comp=new Uint8Array(W*H);
+      for(let i=0;i<W*H;i++) if(label[i]===which) comp[i]=1;
       const seen=new Uint8Array(W*H); const st=[[cx,cy]]; const out=[];
       while(st.length){
         const [x,y]=st.pop(); if(x<0||y<0||x>=W||y>=H) continue;
-        const idx=y*W+x; if(seen[idx]||!m[idx]) continue; seen[idx]=1; out.push(idx);
+        const idx=y*W+x; if(seen[idx]||!comp[idx]) continue;
+        seen[idx]=1; out.push(idx);
         st.push([x+1,y],[x-1,y],[x,y+1],[x,y-1]);
       }
       return out;
     }
     let best=[], bestLen=-1;
-    for(let k=0;k<K;k++){ const comp=flood(k); if(comp.length>bestLen){bestLen=comp.length; best=comp;} }
-    best.forEach(i=>mask[i]=1);
+    for(let k=0;k<K;k++){ const comp=flood(k); if(comp.length>bestLen){best=comp; bestLen=comp.length;} }
 
     const maskC=document.getElementById("mask"), mc=getCtx(maskC);
     const md=mc.createImageData(W,H);
-    for(let i=0;i<W*H;i++){ const v=mask[i]?255:0; const j=i*4; md.data[j]=0; md.data[j+1]=0; md.data[j+2]=0; md.data[j+3]=v; }
+    for(let i=0;i<W*H;i++){ const v=best.includes(i)?255:0; const j=i*4; md.data[j]=0; md.data[j+1]=0; md.data[j+2]=0; md.data[j+3]=v; }
     const tmp2=document.createElement("canvas"); tmp2.width=W; tmp2.height=H;
     tmp2.getContext("2d").putImageData(md,0,0);
     mc.clearRect(0,0,maskC.width,maskC.height);
     mc.imageSmoothingEnabled=false;
     mc.drawImage(tmp2,0,0,W,H,0,0,maskC.width,maskC.height);
 
-    S.hasMask=true; renderPreview();
+    S.hasMask=true; pushUndo(); computeEdges(); renderPreview();
   }
 
   function drawTextLayer(ctx){
@@ -117,7 +122,60 @@
     document.getElementById("btn-make-stitches").disabled=false;
   }
 
-  // Mask -> contours -> running stitches
+  // Edges preview
+  function computeEdges(){
+    const m=document.getElementById("mask"), mc=m.getContext("2d"), id=mc.getImageData(0,0,m.width,m.height);
+    const e=document.getElementById("edges"), ec=e.getContext("2d"); ec.clearRect(0,0,e.width,e.height);
+    const W=m.width,H=m.height,a=id.data, out=ec.createImageData(W,H), o=out.data;
+    const idx=(x,y)=>(y*W+x)<<2;
+    for(let y=1;y<H-1;y++){
+      for(let x=1;x<W-1;x++){
+        const c=a[idx(x,y)+3]>127?1:0;
+        if(!c) continue;
+        const n=a[idx(x+1,y)+3]>127 && a[idx(x-1,y)+3]>127 && a[idx(x,y+1)+3]>127 && a[idx(x,y-1)+3]>127;
+        if(!n){ const j=idx(x,y); o[j]=0;o[j+1]=0;o[j+2]=0;o[j+3]=255; }
+      }
+    }
+    ec.putImageData(out,0,0);
+  }
+
+  // Undo/redo
+  function pushUndo(){
+    const mc=document.getElementById("mask").getContext("2d");
+    const snap=mc.getImageData(0,0,1024,1024);
+    S.undo.push(snap); S.redo.length=0;
+  }
+  function undo(){
+    if(!S.undo.length) return;
+    const mc=document.getElementById("mask").getContext("2d");
+    const current=mc.getImageData(0,0,1024,1024);
+    S.redo.push(current);
+    const prev=S.undo.pop(); mc.putImageData(prev,0,0); S.hasMask=true; computeEdges(); renderPreview();
+  }
+  function redo(){
+    if(!S.redo.length) return;
+    const mc=document.getElementById("mask").getContext("2d");
+    const cur=mc.getImageData(0,0,1024,1024);
+    S.undo.push(cur);
+    const nxt=S.redo.pop(); mc.putImageData(nxt,0,0); S.hasMask=true; computeEdges(); renderPreview();
+  }
+
+  // Export helpers
+  function downloadBlob(name, blob){
+    const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  }
+  function exportPNG(){
+    const c=document.getElementById("preview");
+    c.toBlob(b=>downloadBlob("easbroidery.png",b),"image/png",1.0);
+  }
+  function exportSVG(){
+    const c=document.getElementById("preview"), data=c.toDataURL("image/png");
+    const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${c.width}" height="${c.height}" viewBox="0 0 ${c.width} ${c.height}"><image href="${data}" x="0" y="0" width="${c.width}" height="${c.height}" /></svg>`;
+    downloadBlob("easbroidery.svg", new Blob([svg],{type:"image/svg+xml"}));
+  }
+
+  // Contours -> stitches
   function maskToContours(){
     const m=document.getElementById("mask"), mc=m.getContext("2d"), id=mc.getImageData(0,0,m.width,m.height);
     const W=m.width,H=m.height, a=id.data;
@@ -139,7 +197,6 @@
     }
     return contours;
   }
-
   function generateStitches(){
     const step=4, polys=maskToContours(), stitches=[];
     let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;
@@ -155,27 +212,19 @@
       }
     });
     for(let i=0;i<stitches.length;i++){ stitches[i][0]-=minx; stitches[i][1]-=miny; }
-    EAS.state.stitches={points:stitches,bbox:[maxx-minx,maxy-miny],units:"px",px_per_mm:10};
+    S.stitches={points:stitches,bbox:[maxx-minx,maxy-miny],units:"px",px_per_mm:10};
     document.getElementById("btn-dl-json").disabled=false;
   }
-
-  function downloadBlob(name, blob){
-    const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name;
-    document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
-  }
-  function exportPNG(){
-    const c=document.getElementById("preview");
-    c.toBlob(b=>downloadBlob("easbroidery.png",b),"image/png",1.0);
-  }
-  function exportSVG(){
-    const c=document.getElementById("preview"), data=c.toDataURL("image/png");
-    const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${c.width}" height="${c.height}" viewBox="0 0 ${c.width} ${c.height}"><image href="${data}" x="0" y="0" width="${c.width}" height="${c.height}" /></svg>`;
-    downloadBlob("easbroidery.svg", new Blob([svg],{type:"image/svg+xml"}));
-  }
   function exportStitchesJSON(){
-    const s=EAS.state.stitches || {points:[],bbox:[0,0],units:"px",px_per_mm:10};
+    const s=S.stitches || {points:[],bbox:[0,0],units:"px",px_per_mm:10};
     downloadBlob("easbroidery.stitches.json", new Blob([JSON.stringify(s)],{type:"application/json"}));
   }
 
-  window.EAS_processing={placeImage,autoSubject,renderPreview,generateStitches,exportPNG,exportSVG,exportStitchesJSON};
+  // public
+  window.EAS_processing={
+    placeImage, autoSubject, renderPreview, computeEdges,
+    exportPNG, exportSVG, generateStitches, exportStitchesJSON,
+    undo, redo, pushUndo,
+    setShellTransform
+  };
 })();

@@ -6,9 +6,16 @@
   btn.addEventListener("click", ()=>file.click());
   file.addEventListener("change", e=>{
     const f=e.target.files[0]; if(!f) return;
-    const url=URL.createObjectURL(f);
-    const img=new Image();
-    img.onload=()=>{ EAS.state.img=img; EAS_processing.placeImage(img).then(()=>EAS_processing.renderPreview()); URL.revokeObjectURL(url); };
+    const url=URL.createObjectURL(f); const img=new Image();
+    img.onload=()=>{
+      EAS.state.img=img;
+      EAS_processing.placeImage(img).then(()=>{
+        EAS_processing.pushUndo();
+        EAS_processing.computeEdges();
+        EAS_processing.renderPreview();
+      });
+      URL.revokeObjectURL(url);
+    };
     img.src=url;
   });
 

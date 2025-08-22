@@ -66,7 +66,15 @@ small{color:var(--muted)}
 .chip{border:1px solid #e8c6bd;background:#f0dbd5;border-radius:999px;padding:6px 10px;cursor:pointer}
 .chip--active{background:var(--brand);border-color:var(--brand);color:#fff}
 .switch{display:flex;gap:8px;align-items:center}
-
+/* airy spacing for editor */
+.editor--airy .rail .box{padding:16px}
+.editor--airy .box__title{font-size:1.05rem;margin-bottom:.4rem}
+.stack{display:flex;flex-direction:column;gap:10px}
+.hidden{display:none}
+.btn--small{padding:8px 10px}
+.hint{color:var(--muted);font-size:.9rem}
+#stitchvis{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;mix-blend-mode:multiply}
+#dir{pointer-events:none;opacity:.4}
 /* stage */
 .stage{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;grid-template-columns:1fr 340px;gap:12px}
 .canvas-shell{position:relative;aspect-ratio:1/1;max-width:860px;border:1px dashed #d5c2bb;border-radius:10px;background:#fff;overflow:hidden;touch-action:none;transform-origin:0 0}

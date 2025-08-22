@@ -7,7 +7,6 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body class="home">
-  <!-- Top garland (PNG; no SVG data-URIs) -->
   <div class="garland garland--top" aria-hidden="true"></div>
 
   <header class="site-header">
@@ -24,39 +23,28 @@
 
   <main class="hero">
     <div class="hero__copy">
-      <h1 class="display">
-        Digitize photos into<br />
-        embroidery files
-      </h1>
-      <p class="lead">
-        Use AI‑style math to convert your photos into embroidery designs with ease.
-      </p>
-      <p class="sublead">
-        Upload a photo, refine the subject, add curved text, and export stitch files. Runs entirely
-        in your browser.
-      </p>
+      <h1 class="display">Digitize photos into<br />embroidery files</h1>
+      <p class="lead">Use AI‑style math to convert your photos into embroidery designs with ease.</p>
+      <p class="sublead">Upload a photo, refine the subject, add curved text, and export stitch files. Runs entirely in your browser.</p>
       <a class="btn btn--primary hero__cta" href="editor.html">Upload photo</a>
     </div>
 
+    <!-- Hero art with circular inset -->
     <div class="hero__art">
-      <!-- main hero image -->
-      <figure class="mock">
-        <img src="assets/hero-photo.jpg" alt="Pet photo and embroidered result" />
-        <!-- small inset circle image -->
-        <img class="mock__inset" src="assets/hero-inset.jpg" alt="" />
+      <figure class="hero-frame">
+        <!-- big background image -->
+        <img class="hero-base" src="assets/hero-base.jpg" alt="Sweatshirt with embroidery" />
+        <!-- circular inset image -->
+        <img class="hero-inset" src="assets/hero-inset.jpg" alt="Original pet photo" />
+        <!-- sparkle (optional) -->
+        <svg class="spark" viewBox="0 0 60 60" aria-hidden="true">
+          <path d="M30 0l5 20 20 5-20 5-5 20-5-20-20-5 20-5z" fill="rgba(218,153,135,.55)"/>
+        </svg>
       </figure>
     </div>
   </main>
 
-  <!-- Bottom border flowers (PNG; safe) -->
   <div class="garland garland--bottom" aria-hidden="true"></div>
-
-  <footer class="site-footer">
-    <small>© Easbroidery</small>
-  </footer>
-
-  <script>
-    // no JS needed on the home page
-  </script>
+  <footer class="site-footer"><small>© Easbroidery</small></footer>
 </body>
 </html>

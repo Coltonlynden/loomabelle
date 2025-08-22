@@ -2,24 +2,37 @@
   const S=EAS.state;
 
   // mode switches
-  document.getElementById("mode-mask").onclick=()=>EAS.setBrushMode("mask");
-  document.getElementById("mode-text").onclick=()=>EAS.setBrushMode("text");
-  document.getElementById("mode-dir").onclick =()=>EAS.setBrushMode("dir");
-  EAS.setBrushMode("mask");
+  const setMode = m => {
+    EAS.setBrushMode(m);
+    document.querySelectorAll('.chip').forEach(c=>c.classList.remove('chip--active'));
+    document.getElementById(m==='mask'?'mode-mask':m==='text'?'mode-text':'mode-dir').classList.add('chip--active');
+  };
+  document.getElementById("mode-mask").onclick=()=>setMode("mask");
+  document.getElementById("mode-text").onclick=()=>setMode("text");
+  document.getElementById("mode-dir").onclick =()=>setMode("dir");
+  setMode("mask");
 
-  // tool buttons
-  document.getElementById("tool-brush").onclick=()=>S.tool="brush";
-  document.getElementById("tool-erase").onclick=()=>S.tool="erase";
-  document.getElementById("tool-wand").onclick =()=>S.tool="wand";
+  // tool buttons with active state
+  const tools = {brush:"tool-brush", erase:"tool-erase", wand:"tool-wand"};
+  function pickTool(t){
+    S.tool=t;
+    Object.values(tools).forEach(id=>document.getElementById(id).classList.remove('active'));
+    document.getElementById(tools[t]).classList.add('active');
+  }
+  pickTool("brush");
+  document.getElementById("tool-brush").onclick=()=>pickTool("brush");
+  document.getElementById("tool-erase").onclick=()=>pickTool("erase");
+  document.getElementById("tool-wand").onclick =()=>pickTool("wand");
+
   document.getElementById("brush-size").oninput=e=>S.brushSize=+e.target.value;
 
   // undo/redo
   document.getElementById("btn-undo").onclick=()=>EAS_processing.undo();
   document.getElementById("btn-redo").onclick=()=>EAS_processing.redo();
 
-  // mask + overlays
+  // canvases
   const base=document.getElementById("canvas");
-  const bctx=base.getContext("2d");
+  const bctx=base.getContext("2d",{willReadFrequently:true});
   const mask=document.getElementById("mask");
   const mctx=mask.getContext("2d",{willReadFrequently:true});
   const overlay=document.getElementById("overlay");
@@ -27,11 +40,13 @@
   const edges=document.getElementById("edges");
   const dirOverlay=document.getElementById("dir");
 
+  // toggles
   document.getElementById("btn-clear-mask").onclick=()=>{
     mctx.clearRect(0,0,1024,1024); S.hasMask=false;
     EAS_processing.computeEdges(); EAS_processing.renderPreview(); EAS_processing.pushUndo();
   };
   document.getElementById("btn-fill-mask").onclick =()=>{
+    mctx.globalCompositeOperation='source-over';
     mctx.fillStyle="rgba(0,0,0,1)"; mctx.fillRect(0,0,1024,1024); S.hasMask=true;
     EAS_processing.computeEdges(); EAS_processing.renderPreview(); EAS_processing.pushUndo();
   };
@@ -46,7 +61,7 @@
   dirAngle.oninput = e=>{ S.dirAngle=+e.target.value; dirVal.textContent=S.dirAngle+"°"; };
   patSel.onchange  = e=>{ S.dirPattern=e.target.value; };
 
-  // zoom/pan
+  // view controls
   const zoomIn=document.getElementById("zoom-in"), zoomOut=document.getElementById("zoom-out"), zoomReset=document.getElementById("zoom-reset");
   function setZoom(z){ S.zoom=Math.min(3,Math.max(0.4,z)); EAS_processing.setShellTransform(); }
   zoomIn.onclick = ()=>setZoom(S.zoom+0.1);
@@ -78,8 +93,11 @@
     octx.beginPath(); octx.arc(x,y,S.brushSize,0,Math.PI*2); octx.stroke();
   }
   function maskDot(x,y,erase){
-    mctx.save(); mctx.globalCompositeOperation=erase?"destination-out":"source-over";
-    mctx.fillStyle="rgba(0,0,0,1)"; mctx.beginPath(); mctx.arc(x,y,S.brushSize,0,Math.PI*2); mctx.fill(); mctx.restore();
+    mctx.save();
+    mctx.globalCompositeOperation = erase ? "destination-out" : "source-over";
+    mctx.fillStyle="rgba(0,0,0,1)";
+    mctx.beginPath(); mctx.arc(x,y,S.brushSize,0,Math.PI*2); mctx.fill();
+    mctx.restore();
     S.hasMask=true;
   }
   function wandFill(x,y){
@@ -87,41 +105,52 @@
     const id=mctx.getImageData(0,0,W,H), data=id.data;
     const src=bctx.getImageData(0,0,W,H).data;
     const gx=Math.max(0,Math.min(W-1,Math.round(x))), gy=Math.max(0,Math.min(H-1,Math.round(y)));
-    const idx=(X,Y)=>(Y*W+X)<<2; const sidx=idx(gx,gy); const sr=src[sidx],sg=src[sidx+1],sb=src[sidx+2]; const tol=28;
+    const idx=(X,Y)=>(Y*W+X)<<2; const sidx=idx(gx,gy); const sr=src[sidx],sg=src[sidx+1],sb=src[sidx+2]; const tol=32;
     const seen=new Uint8Array(W*H); const stack=[gx,gy];
     while(stack.length){
       const Y=stack.pop(), X=stack.pop(); if(X<0||Y<0||X>=W||Y>=H) continue;
       const p=Y*W+X; if(seen[p]) continue; seen[p]=1;
       const q=p<<2; const r=src[q],g=src[q+1],b=src[q+2];
-      if(Math.abs(r-sr)+Math.abs(g-sg)+Math.abs(b-sb)>tol) continue;
+      if(Math.abs(r-sr)+Math.abs(g-sg)+Math.abs(b-sb) > tol) continue;
       data[q]=0; data[q+1]=0; data[q+2]=0; data[q+3]=255;
       stack.push(X+1,Y,X-1,Y,X,Y+1,X,Y-1);
     }
     mctx.putImageData(id,0,0); S.hasMask=true;
   }
 
-  // draw flow
-  let painting=false;
-  function down(ev){
-    if(!S.hasImage) return;
-    const {x,y}=pos(ev); cursor(x,y);
+  // throttled drawing (prevents “Page Unresponsive”)
+  let painting=false, raf=false, lastPoint=null;
+  function paintFrame(){
+    raf=false;
+    if(!lastPoint) return;
+    const {x,y}=lastPoint;
     if(S.brushMode==="mask"){
-      if(S.tool==="wand"){ wandFill(x|0,y|0); EAS_processing.computeEdges(); EAS_processing.renderPreview(); EAS_processing.pushUndo(); return; }
-      painting=true; maskDot(x,y,S.tool==="erase"); EAS_processing.renderPreview();
+      if(S.tool!=="wand"){ maskDot(x,y,S.tool==="erase"); EAS_processing.renderPreview(); }
     }else if(S.brushMode==="dir"){
-      painting=true; EAS_processing.paintDirection(x,y,S.brushSize); EAS_processing.renderPreview();
+      EAS_processing.paintDirection(x,y,S.brushSize); EAS_processing.renderPreview();
     }
   }
+
+  function down(ev){
+    if(!S.hasImage) return;
+    const p=pos(ev); lastPoint=p; cursor(p.x,p.y);
+
+    if(S.brushMode==="mask" && S.tool==="wand"){
+      wandFill(p.x|0,p.y|0); EAS_processing.computeEdges(); EAS_processing.renderPreview(); EAS_processing.pushUndo(); return;
+    }
+    painting=true;
+    if(!raf){ raf=true; requestAnimationFrame(paintFrame); }
+  }
   function move(ev){
-    const {x,y}=pos(ev); cursor(x,y);
+    const p=pos(ev); cursor(p.x,p.y); lastPoint=p;
     if(!painting) return;
-    if(S.brushMode==="mask" && S.tool!=="wand"){ maskDot(x,y,S.tool==="erase"); EAS_processing.renderPreview(); }
-    if(S.brushMode==="dir"){ EAS_processing.paintDirection(x,y,S.brushSize); EAS_processing.renderPreview(); }
+    if(!raf){ raf=true; requestAnimationFrame(paintFrame); }
   }
   function up(){
     if(painting && S.brushMode==="mask"){ EAS_processing.computeEdges(); EAS_processing.pushUndo(); }
-    painting=false;
+    painting=false; lastPoint=null;
   }
+
   overlay.addEventListener("mousedown",down);
   overlay.addEventListener("mousemove",move);
   window.addEventListener("mouseup",up);
@@ -136,7 +165,7 @@
   document.getElementById("text-curve").oninput=e=>{ T.curve=+e.target.value; EAS_processing.renderPreview(); };
   document.getElementById("text-size").oninput =e=>{ T.size=+e.target.value; EAS_processing.renderPreview(); };
 
-  // allow dragging text in preview, any mode
+  // drag text in preview
   const prev=document.getElementById("preview");
   prev.addEventListener("mousedown",e=>{
     const r=prev.getBoundingClientRect(); const x=e.clientX-r.left, y=e.clientY-r.top;
@@ -158,8 +187,8 @@
   // hotkeys
   window.addEventListener("keydown",(e)=>{
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="z"){ e.shiftKey?EAS_processing.redo():EAS_processing.undo(); }
-    if(e.key==="1") {EAS.setBrushMode("mask");}
-    if(e.key==="2") {EAS.setBrushMode("text");}
-    if(e.key==="3") {EAS.setBrushMode("dir");}
+    if(e.key==="1") setMode("mask");
+    if(e.key==="2") setMode("text");
+    if(e.key==="3") setMode("dir");
   });
 })();

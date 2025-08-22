@@ -8,6 +8,7 @@
 </head>
 <body>
   <div class="floral floral--top" aria-hidden="true"></div>
+
   <header class="site-header">
     <nav class="site-nav">
       <a class="nav-link" href="index.html">Home</a>
@@ -21,7 +22,6 @@
   </header>
 
   <main class="editor editor--airy">
-    <!-- Left column: steps + tools (spacious, readable) -->
     <aside class="rail">
       <ol class="steps">
         <li class="steps__item steps__item--done">1. Upload</li>
@@ -30,21 +30,19 @@
         <li class="steps__item">4. Stitches & export</li>
       </ol>
 
-      <section class="box">
-        <h3 class="box__title">Image</h3>
+      <details class="box" open>
+        <summary class="box__summary">Image</summary>
         <div class="stack">
           <input id="file" type="file" accept="image/*" />
           <button id="btn-upload" class="btn btn--primary w100">Choose image</button>
           <button id="btn-auto" class="btn w100" disabled>Auto highlight</button>
-          <label class="row">
-            <span>Detail</span>
-            <input id="auto-detail" type="range" min="1" max="6" value="3" />
-          </label>
+          <label class="row"><span>Detail</span><input id="auto-detail" type="range" min="1" max="6" value="3" /></label>
         </div>
-      </section>
+      </details>
 
-      <section class="box">
-        <h3 class="box__title">Brush</h3>
+      <details class="box" open>
+        <summary class="box__summary">Brush</summary>
+
         <div class="row">
           <button id="mode-mask" class="chip chip--active">Mask</button>
           <button id="mode-text" class="chip">Text</button>
@@ -52,9 +50,7 @@
         </div>
 
         <div id="panel-mask" class="stack">
-          <label class="row">
-            <span>Size</span><input id="brush-size" type="range" min="4" max="80" value="26" />
-          </label>
+          <label class="row"><span>Size</span><input id="brush-size" type="range" min="4" max="80" value="26" /></label>
           <div class="row">
             <button id="tool-brush" class="btn btn--small btn--primary">Paint</button>
             <button id="tool-erase" class="btn btn--small">Erase</button>
@@ -77,29 +73,37 @@
           <button id="btn-add-text" class="btn w100">Apply</button>
           <label class="row"><span>Curve</span><input id="text-curve" type="range" min="-100" max="100" value="0" /></label>
           <label class="row"><span>Size</span><input id="text-size" type="range" min="10" max="200" value="56" /></label>
-          <small>Drag the text in the Live preview to move it.</small>
+          <small>Drag on Live preview to move the text.</small>
         </div>
 
         <div id="panel-dir" class="stack hidden">
           <label class="row"><span>Angle</span><input id="dir-angle" type="range" min="0" max="180" value="45" /></label>
           <div class="row"><span id="dir-angle-value">45°</span></div>
-          <div class="hint">Paint areas to set local stitch direction. Different areas can have different angles.</div>
+          <label class="row">
+            <span>Pattern</span>
+            <select id="dir-pattern">
+              <option value="fill" selected>Fill (running)</option>
+              <option value="satin">Satin (zig‑zag)</option>
+              <option value="cross">Cross hatch</option>
+            </select>
+          </label>
+          <div class="hint">Paint areas to assign angle and pattern. Different areas can use different settings.</div>
           <label class="switch"><input id="toggle-dir-overlay" type="checkbox" checked><span>Show direction overlay</span></label>
         </div>
-      </section>
+      </details>
 
-      <section class="box">
-        <h3 class="box__title">View</h3>
+      <details class="box" open>
+        <summary class="box__summary">View</summary>
         <div class="row">
           <button id="zoom-out" class="btn btn--small">−</button>
           <button id="zoom-reset" class="btn btn--small"><span id="zoom-label">100%</span></button>
           <button id="zoom-in" class="btn btn--small">＋</button>
         </div>
         <small>Hold <b>Alt</b> and drag to pan.</small>
-      </section>
+      </details>
 
-      <section class="box">
-        <h3 class="box__title">Stitches</h3>
+      <details class="box" open>
+        <summary class="box__summary">Stitches</summary>
         <button id="btn-make-stitches" class="btn btn--primary w100" disabled>Generate stitches</button>
         <div class="row">
           <label class="switch"><input id="toggle-stitch-preview" type="checkbox" checked><span>Show stitch preview</span></label>
@@ -109,10 +113,9 @@
           <button id="btn-dl-svg"  class="btn btn--small" disabled>SVG</button>
           <button id="btn-dl-json" class="btn btn--small" disabled>Stitches JSON</button>
         </div>
-      </section>
+      </details>
     </aside>
 
-    <!-- Right: work surface -->
     <section class="stage">
       <div class="canvas-shell" id="shell">
         <canvas id="canvas" width="1024" height="1024"></canvas>
@@ -121,10 +124,13 @@
         <canvas id="edges" width="1024" height="1024"></canvas>
         <canvas id="dir"   width="1024" height="1024"></canvas>
       </div>
+
       <div class="stage__preview">
         <h4>Live preview</h4>
-        <canvas id="preview" width="1024" height="1024"></canvas>
-        <canvas id="stitchvis" width="1024" height="1024"></canvas>
+        <div class="preview-stack">
+          <canvas id="preview" width="1024" height="1024"></canvas>
+          <canvas id="stitchvis" width="1024" height="1024"></canvas>
+        </div>
       </div>
     </section>
   </main>

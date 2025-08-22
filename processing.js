@@ -2,33 +2,32 @@
   const S=EAS.state;
   const getCtx=c=>c.getContext("2d",{willReadFrequently:true});
 
-  const shell = ()=> document.getElementById("shell");
+  // zoom/pan transform and label
   function setShellTransform(){
-    const el=shell(); if(!el) return;
+    const el=document.getElementById("shell");
     el.style.transform=`translate(${S.panX}px,${S.panY}px) scale(${S.zoom})`;
-    document.getElementById("zoom-label").textContent = Math.round(S.zoom*100)+"%";
+    const zl=document.getElementById("zoom-label"); if(zl) zl.textContent=Math.round(S.zoom*100)+"%";
   }
 
-  // reset dir map
-  function resetDirMap(){
-    S.dirMap.fill(255); // 255 = unset
-    const d=document.getElementById("dir").getContext("2d");
-    d.clearRect(0,0,1024,1024);
+  // reset direction/pattern overlays
+  function resetDirectionMaps(){
+    S.dirMap.fill(255); S.patMap.fill(255);
+    ["dir","stitchvis"].forEach(id=>getCtx(document.getElementById(id)).clearRect(0,0,1024,1024));
   }
 
+  // place image
   async function placeImage(img){
     const base=document.getElementById("canvas"); const ctx=getCtx(base);
     ctx.clearRect(0,0,1024,1024);
     const w=img.naturalWidth, h=img.naturalHeight;
-    const sc=Math.min(1024/w, 1024/h);
+    const sc=Math.min(1024/w,1024/h);
     const dw=Math.round(w*sc), dh=Math.round(h*sc);
     const ox=(1024-dw)>>1, oy=(1024-dh)>>1;
     ctx.imageSmoothingQuality="high";
     ctx.drawImage(img,0,0,w,h, ox,oy,dw,dh);
 
-    // clear layers
-    ["mask","edges","dir","stitchvis","preview"].forEach(id=>getCtx(document.getElementById(id)).clearRect(0,0,1024,1024));
-    resetDirMap();
+    ["mask","edges","preview"].forEach(id=>getCtx(document.getElementById(id)).clearRect(0,0,1024,1024));
+    resetDirectionMaps();
 
     S.scale=sc; S.hasImage=true; S.hasMask=false;
     document.getElementById("btn-auto").disabled=false;
@@ -38,7 +37,7 @@
     document.getElementById("btn-dl-json").disabled=true;
   }
 
-  // k-means auto subject
+  // auto subject (k-means + center CC)
   function autoSubject(detail=3){
     if(!S.hasImage) return;
     const base=document.getElementById("canvas");
@@ -75,7 +74,7 @@
 
     const mc=getCtx(document.getElementById("mask"));
     const md=mc.createImageData(W,H);
-    for(let i=0;i<W*H;i++){ const v=best.includes(i)?255:0; const j=i*4; md.data[j]=0; md.data[j+1]=0; md.data[j+2]=0; md.data[j+3]=v; }
+    for(let i=0;i<W*H;i++){ const on=best.includes(i); const j=i*4; md.data[j]=0; md.data[j+1]=0; md.data[j+2]=0; md.data[j+3]=on?255:0; }
     const tmp2=document.createElement("canvas"); tmp2.width=W; tmp2.height=H; tmp2.getContext("2d").putImageData(md,0,0);
     mc.clearRect(0,0,1024,1024); mc.imageSmoothingEnabled=false; mc.drawImage(tmp2,0,0,W,H,0,0,1024,1024);
 
@@ -103,6 +102,7 @@
     ctx.restore();
   }
 
+  // preview
   function renderPreview(showStitches=true){
     if(!S.hasImage) return;
     const base=document.getElementById("canvas");
@@ -118,26 +118,23 @@
     document.getElementById("btn-dl-svg").disabled=false;
     document.getElementById("btn-make-stitches").disabled=false;
 
-    // stitch overlay
     const vis = document.getElementById("stitchvis").getContext("2d");
     vis.clearRect(0,0,1024,1024);
     if(showStitches && S.stitches && document.getElementById("toggle-stitch-preview").checked){
-      vis.lineWidth=1;
       let pass=0;
-      for(const segs of S.stitches.passes){
-        vis.strokeStyle = `rgba(0,0,0,${0.35+0.2*(pass%3)/3})`;
-        vis.beginPath();
-        for(const s of segs){
-          vis.moveTo(s[0][0], s[0][1]);
-          for(let i=1;i<s.length;i++){ vis.lineTo(s[i][0], s[i][1]); }
+      for(const passData of S.stitches.passes){
+        vis.strokeStyle = ["rgba(0,0,0,.35)","rgba(0,0,0,.55)","rgba(0,0,0,.75)"][pass%3];
+        vis.lineWidth=1; vis.beginPath();
+        for(const poly of passData){
+          vis.moveTo(poly[0][0], poly[0][1]);
+          for(let i=1;i<poly.length;i++) vis.lineTo(poly[i][0], poly[i][1]);
         }
         vis.stroke();
-        // arrowheads every ~40 px
-        for(const s of segs){
-          for(let i=10;i<s.length;i+=40){
-            const a=s[i-5], b=s[i];
-            const ang=Math.atan2(b[1]-a[1], b[0]-a[0]);
-            drawArrow(vis, b[0], b[1], ang);
+        // arrowheads
+        for(const poly of passData){
+          for(let i=14;i<poly.length;i+=40){
+            const a=poly[i-5], b=poly[i]; const ang=Math.atan2(b[1]-a[1], b[0]-a[0]);
+            drawArrow(vis,b[0],b[1],ang);
           }
         }
         pass++;
@@ -154,7 +151,7 @@
     ctx.stroke();
   }
 
-  // edges preview
+  // edges
   function computeEdges(){
     const m=document.getElementById("mask"), mc=m.getContext("2d"), id=mc.getImageData(0,0,1024,1024);
     const e=document.getElementById("edges"), ec=e.getContext("2d"); ec.clearRect(0,0,1024,1024);
@@ -170,7 +167,7 @@
     ec.putImageData(out,0,0);
   }
 
-  // UNDO/REDO
+  // undo/redo
   function pushUndo(){
     const mc=document.getElementById("mask").getContext("2d");
     const snap=mc.getImageData(0,0,1024,1024);
@@ -190,76 +187,115 @@
     const nxt=S.redo.pop(); mc.putImageData(nxt,0,0); S.hasMask=true; computeEdges(); renderPreview();
   }
 
-  // ===== Direction painting and stitch generator =====
-  // Quantize angle to 12 bins (0..180)
+  // ===== Direction + pattern painting =====
   function angleToBin(deg){ return Math.min(180, Math.max(0, Math.round(deg/15)*15)); }
 
-  function paintDirection(x,y,r,deg){
-    const bin=angleToBin(deg);
+  function paintDirection(x,y,r,deg,pattern){
+    const bin=angleToBin(deg), pat={fill:0,satin:1,cross:2}[pattern];
     const dirCtx=document.getElementById("dir").getContext("2d");
-    dirCtx.fillStyle=`hsl(${(bin/180)*180},70%,60%)`;
+    const hue=(bin/180)*180;
+    dirCtx.fillStyle=`hsla(${hue},70%,60%,0.6)`;
     dirCtx.beginPath(); dirCtx.arc(x,y,r,0,Math.PI*2); dirCtx.fill();
 
-    // write into map
     const R=Math.ceil(r), W=1024;
     for(let yy=y-R; yy<=y+R; yy++){
       for(let xx=x-R; xx<=x+R; xx++){
         if(xx<0||yy<0||xx>=1024||yy>=1024) continue;
-        if((xx-x)**2+(yy-y)**2 <= r*r) S.dirMap[yy*W+xx]=bin;
+        if((xx-x)**2+(yy-y)**2 <= r*r){
+          S.dirMap[yy*W+xx]=bin;
+          S.patMap[yy*W+xx]=pat;
+        }
       }
     }
   }
 
-  // Create hatch passes; each pass = array of polylines; visualize
+  // ===== Stitch generation =====
   function generateStitches(){
-    const mask=document.getElementById("mask").getContext("2d").getImageData(0,0,1024,1024).data;
+    const mask=getCtx(document.getElementById("mask")).getImageData(0,0,1024,1024).data;
     const W=1024,H=1024;
-    const step=4;          // distance between points along a line
-    const spacing=6;       // distance between adjacent lines
-    const bins=[];         // list of bins present
-    const seenBin=new Set();
+
+    // collect unique (bin,pattern) seen
+    const seen=new Set(), combos=[];
     for(let i=0;i<S.dirMap.length;i++){
-      const b=S.dirMap[i];
-      if(b!==255 && !seenBin.has(b)){ seenBin.add(b); bins.push(b); }
+      const b=S.dirMap[i], p=S.patMap[i];
+      if(b!==255 && p!==255){ const key=b+":"+p; if(!seen.has(key)){ seen.add(key); combos.push([b,p]); } }
     }
-    if(bins.length===0) bins.push(angleToBin(S.dirAngle));
+    if(combos.length===0) combos.push([angleToBin(S.dirAngle), {fill:0,satin:1,cross:2}[S.dirPattern]]);
 
     const passes=[];
-    for(const bin of bins){
+    for(const [bin,pat] of combos){
       const ang=bin*Math.PI/180;
-      const ux=Math.cos(ang), uy=Math.sin(ang);
-      // perpendicular vector for stepping between lines
-      const px=-uy, py=ux;
-
-      // find bounds
-      const maxd = Math.hypot(W,H);
-      const lines=[];
-      for(let offset=-maxd; offset<=maxd; offset+=spacing){
-        const seg=[]; let inRun=false, run=[];
-        // param t will move along the line across canvas
-        for(let t=-maxd; t<=maxd; t+=step){
-          const x = (W/2) + ux*t + px*offset;
-          const y = (H/2) + uy*t + py*offset;
-          const xi=x|0, yi=y|0;
-          if(xi<0||yi<0||xi>=W||yi>=H) { if(inRun){ lines.push(run); run=[]; inRun=false; } continue; }
-          const m = mask[(yi*W+xi)*4+3] > 127;
-          const okBin = S.dirMap[yi*W+xi]===255 || S.dirMap[yi*W+xi]===bin;
-          if(m && okBin){
-            run.push([x,y]); inRun=true;
-          }else{
-            if(inRun){ lines.push(run); run=[]; inRun=false; }
-          }
-        }
-        if(run.length) lines.push(run);
+      if(pat===0){ // running fill
+        passes.push(...makeFillPasses(mask,W,H,ang,6,4,(x,y)=>okByCombo(x,y,bin,pat)));
+      }else if(pat===1){ // satin zig-zag
+        passes.push(...makeSatinPasses(mask,W,H,ang,8,(x,y)=>okByCombo(x,y,bin,pat)));
+      }else{ // cross hatch = two fills
+        passes.push(...makeFillPasses(mask,W,H,ang,7,4,(x,y)=>okByCombo(x,y,bin,pat)));
+        passes.push(...makeFillPasses(mask,W,H,ang+Math.PI/2,7,4,(x,y)=>okByCombo(x,y,bin,pat)));
       }
-      passes.push(lines);
     }
 
-    S.stitches = {passes, units:"px", px_per_mm:10};
+    S.stitches={passes, units:"px", px_per_mm:10};
     document.getElementById("btn-dl-json").disabled=false;
     renderPreview(true);
   }
 
+  function okByCombo(x,y,bin,pat){
+    const idx=y*1024+x;
+    const okMask = getAlphaAt(idx) > 127;
+    if(!okMask) return false;
+    const b=S.dirMap[idx], p=S.patMap[idx];
+    if(b===255 || p===255) return true; // unpainted area uses any
+    return b===bin && p===pat;
+    function getAlphaAt(i){ return getCtx(document.getElementById("mask")).getImageData(0,0,1024,1024).data[i*4+3]; }
+  }
+
+  // running fill generation
+  function makeFillPasses(mask,W,H,ang,spacing,step,acceptFn){
+    const ux=Math.cos(ang), uy=Math.sin(ang);
+    const px=-uy, py=ux;
+    const maxd = Math.hypot(W,H);
+    const pass=[];
+    for(let offset=-maxd; offset<=maxd; offset+=spacing){
+      let run=[], inRun=false;
+      for(let t=-maxd; t<=maxd; t+=step){
+        const x=(W/2)+ux*t+px*offset, y=(H/2)+uy*t+py*offset;
+        const xi=x|0, yi=y|0;
+        if(xi<0||yi<0||xi>=W||yi>=H){ if(inRun){ pass.push(run); run=[]; inRun=false; } continue; }
+        const m = mask[(yi*W+xi)*4+3] > 127;
+        const ok = m && acceptFn(xi,yi);
+        if(ok){ run.push([x,y]); inRun=true; } else if(inRun){ pass.push(run); run=[]; inRun=false; }
+      }
+      if(run.length) pass.push(run);
+    }
+    return [pass];
+  }
+
+  // satin: zig-zag strokes across a band oriented along `ang`
+  function makeSatinPasses(mask,W,H,ang,spacing,acceptFn){
+    const u=[Math.cos(ang), Math.sin(ang)];
+    const v=[-u[1], u[0]]; // perpendicular
+    const maxd=Math.hypot(W,H);
+    const pass=[];
+    for(let s=-maxd; s<=maxd; s+=spacing){
+      let dir=1, seg=[];
+      for(let t=-maxd; t<=maxd; t+=4){
+        const x=(W/2)+u[0]*t+v[0]*s, y=(H/2)+u[1]*t+v[1]*s;
+        const xi=x|0, yi=y|0;
+        if(xi<0||yi<0||xi>=W||yi>=H) { continue; }
+        const inside = mask[(yi*W+xi)*4+3]>127 && acceptFn(xi,yi);
+        if(!inside){ if(seg.length){ pass.push(seg); seg=[]; } continue; }
+        // zig to the sides
+        const zz=6;
+        const x2=x+v[0]*zz*dir, y2=y+v[1]*zz*dir;
+        seg.push([x2,y2]); dir*=-1;
+      }
+      if(seg.length) pass.push(seg);
+    }
+    return [pass];
+  }
+
+  // exports
   function exportPNG(){
     const c=document.getElementById("preview");
     c.toBlob(b=>downloadBlob("easbroidery.png",b),"image/png",1.0);
@@ -282,7 +318,10 @@
   window.EAS_processing={
     placeImage, autoSubject, renderPreview, computeEdges,
     exportPNG, exportSVG, generateStitches, exportStitchesJSON,
+    // maps and painting
+    paintDirection:(x,y,r)=>paintDirection(x,y,r,S.dirAngle,S.dirPattern),
+    // undo/redo + view
     undo, redo, pushUndo, setShellTransform,
-    paintDirection
+    resetDirectionMaps
   };
 })();

@@ -1,13 +1,27 @@
-// DMC-like compact palette (RGB). Expand/replace with your actual brand set.
-export const THREADS = [
-  [21,21,21],[51,51,51],[94,94,94],[140,140,140],[200,200,200],[240,240,240],
-  [255,255,255],
-  [233,61,74],[244,115,115],[255,171,171],[255,208,210],
-  [255,173,96],[239,201,120],[255,231,157],
-  [163,200,133],[110,168,110],[45,135,87],
-  [117,170,219],[78,135,194],[53,94,171],[30,54,140],
-  [156,132,202],[133,99,176],[100,72,148],
-  [255,153,204],[245,123,167],[221,86,141],
-  [153,89,57],[199,141,85],[158,118,74],
-  [122,69,54],[80,53,38]
+// Minimal Brother-like palette (RGB). Expandable.
+window.EAS_THREADS = [
+  {name:"White", rgb:[255,255,255]},
+  {name:"Black", rgb:[0,0,0]},
+  {name:"Rose Pink", rgb:[236,170,170]},
+  {name:"Pink", rgb:[230,150,170]},
+  {name:"Salmon", rgb:[230,140,120]},
+  {name:"Red", rgb:[200,40,40]},
+  {name:"Orange", rgb:[230,150,80]},
+  {name:"Yellow", rgb:[245,220,100]},
+  {name:"Lime", rgb:[160,210,90]},
+  {name:"Green", rgb:[50,140,80]},
+  {name:"Sky", rgb:[120,190,230]},
+  {name:"Blue", rgb:[50,100,210]},
+  {name:"Purple", rgb:[130,100,180]},
+  {name:"Brown", rgb:[120,80,60]},
+  {name:"Grey", rgb:[150,150,150]}
 ];
+
+window.nearestThread = function(rgb){
+  let best=0,bd=1e9;
+  for(let i=0;i<EAS_THREADS.length;i++){
+    const t=EAS_THREADS[i], d = (t.rgb[0]-rgb[0])**2+(t.rgb[1]-rgb[1])**2+(t.rgb[2]-rgb[2])**2;
+    if(d<bd){bd=d;best=i;}
+  }
+  return {index:best, ...EAS_THREADS[best]};
+};

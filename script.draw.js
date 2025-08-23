@@ -1,83 +1,96 @@
-// Minimal changes: restore behavior and only hide/show tool groups by mode.
+/* script.draw.js
+   Shows the right tool group when you click Mask / Text / Direction.
+   Also sets up minimal state so other scripts can read it.
+*/
+
 (function () {
-  const S = window.EAS?.state || (window.EAS = { state: {} }).state;
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+  const add  = (el, cls) => el && el.classList.add(cls);
+  const rm   = (el, cls) => el && el.classList.remove(cls);
+  const hide = el => add(el, 'hidden');
+  const show = el => rm(el, 'hidden');
 
-  // ---- Mode chips -> toggle groups only ----
-  const byId = id => document.getElementById(id);
-  const chipMask = byId("mode-mask");
-  const chipText = byId("mode-text");
-  const chipDir  = byId("mode-dir");
-  const gMask = byId("group-mask");
-  const gText = byId("group-text");
-  const gDir  = byId("group-dir");
+  // ----- global state container (lightweight) -----
+  const EAS = (window.EAS ||= {});
+  const S = (EAS.state ||= {
+    brushMode: 'mask',
+    tool: 'brush',
+    brushSize: 20,
+    zoom: 1, panX: 0, panY: 0,
+    text: { content: '', curve: 0, size: 60, angle: 0 },
+    dirAngle: 45, dirPattern: 'fill'
+  });
 
-  function setMode(mode){
+  // ----- canvas defaults so the stage is visible -----
+  const CAN = {
+    base: $('#canvas'),
+    mask: $('#mask'),
+    preview: $('#preview')
+  };
+  for (const k of Object.values(CAN)) {
+    if (!k) continue;
+    if (!k.width)  k.width  = 1024;
+    if (!k.height) k.height = 1024;
+  }
+
+  // ----- MODE TOGGLING -----
+  const chips = $$('#brush-controls .chip[data-mode]');
+  const grpMask = $('.tools-mask');
+  const grpText = $('.tools-text');
+  const grpDir  = $('.tools-direction');
+
+  function setMode(mode) {
     S.brushMode = mode;
-    gMask.classList.toggle("hidden", mode !== "mask");
-    gText.classList.toggle("hidden", mode !== "text");
-    gDir .classList.toggle("hidden", mode !== "dir");
-    [chipMask,chipText,chipDir].forEach(c=>c.classList.remove("chip--active"));
-    ({mask:chipMask,text:chipText,dir:chipDir}[mode]).classList.add("chip--active");
+
+    // visual chip state
+    chips.forEach(c => rm(c, 'chip--active'));
+    const active = chips.find(c => c.dataset.mode === mode);
+    if (active) add(active, 'chip--active');
+
+    // show the matching group
+    if (mode === 'mask') { show(grpMask); hide(grpText); hide(grpDir); }
+    if (mode === 'text') { hide(grpMask); show(grpText); hide(grpDir); }
+    if (mode === 'direction') { hide(grpMask); hide(grpText); show(grpDir); }
   }
-  chipMask?.addEventListener("click", () => setMode("mask"));
-  chipText?.addEventListener("click", () => setMode("text"));
-  chipDir ?.addEventListener("click", () => setMode("dir"));
-  setMode("mask"); // default
 
-  // ---- Tool buttons (mask only) ----
-  const toolBrush = byId("tool-brush");
-  const toolErase = byId("tool-erase");
-  const toolWand  = byId("tool-wand");
-  function pickTool(t){
-    S.tool = t;
-    [toolBrush,toolErase,toolWand].forEach(b=>b?.classList.remove("active"));
-    ({brush:toolBrush,erase:toolErase,wand:toolWand}[t])?.classList.add("active");
-  }
-  toolBrush?.addEventListener("click", ()=>pickTool("brush"));
-  toolErase?.addEventListener("click", ()=>pickTool("erase"));
-  toolWand ?.addEventListener("click", ()=>pickTool("wand"));
-  pickTool("brush");
+  chips.forEach(c => c.addEventListener('click', () => setMode(c.dataset.mode)));
+  setMode('mask'); // default on load
 
-  // ---- Basic hookups to existing pipeline (no layout changes) ----
-  byId("brush-size")?.addEventListener("input", e=>S.brushSize=+e.target.value);
-  byId("btn-undo")?.addEventListener("click", ()=>window.EAS_processing?.undo());
-  byId("btn-redo")?.addEventListener("click", ()=>window.EAS_processing?.redo());
-  byId("btn-clear-mask")?.addEventListener("click", ()=>window.EAS_processing?.clearMask());
-  byId("btn-fill-mask") ?.addEventListener("click", ()=>window.EAS_processing?.fillMask());
+  // ----- MASK tool buttons (only affects state; your processing code can read S.tool) -----
+  $('#brush-size')?.addEventListener('input', e => (S.brushSize = +e.target.value));
+  $('#paint')?.addEventListener('click', () => (S.tool = 'brush'));
+  $('#erase')?.addEventListener('click', () => (S.tool = 'erase'));
+  $('#wand') ?.addEventListener('click', () => (S.tool = 'wand'));
 
-  byId("toggle-mask")?.addEventListener("change", e=>window.EAS_processing?.toggleMask(e.target.checked));
-  byId("toggle-edge")?.addEventListener("change", e=>window.EAS_processing?.toggleEdges(e.target.checked));
-
-  byId("text-input")?.addEventListener("keydown", e=>{
-    if(e.key==="Enter"){ byId("btn-add-text")?.click(); }
+  // ----- TEXT controls -> update state then let preview script redraw -----
+  $('#text-string')?.addEventListener('input', e => (S.text.content = e.target.value));
+  $('#apply-text')?.addEventListener('click', () => {
+    // downstream script.preview.js should read S.text and draw
+    if (window.EAS_preview?.render) window.EAS_preview.render();
   });
-  byId("btn-add-text")?.addEventListener("click", ()=>{
-    const v = byId("text-input").value.trim(); if(!v) return;
-    (S.text||(S.text={})).content = v;
-    window.EAS_processing?.renderPreview();
+  $('#text-curve')?.addEventListener('input', e => {
+    S.text.curve = +e.target.value; window.EAS_preview?.render?.();
   });
-  byId("text-curve")?.addEventListener("input", e=>{ (S.text||(S.text={})).curve=+e.target.value; window.EAS_processing?.renderPreview(); });
-  byId("text-size") ?.addEventListener("input", e=>{ (S.text||(S.text={})).size =+e.target.value; window.EAS_processing?.renderPreview(); });
-
-  byId("dir-angle")?.addEventListener("input", e=>{
-    S.dirAngle = +e.target.value;
-    const v = byId("dir-angle-value"); if(v) v.textContent = S.dirAngle + "°";
-    window.EAS_processing?.renderPreview();
+  $('#text-size')?.addEventListener('input', e => {
+    S.text.size = +e.target.value; window.EAS_preview?.render?.();
   });
-  byId("dir-pattern")?.addEventListener("change", e=>{ S.dirPattern = e.target.value; window.EAS_processing?.renderPreview(); });
-  byId("toggle-dir-overlay")?.addEventListener("change", e=>window.EAS_processing?.toggleDirOverlay(e.target.checked));
+  $('#text-angle')?.addEventListener('input', e => {
+    S.text.angle = +e.target.value; window.EAS_preview?.render?.();
+  });
 
-  // Zoom controls
-  const zr = byId("zoom-reset"), zi = byId("zoom-in"), zo = byId("zoom-out");
-  function setZoom(z){ S.zoom = Math.min(3, Math.max(0.4, z)); window.EAS_processing?.setShellTransform(); }
-  zr?.addEventListener("click", ()=>{ S.panX=0; S.panY=0; setZoom(1); });
-  zi?.addEventListener("click", ()=>setZoom((S.zoom||1)+0.1));
-  zo?.addEventListener("click", ()=>setZoom((S.zoom||1)-0.1));
+  // ----- DIRECTION controls -----
+  $('#pattern')?.addEventListener('change', e => {
+    S.dirPattern = e.target.value; window.EAS_preview?.render?.();
+  });
+  $('#show-dir')?.addEventListener('change', () => window.EAS_preview?.render?.());
 
-  // Export bar
-  byId("btn-make-stitches")?.addEventListener("click", ()=>window.EAS_processing?.generateStitches());
-  byId("btn-dl-png") ?.addEventListener("click", ()=>window.EAS_processing?.exportPNG());
-  byId("btn-dl-svg") ?.addEventListener("click", ()=>window.EAS_processing?.exportSVG());
-  byId("btn-dl-json")?.addEventListener("click", ()=>window.EAS_processing?.exportStitchesJSON());
-  byId("toggle-stitch-preview")?.addEventListener("change", ()=>window.EAS_processing?.renderPreview(true));
+  // ----- Zoom buttons (optional but harmless) -----
+  function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+  $('#zoom-in')   ?.addEventListener('click', () => { S.zoom = clamp((S.zoom||1)+0.1, 0.4, 3);  window.EAS_preview?.fit?.(); });
+  $('#zoom-out')  ?.addEventListener('click', () => { S.zoom = clamp((S.zoom||1)-0.1, 0.4, 3);  window.EAS_preview?.fit?.(); });
+  $('#zoom-reset')?.addEventListener('click', () => { S.zoom = 1; S.panX = 0; S.panY = 0;     window.EAS_preview?.fit?.(); });
+
+  // expose for other scripts
+  window.EAS_draw = { setMode };
 })();

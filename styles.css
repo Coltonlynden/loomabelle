@@ -1,15 +1,20 @@
 :root{
   --bg:#fff3ea; --panel:#fff7f0; --ink:#4e3b36; --muted:#7a6460;
   --brand:#d99187; --line:#eadbd5;
+  /* NEW: stage sizing so preview is not huge */
+  --stage-max: 560px;
 }
 
-/* base */
 *{box-sizing:border-box}
 html,body{margin:0}
 body{background:var(--bg);color:var(--ink);font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Inter,Arial,sans-serif}
 a{color:inherit;text-decoration:none}
+.hidden{display:none}
+
+/* buttons */
 .btn{display:inline-block;border:1px solid var(--brand);background:#f6e9e3;color:var(--ink);border-radius:999px;padding:12px 18px;font-weight:600}
 .btn--primary{background:var(--brand);color:#fff}
+.btn--small{padding:6px 10px}
 
 /* header */
 .site-header{max-width:1200px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;justify-content:space-between}
@@ -18,7 +23,7 @@ a{color:inherit;text-decoration:none}
 .logo{height:52px}
 .wordmark{font-weight:800;letter-spacing:.08em}
 
-/* garlands */
+/* garlands (keep if you use them) */
 .garland{width:100%;background-repeat:no-repeat;background-position:center;background-size:contain}
 .garland--top{height:86px;background-image:url("assets/garland-top.png")}
 .garland--bottom{height:120px;background-image:url("assets/garland-bottom.png")}
@@ -36,21 +41,35 @@ a{color:inherit;text-decoration:none}
 .hero__art{display:flex;justify-content:center;pointer-events:none;z-index:1}
 .hero-frame{position:relative;max-width:520px;width:100%;aspect-ratio:4/3;border-radius:18px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,.10);background:#fff}
 .hero-base{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-
-/* inset moved to LEFT per request */
-.hero-inset{
-  position:absolute;left:6%;top:12%;width:38%;aspect-ratio:1/1;object-fit:cover;
-  border-radius:50%;border:10px solid #fff;box-shadow:0 10px 34px rgba(0,0,0,.18)
-}
+.hero-inset{position:absolute;left:6%;top:12%;width:38%;aspect-ratio:1/1;object-fit:cover;border-radius:50%;border:10px solid #fff;box-shadow:0 10px 34px rgba(0,0,0,.18)}
 
 .site-footer{padding:20px;text-align:center;color:var(--muted)}
 
-/* responsive */
 @media (max-width:980px){
-  .hero{grid-template-columns:1fr;gap:20px} /* image stays second */
+  .hero{grid-template-columns:1fr;gap:20px}
   .garland--top{height:60px}
   .garland--bottom{height:90px}
 }
 
-/* editor helpers used by other pages */
-.hidden{display:none}
+/* ===== Editor layout (unchanged look) ===== */
+.editor{max-width:1280px;margin:10px auto;padding:0 16px;display:grid;grid-template-columns:320px 1fr;gap:16px}
+@media (max-width:980px){ .editor{grid-template-columns:1fr} }
+.box{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.box__summary{font-weight:700;padding:12px 14px;border-bottom:1px solid var(--line)}
+.stack{display:flex;flex-direction:column;gap:10px;padding:12px 14px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chip{border:1px solid #e8c6bd;background:#f0dbd5;border-radius:999px;padding:6px 10px;cursor:pointer}
+.chip--active{background:var(--brand);border-color:var(--brand);color:#fff}
+
+/* NEW: clamp stage + preview sizes */
+.viewbar{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:10px 0}
+.canvas-shell{position:relative;width:min(100%,var(--stage-max));aspect-ratio:1/1;border:1px dashed #d5c2bb;border-radius:10px;background:#fff;overflow:hidden;touch-action:none}
+.canvas-shell canvas{position:absolute;inset:0;width:100%;height:100%}
+.stage__preview{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:12px;max-width:var(--stage-max)}
+.preview-stack{position:relative;border:1px solid #e8ddd7;border-radius:8px;background:#fff}
+.preview-stack canvas{display:block;width:100%}
+
+/* sticky export */
+.stitch-bar{position:fixed;left:0;right:0;bottom:0;background:rgba(255,247,240,.96);border-top:1px solid var(--line)}
+.stitch-bar__row{max-width:1280px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;justify-content:space-between}
+.site-footer{padding:26px 16px 90px;text-align:center;color:var(--muted)}

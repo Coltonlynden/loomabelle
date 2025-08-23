@@ -32,11 +32,16 @@ a{color:inherit;text-decoration:none}
 .display{font-size:clamp(34px,5vw,64px);line-height:1.05;margin:0 0 .6rem}
 .lead{font-size:1.125rem;margin:.25rem 0 .4rem}
 .sublead{color:var(--muted);margin:0 0 1rem}
-.hero__copy{position:relative;z-index:2}        /* keep button clickable */
+.hero__copy{position:relative;z-index:2}
 .hero__art{display:flex;justify-content:center;pointer-events:none;z-index:1}
 .hero-frame{position:relative;max-width:520px;width:100%;aspect-ratio:4/3;border-radius:18px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,.10);background:#fff}
 .hero-base{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.hero-inset{position:absolute;right:6%;top:8%;width:38%;aspect-ratio:1/1;object-fit:cover;border-radius:50%;border:10px solid #fff;box-shadow:0 10px 34px rgba(0,0,0,.18)}
+
+/* inset moved to LEFT per request */
+.hero-inset{
+  position:absolute;left:6%;top:12%;width:38%;aspect-ratio:1/1;object-fit:cover;
+  border-radius:50%;border:10px solid #fff;box-shadow:0 10px 34px rgba(0,0,0,.18)
+}
 
 .site-footer{padding:20px;text-align:center;color:var(--muted)}
 
@@ -47,5 +52,5 @@ a{color:inherit;text-decoration:none}
   .garland--bottom{height:90px}
 }
 
-/* ===== Editor layout bits used below ===== */
+/* editor helpers used by other pages */
 .hidden{display:none}

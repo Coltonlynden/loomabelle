@@ -1,169 +1,19 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Easbroidery — Editor</title>
-  <link rel="stylesheet" href="styles.css"/>
-  <style>
-    /* keep your site styles; only add a tiny helper */
-    .hidden{display:none!important}
-    .chip{border:1px solid #e8c6bd;background:#f0dbd5;border-radius:999px;padding:6px 10px;cursor:pointer}
-    .chip--active{background:#d99187;border-color:#d99187;color:#fff}
-    .panel-grid{display:grid;grid-template-columns:1fr;gap:10px;padding:0 14px 14px}
-    .btn{display:inline-block;border:1px solid #d99187;background:#f6e9e3;color:#4e3b36;border-radius:999px;padding:8px 12px}
-    .btn--small{padding:6px 10px}
-    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    .box{background:#fff7f0;border:1px solid #eadbd5;border-radius:14px;overflow:hidden}
-    .box__summary{font-weight:700;padding:12px 14px;border-bottom:1px solid #eadbd5}
-    .stack{display:flex;flex-direction:column;gap:10px;padding:12px 14px}
-    .viewbar{background:#fff7f0;border:1px solid #eadbd5;border-radius:10px;padding:8px 10px;margin:10px 0}
-    .canvas-shell{position:relative;aspect-ratio:1/1;width:100%;max-width:900px;border:1px dashed #d5c2bb;border-radius:10px;background:#fff;overflow:hidden;touch-action:none}
-    .canvas-shell canvas{position:absolute;inset:0;width:100%;height:100%}
-    .stage__preview{background:#fff7f0;border:1px solid #eadbd5;border-radius:12px;padding:12px;margin-top:12px;max-width:900px}
-    .preview-stack{position:relative;border:1px solid #e8ddd7;border-radius:8px;background:#fff}
-    .preview-stack canvas{display:block;width:100%}
-    .stitch-bar{position:fixed;left:0;right:0;bottom:0;background:rgba(255,247,240,.96);border-top:1px solid #eadbd5}
-    .stitch-bar__row{max-width:1280px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;justify-content:space-between}
-    .site-footer{padding:26px 16px 90px;text-align:center;color:#7a6460}
-    .editor{max-width:1280px;margin:10px auto;padding:0 16px;display:grid;grid-template-columns:320px 1fr;gap:16px}
-    @media (max-width:980px){ .editor{grid-template-columns:1fr} }
-  </style>
-</head>
-<body class="editor-page">
-  <header class="site-header">
-    <nav class="site-nav">
-      <a class="nav-link" href="index.html">Home</a>
-      <a class="nav-link" href="features.html">Features</a>
-      <a class="nav-link" href="pricing.html">Pricing</a>
-    </nav>
-    <a class="brand" href="index.html">
-      <img class="logo" src="assets/logo.png" alt=""><span class="wordmark">EASBROIDERY</span>
-    </a>
-  </header>
-
-  <main class="editor">
-    <!-- left rail -->
-    <aside>
-      <ul>
-        <li>1. Upload</li>
-        <li>2. Select & refine</li>
-        <li>3. Text & direction</li>
-        <li>4. Stitches & export</li>
-      </ul>
-
-      <div class="box">
-        <div class="box__summary">Image</div>
-        <div class="stack">
-          <div class="row">
-            <input id="file" type="file" accept="image/*">
-            <button id="btn-autohighlight" class="btn">Auto highlight</button>
-          </div>
-          <label class="row">Detail <input id="detail" type="range" min="0" max="1" step="0.01" value="0.5" style="width:220px"></label>
-          <div class="viewbar row">
-            <button id="zoom-out" class="btn btn--small">−</button>
-            <button id="zoom-reset" class="btn btn--small">100%</button>
-            <button id="zoom-in" class="btn btn--small">+</button>
-            <span style="color:#7a6460">• Hold Alt and drag to pan.</span>
-          </div>
-        </div>
-      </div>
-    </aside>
-
-    <!-- stage -->
-    <section>
-      <div id="shell" class="canvas-shell">
-        <canvas id="canvas" width="1024" height="1024"></canvas>
-        <canvas id="mask"   width="1024" height="1024"></canvas>
-        <canvas id="edges"  width="1024" height="1024"></canvas>
-        <canvas id="dir"    width="1024" height="1024"></canvas>
-        <canvas id="overlay"width="1024" height="1024"></canvas>
-      </div>
-
-      <!-- Brush panel under the image -->
-      <div class="box">
-        <div class="box__summary">Brush</div>
-
-        <!-- mode chips -->
-        <div class="stack" style="padding-bottom:0">
-          <div class="row">
-            <button id="mode-mask" class="chip chip--active">Mask</button>
-            <button id="mode-text" class="chip">Text</button>
-            <button id="mode-dir"  class="chip">Direction</button>
-          </div>
-        </div>
-
-        <!-- MASK GROUP -->
-        <div id="group-mask" class="panel-grid">
-          <label class="row">Size <input id="brush-size" type="range" min="2" max="60" value="18" style="width:220px"></label>
-          <div class="row">
-            <button id="tool-brush" class="btn btn--small">Paint</button>
-            <button id="tool-erase" class="btn btn--small">Erase</button>
-            <button id="tool-wand"  class="btn btn--small">Wand</button>
-            <button id="btn-undo" class="btn btn--small">Undo</button>
-            <button id="btn-redo" class="btn btn--small">Redo</button>
-            <button id="btn-clear-mask" class="btn btn--small">Clear</button>
-            <button id="btn-fill-mask"  class="btn btn--small">Fill</button>
-          </div>
-          <div class="row">
-            <label><input id="toggle-mask" type="checkbox" checked> Show mask</label>
-            <label><input id="toggle-edge" type="checkbox"> Show edges</label>
-          </div>
-        </div>
-
-        <!-- TEXT GROUP -->
-        <div id="group-text" class="panel-grid hidden">
-          <label class="row">Text <input id="text-input" type="text" placeholder="Add text" style="flex:1"></label>
-          <button id="btn-add-text" class="btn">Apply</button>
-          <label class="row">Curve <input id="text-curve" type="range" min="-1" max="1" step="0.01" value="0" style="width:220px"></label>
-          <label class="row">Size <input id="text-size"  type="range" min="10" max="120" value="48" style="width:220px"></label>
-          <p style="color:#7a6460;margin:0 14px 12px">Drag in Live preview to move the text.</p>
-        </div>
-
-        <!-- DIRECTION GROUP -->
-        <div id="group-dir" class="panel-grid hidden">
-          <label class="row">Angle <input id="dir-angle" type="range" min="0" max="180" value="45" style="width:220px"> <span id="dir-angle-value">45°</span></label>
-          <label class="row">Pattern
-            <select id="dir-pattern">
-              <option value="fill">Fill (running)</option>
-              <option value="satin">Satin</option>
-              <option value="zigzag">Zig‑zag</option>
-            </select>
-          </label>
-          <label><input id="toggle-dir-overlay" type="checkbox" checked> Show direction overlay</label>
-        </div>
-      </div>
-
-      <!-- preview -->
-      <div class="stage__preview box">
-        <div class="box__summary">Live preview</div>
-        <div class="preview-stack">
-          <canvas id="preview" width="1024" height="1024"></canvas>
-          <canvas id="stitchvis" width="1024" height="1024"></canvas>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <!-- sticky export bar -->
-  <div class="stitch-bar">
-    <div class="stitch-bar__row">
-      <label><input id="toggle-stitch-preview" type="checkbox" checked> Show stitch preview</label>
-      <div class="row">
-        <button id="btn-make-stitches" class="btn">Generate stitches</button>
-        <button id="btn-dl-png"  class="btn">PNG</button>
-        <button id="btn-dl-svg"  class="btn">SVG</button>
-        <button id="btn-dl-json" class="btn">Stitches JSON</button>
-      </div>
-    </div>
+<!-- inside your left rail "Image" box -->
+<div class="stack">
+  <div class="row">
+    <input id="file" type="file" accept="image/*">
+    <button id="btn-autohighlight" class="btn btn--small">Auto highlight</button>
   </div>
+  <!-- NEW: filename field that we populate after upload -->
+  <input id="filename" type="text" readonly placeholder="No file chosen" style="width:100%;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 10px">
+  <label class="row">Detail
+    <input id="detail" type="range" min="0" max="1" step="0.01" value="0.5" style="width:220px">
+  </label>
 
-  <footer class="site-footer"><small>© Easbroidery</small></footer>
-
-  <!-- keep your existing pipeline; just include the same files -->
-  <script src="processing.js"></script>
-  <script src="script.preview.js"></script>
-  <script src="script.upload.js"></script>
-  <script src="script.draw.js"></script>
-</body>
-</html>
+  <div class="viewbar row">
+    <button id="zoom-out" class="btn btn--small">−</button>
+    <button id="zoom-reset" class="btn btn--small">100%</button>
+    <button id="zoom-in" class="btn btn--small">+</button>
+    <span style="color:var(--muted)">• Hold Alt and drag to pan.</span>
+  </div>
+</div>

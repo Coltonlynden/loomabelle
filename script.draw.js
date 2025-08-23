@@ -1,18 +1,32 @@
 (function(){
   const S=EAS.state;
 
-  // mode switches
-  const setMode = m => {
-    EAS.setBrushMode(m);
-    document.querySelectorAll('.chip').forEach(c=>c.classList.remove('chip--active'));
-    document.getElementById(m==='mask'?'mode-mask':m==='text'?'mode-text':'mode-dir').classList.add('chip--active');
-  };
-  document.getElementById("mode-mask").onclick=()=>setMode("mask");
-  document.getElementById("mode-text").onclick=()=>setMode("text");
-  document.getElementById("mode-dir").onclick =()=>setMode("dir");
-  setMode("mask");
+  // --- mode switching + panel visibility ---
+  const chipMask = document.getElementById("mode-mask");
+  const chipText = document.getElementById("mode-text");
+  const chipDir  = document.getElementById("mode-dir");
+  const panelMask = document.getElementById("panel-mask");
+  const panelText = document.getElementById("panel-text");
+  const panelDir  = document.getElementById("panel-dir");
 
-  // tool buttons with active state
+  function showPanel(mode){
+    panelMask.classList.toggle("hidden", mode!=="mask");
+    panelText.classList.toggle("hidden", mode!=="text");
+    panelDir .classList.toggle("hidden", mode!=="dir");
+
+    chipMask.classList.toggle("chip--active", mode==="mask");
+    chipText.classList.toggle("chip--active", mode==="text");
+    chipDir .classList.toggle("chip--active", mode==="dir");
+
+    EAS.setBrushMode(mode);
+  }
+
+  chipMask.onclick=()=>showPanel("mask");
+  chipText.onclick=()=>showPanel("text");
+  chipDir .onclick=()=>showPanel("dir");
+  showPanel("mask"); // default
+
+  // --- tool pickers (mask only) ---
   const tools = {brush:"tool-brush", erase:"tool-erase", wand:"tool-wand"};
   function pickTool(t){
     S.tool=t;
@@ -26,11 +40,11 @@
 
   document.getElementById("brush-size").oninput=e=>S.brushSize=+e.target.value;
 
-  // undo/redo
+  // --- undo/redo ---
   document.getElementById("btn-undo").onclick=()=>EAS_processing.undo();
   document.getElementById("btn-redo").onclick=()=>EAS_processing.redo();
 
-  // canvases
+  // --- canvases ---
   const base=document.getElementById("canvas");
   const bctx=base.getContext("2d",{willReadFrequently:true});
   const mask=document.getElementById("mask");
@@ -40,7 +54,7 @@
   const edges=document.getElementById("edges");
   const dirOverlay=document.getElementById("dir");
 
-  // toggles
+  // --- toggles ---
   document.getElementById("btn-clear-mask").onclick=()=>{
     mctx.clearRect(0,0,1024,1024); S.hasMask=false;
     EAS_processing.computeEdges(); EAS_processing.renderPreview(); EAS_processing.pushUndo();
@@ -54,14 +68,14 @@
   document.getElementById("toggle-edge").onchange=e=>{ edges.style.opacity=e.target.checked?"1":"0"; };
   document.getElementById("toggle-dir-overlay").onchange=e=>{ dirOverlay.style.opacity=e.target.checked?"0.4":"0"; };
 
-  // direction controls
+  // --- direction controls ---
   const dirAngle = document.getElementById("dir-angle");
   const dirVal   = document.getElementById("dir-angle-value");
   const patSel   = document.getElementById("dir-pattern");
-  dirAngle.oninput = e=>{ S.dirAngle=+e.target.value; dirVal.textContent=S.dirAngle+"°"; };
-  patSel.onchange  = e=>{ S.dirPattern=e.target.value; };
+  dirAngle.oninput = e=>{ S.dirAngle=+e.target.value; dirVal.textContent=S.dirAngle+"°"; EAS_processing.renderPreview(); };
+  patSel.onchange  = e=>{ S.dirPattern=e.target.value; EAS_processing.renderPreview(); };
 
-  // view controls
+  // --- view controls ---
   const zoomIn=document.getElementById("zoom-in"), zoomOut=document.getElementById("zoom-out"), zoomReset=document.getElementById("zoom-reset");
   function setZoom(z){ S.zoom=Math.min(3,Math.max(0.4,z)); EAS_processing.setShellTransform(); }
   zoomIn.onclick = ()=>setZoom(S.zoom+0.1);
@@ -80,7 +94,7 @@
   window.addEventListener("mouseup",()=>panning=false);
   EAS_processing.setShellTransform();
 
-  // helpers
+  // --- helpers ---
   function pos(ev){
     const r=mask.getBoundingClientRect();
     const cx=(ev.touches?ev.touches[0].clientX:ev.clientX)-r.left;
@@ -118,7 +132,7 @@
     mctx.putImageData(id,0,0); S.hasMask=true;
   }
 
-  // throttled drawing (prevents “Page Unresponsive”)
+  // --- throttled drawing ---
   let painting=false, raf=false, lastPoint=null;
   function paintFrame(){
     raf=false;
@@ -158,7 +172,7 @@
   overlay.addEventListener("touchmove",move,{passive:false});
   window.addEventListener("touchend",up);
 
-  // text controls
+  // --- text controls ---
   const T=S.text;
   const textInput=document.getElementById("text-input");
   document.getElementById("btn-add-text").onclick=()=>{ if(textInput.value.trim()){ T.content=textInput.value; EAS_processing.renderPreview(); } };
@@ -177,18 +191,18 @@
   });
   window.addEventListener("mouseup",()=>T.dragging=false);
 
-  // generate + export
+  // --- generate + export ---
   document.getElementById("btn-make-stitches").onclick=()=>EAS_processing.generateStitches();
   document.getElementById("btn-dl-png").onclick =()=>EAS_processing.exportPNG();
   document.getElementById("btn-dl-svg").onclick =()=>EAS_processing.exportSVG();
   document.getElementById("btn-dl-json").onclick=()=>EAS_processing.exportStitchesJSON();
   document.getElementById("toggle-stitch-preview").onchange=()=>EAS_processing.renderPreview(true);
 
-  // hotkeys
+  // --- hotkeys ---
   window.addEventListener("keydown",(e)=>{
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="z"){ e.shiftKey?EAS_processing.redo():EAS_processing.undo(); }
-    if(e.key==="1") setMode("mask");
-    if(e.key==="2") setMode("text");
-    if(e.key==="3") setMode("dir");
+    if(e.key==="1") showPanel("mask");
+    if(e.key==="2") showPanel("text");
+    if(e.key==="3") showPanel("dir");
   });
 })();

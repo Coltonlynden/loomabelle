@@ -1,128 +1,109 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Easbroidery — Editor</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css"/>
+  <link rel="stylesheet" href="editor.css"/>
 </head>
 <body class="editor-page">
-  <div class="garland garland--top" aria-hidden="true"></div>
-
   <header class="site-header">
     <nav class="site-nav">
       <a class="nav-link" href="index.html">Home</a>
       <a class="nav-link" href="features.html">Features</a>
       <a class="nav-link" href="pricing.html">Pricing</a>
     </nav>
-    <div class="brand">
-      <img src="assets/logo.png" class="logo" alt="Easbroidery logo" />
-      <span class="wordmark">EASBROIDERY</span>
-    </div>
+    <a class="brand" href="index.html"><img class="logo" src="assets/logo.png" alt=""><span class="wordmark">EASBROIDERY</span></a>
   </header>
 
-  <main class="editor editor--stack">
-    <!-- left: steps + upload -->
+  <main class="editor">
     <aside class="rail">
-      <ol class="steps">
-        <li class="steps__item steps__item--done">1. Upload</li>
-        <li class="steps__item steps__item--active">2. Select & refine</li>
+      <ul class="steps">
+        <li class="steps__item steps__item--active">1. Upload</li>
+        <li class="steps__item">2. Select & refine</li>
         <li class="steps__item">3. Text & direction</li>
         <li class="steps__item">4. Stitches & export</li>
-      </ol>
+      </ul>
 
-      <details class="box" open>
-        <summary class="box__summary">Image</summary>
+      <div class="box">
+        <div class="box__summary">Image</div>
         <div class="stack">
-          <input id="file" type="file" accept="image/*" />
-          <button id="btn-upload" class="btn btn--primary w100">Choose image</button>
-          <button id="btn-auto" class="btn w100" disabled>Auto highlight</button>
-          <label class="row"><span>Detail</span><input id="auto-detail" type="range" min="1" max="6" value="3" /></label>
+          <input id="file" type="file" accept="image/*">
+          <button id="btn-autohighlight" class="btn">Auto highlight</button>
+          <label class="row">Detail <input id="detail" type="range" min="0" max="1" step="0.01" value="0.5"></label>
         </div>
-      </details>
+      </div>
     </aside>
 
-    <!-- right: work surface -->
-    <section class="stage stage--stack">
-      <!-- View bar sits on top of the image box -->
-      <div class="viewbar">
-        <div class="row">
-          <button id="zoom-out" class="btn btn--small">−</button>
-          <button id="zoom-reset" class="btn btn--small"><span id="zoom-label">100%</span></button>
-          <button id="zoom-in" class="btn btn--small">＋</button>
-          <span class="muted">&nbsp;•&nbsp;Hold <b>Alt</b> and drag to pan</span>
-        </div>
+    <section>
+      <div class="viewbar row">
+        <button id="zoom-out" class="btn btn--small">−</button>
+        <button id="zoom-reset" class="btn btn--small">100%</button>
+        <button id="zoom-in" class="btn btn--small">+</button>
+        <span class="muted">• Hold Alt and drag to pan.</span>
       </div>
 
-      <!-- Canvas box -->
-      <div class="canvas-shell" id="shell">
+      <div id="shell" class="canvas-shell">
         <canvas id="canvas" width="1024" height="1024"></canvas>
         <canvas id="mask"   width="1024" height="1024"></canvas>
-        <canvas id="overlay" width="1024" height="1024"></canvas>
-        <canvas id="edges" width="1024" height="1024"></canvas>
-        <canvas id="dir"   width="1024" height="1024"></canvas>
+        <canvas id="edges"  width="1024" height="1024"></canvas>
+        <canvas id="dir"    width="1024" height="1024"></canvas>
+        <canvas id="overlay"width="1024" height="1024"></canvas>
       </div>
 
-      <!-- Brush panel now BELOW the image -->
-      <section class="brush-panel box">
+      <!-- Brush panel attached under image -->
+      <div class="box brush-panel">
         <div class="box__summary">Brush</div>
-
         <div class="panel-row">
           <button id="mode-mask" class="chip chip--active">Mask</button>
           <button id="mode-text" class="chip">Text</button>
           <button id="mode-dir"  class="chip">Direction</button>
         </div>
 
-        <!-- Mask tools -->
+        <!-- MASK tools only -->
         <div id="panel-mask" class="panel-grid">
-          <label><span>Size</span><input id="brush-size" type="range" min="4" max="80" value="26" /></label>
-
+          <label class="row">Size <input id="brush-size" type="range" min="2" max="60" value="18"></label>
           <div class="tool-group">
             <button id="tool-brush" class="btn btn--small btn-toggle active">Paint</button>
             <button id="tool-erase" class="btn btn--small btn-toggle">Erase</button>
             <button id="tool-wand"  class="btn btn--small btn-toggle">Wand</button>
-          </div>
-
-          <div class="tool-group">
             <button id="btn-undo" class="btn btn--small">Undo</button>
             <button id="btn-redo" class="btn btn--small">Redo</button>
             <button id="btn-clear-mask" class="btn btn--small">Clear</button>
-            <button id="btn-fill-mask" class="btn btn--small">Fill</button>
+            <button id="btn-fill-mask"  class="btn btn--small">Fill</button>
           </div>
-
           <div class="tool-group">
-            <label class="switch"><input id="toggle-mask" type="checkbox" checked><span>Show mask</span></label>
-            <label class="switch"><input id="toggle-edge" type="checkbox"><span>Show edges</span></label>
+            <label class="switch"><input id="toggle-mask" type="checkbox" checked> Show mask</label>
+            <label class="switch"><input id="toggle-edge" type="checkbox"> Show edges</label>
           </div>
         </div>
 
-        <!-- Text tools -->
+        <!-- TEXT tools only -->
         <div id="panel-text" class="panel-grid hidden">
-          <label><span>Text</span><input id="text-input" type="text" placeholder="Add text" /></label>
+          <label class="row">Text <input id="text-input" type="text" placeholder="Add text" class="w100"></label>
           <button id="btn-add-text" class="btn">Apply</button>
-          <label><span>Curve</span><input id="text-curve" type="range" min="-100" max="100" value="0" /></label>
-          <label><span>Size</span><input id="text-size" type="range" min="10" max="200" value="56" /></label>
-          <small class="muted">Drag in Live preview to move the text.</small>
+          <label class="row">Curve <input id="text-curve" type="range" min="-1" max="1" step="0.01" value="0"></label>
+          <label class="row">Size <input id="text-size"  type="range" min="10" max="120" value="48"></label>
+          <p class="muted">Drag in Live preview to move the text.</p>
         </div>
 
-        <!-- Direction tools -->
+        <!-- DIRECTION tools only -->
         <div id="panel-dir" class="panel-grid hidden">
-          <label><span>Angle</span><input id="dir-angle" type="range" min="0" max="180" value="45" /></label>
-          <div><span id="dir-angle-value">45°</span></div>
-          <label><span>Pattern</span>
+          <label class="row">Angle <input id="dir-angle" type="range" min="0" max="180" value="45"><span id="dir-angle-value">45°</span></label>
+          <label class="row">Pattern
             <select id="dir-pattern">
-              <option value="fill" selected>Fill (running)</option>
-              <option value="satin">Satin (zig‑zag)</option>
-              <option value="cross">Cross hatch</option>
+              <option value="fill">Fill (running)</option>
+              <option value="satin">Satin</option>
+              <option value="zigzag">Zig‑zag</option>
             </select>
           </label>
-          <label class="switch"><input id="toggle-dir-overlay" type="checkbox" checked><span>Show direction overlay</span></label>
+          <label class="switch"><input id="toggle-dir-overlay" type="checkbox" checked> Show direction overlay</label>
         </div>
-      </section>
+      </div>
 
-      <!-- Preview -->
-      <div class="stage__preview">
-        <h4>Live preview</h4>
+      <div class="box stage__preview">
+        <div class="box__summary">Live preview</div>
         <div class="preview-stack">
           <canvas id="preview" width="1024" height="1024"></canvas>
           <canvas id="stitchvis" width="1024" height="1024"></canvas>
@@ -131,31 +112,22 @@
     </section>
   </main>
 
-  <!-- Fixed stitches bar -->
-  <div class="stitch-bar" role="region" aria-label="Stitches">
+  <!-- sticky bottom bar -->
+  <div class="stitch-bar">
     <div class="stitch-bar__row">
-      <div class="row">
-        <label class="switch">
-          <input id="toggle-stitch-preview" type="checkbox" checked />
-          <span>Show stitch preview</span>
-        </label>
-      </div>
-      <div class="row gap10">
-        <button id="btn-make-stitches" class="btn btn--primary" disabled>Generate stitches</button>
-        <button id="btn-dl-png"  class="btn" disabled>PNG</button>
-        <button id="btn-dl-svg"  class="btn" disabled>SVG</button>
-        <button id="btn-dl-json" class="btn" disabled>Stitches JSON</button>
+      <label class="switch"><input id="toggle-stitch-preview" type="checkbox" checked> Show stitch preview</label>
+      <div class="tool-group">
+        <button id="btn-make-stitches" class="btn btn--primary">Generate stitches</button>
+        <button id="btn-dl-png"  class="btn">PNG</button>
+        <button id="btn-dl-svg"  class="btn">SVG</button>
+        <button id="btn-dl-json" class="btn">Stitches JSON</button>
       </div>
     </div>
   </div>
 
-  <div class="garland garland--bottom" aria-hidden="true"></div>
   <footer class="site-footer"><small>© Easbroidery</small></footer>
 
-  <script src="colors.js"></script>
-  <script src="app.js"></script>
   <script src="processing.js"></script>
-  <script src="script.upload.js"></script>
   <script src="script.draw.js"></script>
 </body>
 </html>

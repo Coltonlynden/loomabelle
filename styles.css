@@ -28,12 +28,12 @@ small{color:var(--muted)}
 .logo{height:52px;width:auto}
 .wordmark{font-weight:800;letter-spacing:.08em}
 
-/* ===== Garlands (PNG images) ===== */
+/* ===== Garlands ===== */
 .garland{width:100%;background-repeat:no-repeat;background-position:center;background-size:contain}
 .garland--top{height:86px;background-image:url("assets/garland-top.png")}
 .garland--bottom{height:120px;background-image:url("assets/garland-bottom.png")}
 
-/* ===== Hero layout (text left, art right) ===== */
+/* ===== Hero (text left, image right) ===== */
 .hero{
   max-width:1200px;margin:0 auto;padding:24px 16px 0;
   display:grid;grid-template-columns:minmax(320px,1fr) minmax(380px,1fr);
@@ -64,12 +64,12 @@ small{color:var(--muted)}
 /* ===== Responsive ===== */
 @media (max-width:980px){
   .hero{grid-template-columns:1fr;gap:20px}
-  .hero__art{order:-1} /* image above on mobile */
+  /* keep text first, image second on mobile; DO NOT reorder */
   .garland--top{height:60px}
   .garland--bottom{height:90px}
 }
 
-/* ===== Editor page styles (from previous working layout) ===== */
+/* ===== Editor page styles ===== */
 .editor{max-width:1280px;margin:10px auto;padding:0 16px;display:grid;grid-template-columns:320px 1fr;gap:16px}
 .steps{list-style:none;padding:0;margin:0 0 12px;display:grid;gap:6px}
 .steps__item{padding:10px 12px;border-radius:8px;background:#f6ebe6}

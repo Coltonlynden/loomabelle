@@ -1,5 +1,5 @@
-// hatch + exports + zoom transform
-(function(){
+// Hatching + exports + zoom transform
+(function () {
   const S = (window.EAS ||= {}).state ||= {};
   const mask = document.getElementById('mask');
 
@@ -10,33 +10,36 @@
     window.EAS_preview.render();
   }
 
+  // simple line-fill hatch using mask alpha
   function hatch(){
     const W=1024,H=1024;
     const m = mask.getContext('2d').getImageData(0,0,W,H).data;
-    const spacing=4, stitch=2, ang=(S.dirAngle||45)*Math.PI/180;
+    const spacing=4, step=2, ang=(S.dirAngle||45)*Math.PI/180;
     const nx=Math.cos(ang), ny=Math.sin(ang), px=-Math.sin(ang), py=Math.cos(ang);
-    const minT=-Math.ceil((W*Math.abs(px)+H*Math.abs(py))/2), maxT=-minT;
-
+    const bound = Math.ceil((W*Math.abs(px)+H*Math.abs(py))/2);
     const paths=[];
-    for(let t=minT;t<=maxT;t+=spacing){
+
+    for(let t=-bound; t<=bound; t+=spacing){
       let on=false, seg=[];
-      for(let s=-800;s<=800;s+=stitch){
+      for(let s=-900; s<=900; s+=step){
         const x=512+nx*s+px*t, y=512+ny*s+py*t;
         if(x<0||x>=W||y<0||y>=H){ if(on){paths.push(seg); seg=[]; on=false;} continue; }
-        const a=m[((y|0)*W+(x|0))*4+3]>0;
-        if(a){ seg.push([x,y]); on=true; } else if(on){ paths.push(seg); seg=[]; on=false; }
+        const a = m[((y|0)*W+(x|0))*4+3] > 0;  // inside mask?
+        if(a){ seg.push([x,y]); on=true; }
+        else if(on){ paths.push(seg); seg=[]; on=false; }
       }
       if(seg.length) paths.push(seg);
     }
-    S.stitches=paths.flat();
-    return {paths,count:S.stitches.length};
+    S.stitches = paths.flat();
+    return { paths, count:S.stitches.length };
   }
 
   function download(name,blob){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),800); }
 
   function exportPNG(){ document.getElementById('preview').toBlob(b=>download('easbroidery.png',b),'image/png'); }
   function exportSVG(){
-    const {paths}=hatch(); const segs=paths.map(seg=>`<path d="${seg.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+','+p[1].toFixed(1)).join('')}" fill="none" stroke="#000" stroke-width="0.4"/>`).join('');
+    const {paths}=hatch();
+    const segs=paths.map(seg=>`<path d="${seg.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+','+p[1].toFixed(1)).join('')}" fill="none" stroke="#000" stroke-width="0.4"/>`).join('');
     const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">${segs}</svg>`;
     download('easbroidery.svg',new Blob([svg],{type:'image/svg+xml'}));
   }
@@ -49,11 +52,12 @@
     function enc(dx,dy,flags=0){
       while(Math.abs(dx)>121||Math.abs(dy)>121){ const sx=Math.max(-121,Math.min(121,dx)); const sy=Math.max(-121,Math.min(121,dy)); enc(sx,sy,flags); dx-=sx; dy-=sy; }
       let b1=0,b2=0,b3=0x80;
-      function bits(v,isX){ let a=Math.abs(v),s=v>=0; const set=(P,bit)=>{ if(P===1){ b1|=s?bit:bit<<1; } else if(P===2){ b2|=s?bit:bit<<1; } else { b3|=s?bit:bit<<1; } };
+      function bits(v){ let a=Math.abs(v),s=v>=0;
+        const set=(P,bit)=>{ if(P===1){ b1|=s?bit:bit<<1; } else if(P===2){ b2|=s?bit:bit<<1; } else { b3|=s?bit:bit<<1; } };
         const use=(unit,P,bit)=>{ while(a>=unit){ set(P,bit); a-=unit; } };
         use(81,3,1); use(27,2,16); use(9,2,1); use(3,1,16); use(1,1,1);
       }
-      bits(dx,true); bits(dy,false);
+      bits(dx); bits(dy);
       if(flags&1) b3|=0x20; if(flags&2) b3|=0x10;
       bytes.push(b1,b2,b3);
     }
@@ -66,5 +70,5 @@
 
   function generate(){ hatch(); window.EAS_preview.render(); }
 
-  window.EAS_processing={hatch,generate,exportPNG,exportSVG,exportJSON,exportDST,setShellTransform};
+  window.EAS_processing = { hatch, generate, exportPNG, exportSVG, exportJSON, exportDST, setShellTransform };
 })();

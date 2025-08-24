@@ -1,17 +1,19 @@
-// Painting / Wand / Text tools
+// Paint / Erase / Wand tools — fixed event flow
 (function () {
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
   const S = (window.EAS ||= {}).state ||= { tool:'brush', mode:'mask', brushSize:18, dirAngle:45, showDir:false };
 
-  // canvases
   const base = $('#canvas');
   const mask = $('#mask');
   const bctx = base.getContext('2d', { willReadFrequently: true });
   const mctx = mask.getContext('2d', { willReadFrequently: true });
   base.width = base.height = mask.width = mask.height = 1024;
 
-  // mode chips show/hide tool groups
+  // ensure the paint target accepts events and is on top
+  mask.style.pointerEvents = 'auto';
+  mask.style.zIndex = 3; // overlay/edges are pointer-events:none
+
   const chips = $$('#brush-controls .chip[data-mode]');
   const gMask = $('.tools-mask'), gText = $('.tools-text'), gDir = $('.tools-direction');
   function setMode(m) {
@@ -24,26 +26,22 @@
   chips.forEach(c => c.addEventListener('click', () => setMode(c.dataset.mode)));
   setMode('mask');
 
-  // tool selectors
-  $('#paint')?.addEventListener('click', () => S.tool = 'brush');
-  $('#erase')?.addEventListener('click', () => S.tool = 'erase');
-  $('#wand') ?.addEventListener('click', () => S.tool = 'wand');
-  $('#brush-size')?.addEventListener('input', e => S.brushSize = +e.target.value);
+  $('#paint').addEventListener('click', () => { S.tool='brush';  setActiveTool(); });
+  $('#erase').addEventListener('click', () => { S.tool='erase';  setActiveTool(); });
+  $('#wand') .addEventListener('click', () => { S.tool='wand';   setActiveTool(); });
+  function setActiveTool(){ ['paint','erase','wand'].forEach(id=>$('#'+id).classList.toggle('chip--active',S.tool===id)); }
+  $('#brush-size').addEventListener('input', e => S.brushSize = +e.target.value);
 
-  // undo/redo
   const UNDO = [], REDO = [];
-  function pushUndo() {
-    try { UNDO.push(mctx.getImageData(0,0,1024,1024)); if (UNDO.length > 30) UNDO.shift(); REDO.length = 0; } catch {}
-  }
-  $('#btn-undo')?.addEventListener('click', ()=>{ if (!UNDO.length) return; REDO.push(mctx.getImageData(0,0,1024,1024)); mctx.putImageData(UNDO.pop(),0,0); window.EAS_preview.render(); });
-  $('#btn-redo')?.addEventListener('click', ()=>{ if (!REDO.length) return; UNDO.push(mctx.getImageData(0,0,1024,1024)); mctx.putImageData(REDO.pop(),0,0); window.EAS_preview.render(); });
-  $('#btn-clear-mask')?.addEventListener('click', ()=>{ pushUndo(); mctx.clearRect(0,0,1024,1024); window.EAS_preview.render(); });
-  $('#btn-fill-mask') ?.addEventListener('click', ()=>{ pushUndo(); mctx.fillStyle = '#000'; mctx.fillRect(0,0,1024,1024); window.EAS_preview.render(); });
+  function pushUndo(){ try{ UNDO.push(mctx.getImageData(0,0,1024,1024)); if(UNDO.length>40) UNDO.shift(); REDO.length=0; }catch{} }
+  $('#btn-undo').addEventListener('click', ()=>{ if(!UNDO.length) return; REDO.push(mctx.getImageData(0,0,1024,1024)); mctx.putImageData(UNDO.pop(),0,0); window.EAS_preview.render(); });
+  $('#btn-redo').addEventListener('click', ()=>{ if(!REDO.length) return; UNDO.push(mctx.getImageData(0,0,1024,1024)); mctx.putImageData(REDO.pop(),0,0); window.EAS_preview.render(); });
+  $('#btn-clear-mask').addEventListener('click', ()=>{ pushUndo(); mctx.clearRect(0,0,1024,1024); window.EAS_preview.render(); });
+  $('#btn-fill-mask').addEventListener('click', ()=>{ pushUndo(); mctx.fillStyle='#000'; mctx.fillRect(0,0,1024,1024); window.EAS_preview.render(); });
 
-  $('#toggle-mask') ?.addEventListener('change', e => $('#mask').style.opacity   = e.target.checked ? 1 : 0);
-  $('#toggle-edges')?.addEventListener('change', e => $('#edges').style.opacity  = e.target.checked ? 1 : 0);
+  $('#toggle-mask').addEventListener('change', e => $('#overlay').style.display = e.target.checked ? 'block' : 'none');
+  $('#toggle-edges').addEventListener('change', e => $('#edges').style.display   = e.target.checked ? 'block' : 'none');
 
-  // painting helpers
   function dot(x, y, r, erase) {
     mctx.save();
     mctx.globalCompositeOperation = erase ? 'destination-out' : 'source-over';
@@ -57,7 +55,6 @@
     return { x: (p.clientX - r.left) * 1024 / r.width, y: (p.clientY - r.top) * 1024 / r.height };
   };
 
-  // flood fill based on base image color near clicked pixel
   function wand(x, y) {
     pushUndo();
     const W = 1024, H = 1024;
@@ -80,17 +77,16 @@
     mctx.putImageData(out,0,0);
   }
 
-  // pointer plumbing
-  let painting = false, last = null;
+  let painting=false,last=null;
   function down(ev){
-    if (S.tool === 'wand') { const p = pos(ev, mask); wand(p.x,p.y); window.EAS_preview.render(); ev.preventDefault(); return; }
-    painting = true; last = pos(ev, mask); pushUndo();
-    dot(last.x, last.y, S.brushSize, S.tool === 'erase');
+    if (S.tool==='wand'){ const p=pos(ev,mask); wand(p.x,p.y); window.EAS_preview.render(); ev.preventDefault(); return; }
+    painting=true; last=pos(ev,mask); pushUndo();
+    dot(last.x,last.y,S.brushSize,S.tool==='erase');
     window.EAS_preview.render(); ev.preventDefault();
   }
   function move(ev){
     if(!painting) return;
-    const p = pos(ev, mask);
+    const p=pos(ev,mask);
     const dx=p.x-last.x, dy=p.y-last.y, dist=Math.hypot(dx,dy);
     const steps=Math.max(1,(dist/(S.brushSize*0.5))|0);
     for(let i=1;i<=steps;i++) dot(last.x+dx*i/steps,last.y+dy*i/steps,S.brushSize,S.tool==='erase');
@@ -101,32 +97,29 @@
   mask.addEventListener('mousedown',down); window.addEventListener('mousemove',move); window.addEventListener('mouseup',up);
   mask.addEventListener('touchstart',down,{passive:false}); window.addEventListener('touchmove',move,{passive:false}); window.addEventListener('touchend',up);
 
-  // TEXT controls -> live preview + overlay
+  // TEXT controls wiring
   const T = (S.text = { content:'', curve:0, size:64, angle:0 });
-  $('#text-string')?.addEventListener('input', e => { T.content = e.target.value; window.EAS_preview.render(); });
-  $('#text-curve') ?.addEventListener('input', e => { T.curve   = +e.target.value; window.EAS_preview.render(); });
-  $('#text-size')  ?.addEventListener('input', e => { T.size    = +e.target.value; window.EAS_preview.render(); });
-  $('#text-angle') ?.addEventListener('input', e => { T.angle   = +e.target.value; window.EAS_preview.render(); });
-  $('#apply-text') ?.addEventListener('click', ()=> window.EAS_preview.render());
+  $('#text-string').addEventListener('input', e => { T.content = e.target.value; window.EAS_preview.render(); });
+  $('#text-curve') .addEventListener('input', e => { T.curve   = +e.target.value; window.EAS_preview.render(); });
+  $('#text-size')  .addEventListener('input', e => { T.size    = +e.target.value; window.EAS_preview.render(); });
+  $('#text-angle') .addEventListener('input', e => { T.angle   = +e.target.value; window.EAS_preview.render(); });
+  $('#apply-text') .addEventListener('click', ()=> window.EAS_preview.render());
 
-  // Direction overlay
-  const dirA = $('#dir-angle'), dirV = $('#dir-angle-value'), dirP = $('#dir-pattern'), dirT = $('#toggle-dir');
-  S.dirAngle = +dirA.value; S.dirPattern = dirP.value; S.showDir = dirT.checked;
-  dirA?.addEventListener('input',e=>{S.dirAngle=+e.target.value; dirV.textContent=S.dirAngle+'°'; window.EAS_preview.render();});
-  dirP?.addEventListener('change',e=>{S.dirPattern=e.target.value; window.EAS_preview.render();});
-  dirT?.addEventListener('change',()=>{S.showDir=dirT.checked; window.EAS_preview.render();});
+  // Direction + zoom
+  const dirA = $('#dir-angle'), dirV = $('#dir-angle-value'), dirT = $('#toggle-dir');
+  S.dirAngle = +dirA.value; S.showDir = dirT.checked;
+  dirA.addEventListener('input',e=>{S.dirAngle=+e.target.value; dirV.textContent=S.dirAngle+'°'; window.EAS_preview.render();});
+  dirT.addEventListener('change',()=>{S.showDir=dirT.checked; window.EAS_preview.render();});
 
-  // Zoom controls (shell transform handled in processing.js)
   function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
-  $('#zoom-in')  ?.addEventListener('click',()=>{S.zoom=clamp((S.zoom||1)+0.1,0.4,3); window.EAS_processing.setShellTransform();});
-  $('#zoom-out') ?.addEventListener('click',()=>{S.zoom=clamp((S.zoom||1)-0.1,0.4,3); window.EAS_processing.setShellTransform();});
-  $('#zoom-reset')?.addEventListener('click',()=>{S.zoom=1;S.panX=0;S.panY=0;window.EAS_processing.setShellTransform();});
+  $('#zoom-in')  .addEventListener('click',()=>{S.zoom=clamp((S.zoom||1)+0.1,0.4,3); window.EAS_processing.setShellTransform();});
+  $('#zoom-out') .addEventListener('click',()=>{S.zoom=clamp((S.zoom||1)-0.1,0.4,3); window.EAS_processing.setShellTransform();});
+  $('#zoom-reset').addEventListener('click',()=>{S.zoom=1;S.panX=0;S.panY=0;window.EAS_processing.setShellTransform();});
 
   // Exports
-  $('#btn-make')?.addEventListener('click',()=>window.EAS_processing.generate());
-  $('#dl-png') ?.addEventListener('click',()=>window.EAS_processing.exportPNG());
-  $('#dl-svg') ?.addEventListener('click',()=>window.EAS_processing.exportSVG());
-  $('#dl-json')?.addEventListener('click',()=>window.EAS_processing.exportJSON());
-  $('#dl-dst') ?.addEventListener('click',()=>window.EAS_processing.exportDST());
-  $('#toggle-stitch')?.addEventListener('change',()=>window.EAS_preview.render());
+  $('#btn-make').addEventListener('click',()=>window.EAS_processing.generate());
+  $('#dl-png') .addEventListener('click',()=>window.EAS_processing.exportPNG());
+  $('#dl-svg') .addEventListener('click',()=>window.EAS_processing.exportSVG());
+  $('#dl-json').addEventListener('click',()=>window.EAS_processing.exportJSON());
+  $('#dl-dst') .addEventListener('click',()=>window.EAS_processing.exportDST());
 })();

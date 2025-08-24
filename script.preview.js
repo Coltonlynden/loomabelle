@@ -1,12 +1,12 @@
-// Live preview compositor (+ draw text both on preview and on-stage overlay)
+// Compose stage overlays + stitch-only preview (colored by kept palette)
 (function () {
   const S = (window.EAS ||= {}).state ||= {};
   const base = document.getElementById('canvas');
   const mask = document.getElementById('mask');
   const overlay = document.getElementById('overlay');
 
-  const p = document.getElementById('preview');
-  const s = document.getElementById('stitchvis');
+  const p = document.getElementById('preview'); // offscreen compositor
+  const s = document.getElementById('stitchvis'); // visible stitch-only
   const pctx = p.getContext('2d'), sctx = s.getContext('2d');
   p.width = p.height = s.width = s.height = 1024;
 
@@ -29,18 +29,23 @@
   }
 
   function render() {
-    // preview
-    pctx.clearRect(0,0,1024,1024);
-    pctx.drawImage(base,0,0);
-    pctx.save(); pctx.globalAlpha=0.25; pctx.drawImage(mask,0,0); pctx.restore();
-    drawCurvedText(pctx);
-
-    // stage overlay (so text is visible above the top image too)
+    // Stage overlay for editing:
+    //  base image
     const octx = overlay.getContext('2d');
     overlay.width = overlay.height = 1024;
     octx.clearRect(0,0,1024,1024);
+    //  pink translucent mask (easier to see than black)
+    const m = mask.getContext('2d').getImageData(0,0,1024,1024).data;
+    octx.save();
+    octx.fillStyle = 'rgba(233,120,150,.28)';
+    octx.beginPath();
+    // paint from mask alpha
+    const img=octx.createImageData(1024,1024);
+    for(let i=0;i<m.length;i+=4){ img.data[i]=233; img.data[i+1]=120; img.data[i+2]=150; img.data[i+3]=m[i+3]?72:0; }
+    octx.putImageData(img,0,0);
+    octx.restore();
 
-    // optional direction grid
+    // Direction lines
     if (S.showDir) {
       const ang=(S.dirAngle||45)*Math.PI/180; octx.save(); octx.globalAlpha=.15; octx.strokeStyle='#000';
       for(let t=-1024;t<=1024;t+=32){
@@ -53,24 +58,31 @@
       }
       octx.restore();
     }
-    drawCurvedText(octx); // text on stage overlay
+    drawCurvedText(octx);
 
-    // stitch preview (colored by sampled image)
+    // Stitch-only live preview:
     sctx.clearRect(0,0,1024,1024);
     if (document.getElementById('toggle-stitch')?.checked) {
       const res = window.EAS_processing.hatch();
       const b = base.getContext('2d').getImageData(0,0,1024,1024).data;
-      function colorAt(x,y){ const i=((y|0)*1024+(x|0))<<2; return `rgb(${b[i]},${b[i+1]},${b[i+2]})`; }
+      const keep = S.keepColors || new Set();
+      const pal = S.palette || [];
+      function nearestIndex(x,y){
+        const i=((y|0)*1024+(x|0))<<2; const r=b[i],g=b[i+1],bl=b[i+2];
+        let bi=0,bd=1e9; for(let j=0;j<pal.length;j++){ const c=pal[j]; const d=(r-c[0])**2+(g-c[1])**2+(bl-c[2])**2; if(d<bd){bd=d;bi=j;} }
+        return bi;
+      }
       for (const seg of res.paths){
         if (seg.length<2) continue;
-        for (let i=1;i<seg.length;i++){
-          sctx.beginPath();
-          sctx.moveTo(seg[i-1][0],seg[i-1][1]);
-          sctx.lineTo(seg[i][0],seg[i][1]);
-          sctx.strokeStyle = colorAt(seg[i][0],seg[i][1]); // approximate thread color
-          sctx.lineWidth = 1;
-          sctx.stroke();
-        }
+        const idx = nearestIndex(seg[0][0],seg[0][1]);
+        if (!keep.has(idx)) continue; // skip colors not selected
+        const c = pal[idx]||[0,0,0];
+        sctx.strokeStyle = `rgb(${c[0]|0},${c[1]|0},${c[2]|0})`;
+        sctx.lineWidth = 1;
+        sctx.beginPath();
+        sctx.moveTo(seg[0][0],seg[0][1]);
+        for (let i=1;i<seg.length;i++) sctx.lineTo(seg[i][0],seg[i][1]);
+        sctx.stroke();
       }
     }
   }

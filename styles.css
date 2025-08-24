@@ -3,7 +3,7 @@
 body{background:var(--bg);color:var(--ink);font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Inter,Roboto,Arial,sans-serif}
 a{color:inherit;text-decoration:none}
 .hidden{display:none!important}.muted{color:var(--muted)}
-.btn{border:1px solid var(--brand);background:#f6e9e3;border-radius:999px;padding:10px 14px}.btn--primary{background:var(--brand);color:#fff}.btn--small{padding:6px 10px}
+.btn{border:1px solid var(--brand);background:#f6e9e3;border-radius:999px;padding:10px 14px;cursor:pointer}.btn--primary{background:var(--brand);color:#fff}.btn--small{padding:6px 10px}
 .textfield{background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 10px;width:100%}
 .site-header{max-width:1200px;margin:0 auto;padding:12px 16px;display:flex;justify-content:space-between;align-items:center}
 .site-nav{display:flex;gap:24px}.brand{display:flex;gap:10px;align-items:center}.logo{height:48px}.wordmark{font-weight:800;letter-spacing:.08em}
@@ -20,9 +20,10 @@ a{color:inherit;text-decoration:none}
 /* Stage */
 .canvas-shell{position:relative;width:min(100%,var(--stage-max));aspect-ratio:1/1;border:1px dashed #d5c2bb;border-radius:10px;background:#fff;overflow:hidden;touch-action:none}
 .canvas-shell canvas{position:absolute;inset:0;width:100%;height:100%}
-#edges,#overlay{pointer-events:none}   /* allow painting on #mask */
+#overlay,#edges{pointer-events:none}
+#mask{z-index:3;pointer-events:auto}
 
-/* Live preview (stitch only) */
+/* Preview */
 .stage__preview{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:12px;max-width:var(--stage-max)}
 .preview-stack{position:relative;border:1px solid #e8ddd7;border-radius:8px;background:#fff}
 .preview-stack canvas{display:block;width:100%}
@@ -31,7 +32,7 @@ a{color:inherit;text-decoration:none}
 .stitch-bar{position:fixed;left:0;right:0;bottom:0;background:rgba(255,247,240,.97);border-top:1px solid var(--line);backdrop-filter:saturate(1.1) blur(2px);z-index:5}
 .stitch-bar__row{max-width:1280px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;justify-content:space-between}
 
-/* Home hero kept from prior drop */
+/* Home hero (unchanged) */
 .hero{max-width:1200px;margin:30px auto;padding:0 16px;display:grid;grid-template-columns:1.1fr .9fr;gap:32px;align-items:center}
 .hero__copy .display{font-weight:900;font-size:clamp(32px,6vw,56px);margin:0 0 10px}
 .hero__copy .lead{margin:0 0 6px}.hero__copy .sublead{margin:0 0 16px}

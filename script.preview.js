@@ -1,107 +1,96 @@
-/* Easbroidery — wire the existing buttons to the new path engine.
-   Layout is unchanged. This only attaches listeners to your
-   existing canvases and buttons by id/data attributes.
+/* Easbroidery — wire existing UI to the path engine.
+   Layout is unchanged. This file only finds your current elements and attaches handlers.
 */
-
 (function () {
-  const E = (window.EAS ||= {});
-  const P = E.paths;
+  const P = (window.EAS && window.EAS.paths) || {};
+  if (!P.generate) return;
 
-  // Resolve canvases without changing HTML
-  function byAny(ids) {
-    for (const id of ids) {
-      const el = document.getElementById(id) || document.querySelector(id);
+  // tolerate your original ids/classes
+  const q = (selArr) => {
+    for (const s of selArr) {
+      const el = document.querySelector(s);
       if (el) return el;
     }
     return null;
+  };
+
+  // canvases already present in your layout
+  const maskCanvas = q(['#editCanvas', '#maskCanvas', '#mask', 'canvas.edit']);
+  const liveCanvas = q(['#previewCanvas', '#liveCanvas', '#live', 'canvas.live']);
+
+  // optional controls (if absent, defaults are used)
+  const angleInput   = q(['#angle',   'input[name="angle"]']);
+  const spacingInput = q(['#spacing', 'input[name="spacing"]']);
+  const stepInput    = q(['#step',    'input[name="step"]']);
+
+  // buttons that already exist in your layout
+  const btnGen  = q(['#btn-generate', '.btn-generate']);
+  const btnPNG  = q(['#btn-png', '.btn-png']);
+  const btnSVG  = q(['#btn-svg', '.btn-svg']);
+  const btnJSON = q(['#btn-json', '.btn-json']);
+  const btnDST  = q(['#btn-dst', '.btn-dst']);
+
+  const showPreviewChk = q(['#toggle-stitch', 'input[name="showStitch"]']);
+
+  let last = null;
+
+  function currentOpts() {
+    const angle = angleInput ? Number(angleInput.value || angleInput.dataset.value || 45) : 45;
+    const spacing = spacingInput ? Number(spacingInput.value || spacingInput.dataset.value || 6) : 6;
+    const step = stepInput ? Number(stepInput.value || stepInput.dataset.value || 3) : 3;
+    return { angleDeg: angle, hatchSpacing: spacing, step };
   }
 
-  // Expected existing elements
-  const maskCanvas = byAny(['mask','canvas-mask','#mask']);
-  const liveCanvas = byAny(['live','liveCanvas','#live','#preview']);
-  const btnGen  = document.querySelector('[data-action="gen"]') || document.getElementById('btn-generate');
-  const btnPNG  = document.querySelector('[data-action="png"]') || document.getElementById('btn-png');
-  const btnSVG  = document.querySelector('[data-action="svg"]') || document.getElementById('btn-svg');
-  const btnJSON = document.querySelector('[data-action="json"]')|| document.getElementById('btn-json');
-  const btnDST  = document.querySelector('[data-action="dst"]') || document.getElementById('btn-dst');
-  const angleInp = document.querySelector('[data-angle]');
-  const spaceInp = document.querySelector('[data-spacing]');
-  const stepInp  = document.querySelector('[data-step]');
-
-  let lastResult = null;
-
-  function gatherOpts() {
-    const o = {};
-    if (angleInp) o.angleDeg = +angleInp.value || 45;
-    if (spaceInp) o.hatchSpacing = +spaceInp.value || 6;
-    if (stepInp)  o.step = +stepInp.value || 3;
-    return o;
-  }
-
-  function ensureLiveSize() {
-    if (!liveCanvas) return;
-    const rect = liveCanvas.getBoundingClientRect();
-    if (rect.width && rect.height) {
-      liveCanvas.width  = rect.width  | 0;
-      liveCanvas.height = rect.height | 0;
-    }
-  }
-
-  async function generate() {
+  function generate() {
     if (!maskCanvas) return;
-    ensureLiveSize();
-    lastResult = P.generate(maskCanvas, gatherOpts());
-    if (liveCanvas) {
-      P.preview(liveCanvas, lastResult);
+    last = P.generate(maskCanvas, currentOpts());
+    if (liveCanvas && (!showPreviewChk || showPreviewChk.checked)) {
+      P.preview(liveCanvas, last);
+    } else if (liveCanvas) {
+      const ctx = liveCanvas.getContext('2d');
+      ctx.clearRect(0,0,liveCanvas.width, liveCanvas.height);
     }
   }
 
-  // Buttons
-  if (btnGen)  btnGen.addEventListener('click', generate);
-  if (angleInp) angleInp.addEventListener('input', generate);
-  if (spaceInp) spaceInp.addEventListener('input', generate);
-  if (stepInp)  stepInp.addEventListener('input', generate);
+  // wire events
+  if (btnGen) btnGen.addEventListener('click', generate);
+  [angleInput, spacingInput, stepInput].forEach((el)=> el && el.addEventListener('input', generate));
+  if (showPreviewChk) showPreviewChk.addEventListener('change', () => { if (last && liveCanvas && showPreviewChk.checked) P.preview(liveCanvas, last); });
 
   function download(name, blob) {
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = name;
-    document.body.appendChild(a);
-    a.click();
-    URL.revokeObjectURL(a.href);
-    a.remove();
+    a.download = name; a.href = URL.createObjectURL(blob);
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
   }
 
-  if (btnPNG && liveCanvas) {
-    btnPNG.addEventListener('click', () => {
-      liveCanvas.toBlob(b => download('stitches.png', b), 'image/png');
-    });
-  }
+  if (btnPNG) btnPNG.addEventListener('click', () => {
+    if (!liveCanvas || !last) return;
+    // redraw once at full resolution
+    const temp = document.createElement('canvas');
+    temp.width = last.stats.w; temp.height = last.stats.h;
+    P.preview(temp, last);
+    temp.toBlob((b)=> download('easbroidery.png', b), 'image/png');
+  });
 
-  if (btnSVG) {
-    btnSVG.addEventListener('click', () => {
-      if (!lastResult) return;
-      const svg = P.exportSVG(lastResult);
-      download('stitches.svg', new Blob([svg], {type:'image/svg+xml'}));
-    });
-  }
+  if (btnSVG) btnSVG.addEventListener('click', () => {
+    if (!last) return;
+    const svg = P.exportSVG(last);
+    download('easbroidery.svg', new Blob([svg], { type: 'image/svg+xml' }));
+  });
 
-  if (btnJSON) {
-    btnJSON.addEventListener('click', () => {
-      if (!lastResult) return;
-      const json = P.exportJSON(lastResult);
-      download('stitches.json', new Blob([json], {type:'application/json'}));
-    });
-  }
+  if (btnJSON) btnJSON.addEventListener('click', () => {
+    if (!last) return;
+    const json = P.exportJSON(last);
+    download('stitches.json', new Blob([json], { type: 'application/json' }));
+  });
 
-  if (btnDST) {
-    btnDST.addEventListener('click', () => {
-      if (!lastResult) return;
-      const dst = P.exportDST(lastResult);
-      download('stitches.dst', new Blob([dst], {type:'application/octet-stream'}));
-    });
-  }
+  if (btnDST) btnDST.addEventListener('click', () => {
+    if (!last) return;
+    const u8 = P.exportDST(last);
+    download('easbroidery.dst', new Blob([u8], { type: 'application/octet-stream' }));
+  });
 
-  // expose for other modules without touching layout
-  E.preview = { generate: () => generate(), last: () => lastResult };
+  // run once if the page already has a mask
+  if (maskCanvas && maskCanvas.width && maskCanvas.height) generate();
 })();

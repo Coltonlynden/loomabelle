@@ -1,109 +1,279 @@
-// Hatching + palette (from original src) + exports + zoom transform
+/* Easbroidery — stitch path generation + exporters
+   Pure logic. No DOM shape changes.
+
+   Public API:
+     window.EAS.paths.generate(maskCanvas, opts?)
+       -> { points, segments, stats }
+     window.EAS.paths.preview(canvas, result, opts?)
+     window.EAS.paths.exportSVG(result, w, h)
+     window.EAS.paths.exportJSON(result)
+     window.EAS.paths.exportDST(result, w, h)
+*/
+
 (function () {
-  const $=(s,r=document)=>r.querySelector(s);
-  const S=(window.EAS ||= {}).state ||= {};
-  const mask = document.getElementById('mask');
+  const root = (window.EAS ||= {});
+  const P = (root.paths ||= {});
 
-  function setShellTransform(){
-    const shell=document.getElementById('shell');
-    const z=S.zoom||1, x=S.panX||0, y=S.panY||0;
-    shell.style.transform=`translate(${x}px,${y}px) scale(${z})`;
-    window.EAS_preview.render();
+  // ---------- defaults ----------
+  const DEF = {
+    angleDeg: 45,        // hatch angle
+    hatchSpacing: 6,     // px between hatch lines
+    step: 3,             // px between stitches on a hatch
+    minSeg: 8,           // ignore very tiny segments (px)
+    maxStitch: 12,       // split long moves into sub-stitches (px)
+  };
+
+  // ---------- helpers ----------
+  function toRad(a) { return (a * Math.PI) / 180; }
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+  function maskSampler(maskCanvas) {
+    const ctx = maskCanvas.getContext('2d', { willReadFrequently: true });
+    const { width: W, height: H } = maskCanvas;
+    const data = ctx.getImageData(0, 0, W, H).data;
+    return (x, y) => {
+      x = (x + 0.5) | 0;
+      y = (y + 0.5) | 0;
+      if (x < 0 || y < 0 || x >= W || y >= H) return 0;
+      return data[(y * W + x) * 4 + 3]; // alpha
+    };
   }
 
-  // fast hatch from mask alpha
-  function hatch(){
-    const W=1024,H=1024;
-    const m = mask.getContext('2d').getImageData(0,0,W,H).data;
-    const spacing=4, step=2, ang=(S.dirAngle||45)*Math.PI/180;
-    const nx=Math.cos(ang), ny=Math.sin(ang), px=-Math.sin(ang), py=Math.cos(ang);
-    const bound = Math.ceil((W*Math.abs(px)+H*Math.abs(py))/2);
-    const paths=[];
-    for(let t=-bound; t<=bound; t+=spacing){
-      let on=false, seg=[];
-      for(let s=-900; s<=900; s+=step){
-        const x=512+nx*s+px*t, y=512+ny*s+py*t;
-        if(x<0||x>=W||y<0||y>=H){ if(on){paths.push(seg); seg=[]; on=false;} continue; }
-        const a = m[((y|0)*W+(x|0))*4+3] > 0;
-        if(a){ seg.push([x,y]); on=true; }
-        else if(on){ paths.push(seg); seg=[]; on=false; }
+  // Split long move into sub-stitches
+  function splitRun(ax, ay, bx, by, maxLen) {
+    const dx = bx - ax, dy = by - ay;
+    const L = Math.hypot(dx, dy);
+    if (L <= maxLen) return [[bx, by]];
+    const n = Math.ceil(L / maxLen);
+    const out = [];
+    for (let i = 1; i <= n; i++) {
+      const t = i / n;
+      out.push([ax + dx * t, ay + dy * t]);
+    }
+    return out;
+  }
+
+  // ---------- core: build hatch segments inside mask ----------
+  function generate(maskCanvas, opts = {}) {
+    const cfg = { ...DEF, ...opts };
+    const W = maskCanvas.width;
+    const H = maskCanvas.height;
+
+    const alpha = maskSampler(maskCanvas);
+    const ang = toRad(cfg.angleDeg);
+    const s = Math.sin(ang), c = Math.cos(ang);
+
+    // Rotate a point around image center into hatch space
+    const cx = W / 2, cy = H / 2;
+    function R(x, y) {
+      const dx = x - cx, dy = y - cy;
+      return [ dx * c + dy * s, -dx * s + dy * c ];
+    }
+    function Rinv(u, v) {
+      const x = u * c - v * s + cx;
+      const y = u * s + v * c + cy;
+      return [x, y];
+    }
+
+    // extents in hatch coordinates
+    const corners = [[0,0],[W,0],[0,H],[W,H]].map(([x,y])=>R(x,y));
+    const umin = Math.min(...corners.map(p=>p[0]));
+    const umax = Math.max(...corners.map(p=>p[0]));
+    const vmin = Math.min(...corners.map(p=>p[1]));
+    const vmax = Math.max(...corners.map(p=>p[1]));
+
+    const segments = []; // each = [[x1,y1],[x2,y2]]
+
+    // march horizontally in hatch-space (v changes)
+    for (let v = vmin - 2; v <= vmax + 2; v += cfg.hatchSpacing) {
+      // line param u from umin..umax
+      let inside = false;
+      let u0 = umin - 2;
+
+      function test(u) {
+        const [x,y] = Rinv(u, v);
+        // sample with small stride for robustness
+        return alpha(x|0, y|0) > 127;
       }
-      if(seg.length) paths.push(seg);
-    }
-    S.stitchPaths = paths;
-    S.stitches = paths.flat();
-    return paths;
-  }
 
-  // K-means from ORIGINAL src (never from composite)
-  function computePalette(k=5){
-    const src=S.srcData; if(!src) return {centroids:[[0,0,0]]};
-    const a=src.data; const samples=[];
-    for(let i=0;i<a.length;i+=4*8){ samples.push([a[i],a[i+1],a[i+2]]); }
-    const C=[]; for(let i=0;i<k;i++) C.push(samples[(i*samples.length/k)|0].slice());
-    for(let it=0;it<6;it++){
-      const sum=Array.from({length:k},()=>[0,0,0,0]);
-      for(const p of samples){
-        let bi=0,bd=1e9; for(let j=0;j<k;j++){ const d=(p[0]-C[j][0])**2+(p[1]-C[j][1])**2+(p[2]-C[j][2])**2; if(d<bd){bd=d;bi=j;} }
-        sum[bi][0]+=p[0]; sum[bi][1]+=p[1]; sum[bi][2]+=p[2]; sum[bi][3]++;
+      for (let u = umin - 2; u <= umax + 2; u += 1) {
+        const t = test(u);
+        if (!inside && t) {
+          inside = true;
+          u0 = u;
+        } else if (inside && !t) {
+          inside = false;
+          const u1 = u;
+          // map back to image coords
+          const a = Rinv(u0, v);
+          const b = Rinv(u1, v);
+          const L = Math.hypot(b[0]-a[0], b[1]-a[1]);
+          if (L >= cfg.minSeg) segments.push([a, b]);
+        }
       }
-      for(let j=0;j<k;j++){ if(sum[j][3]){ C[j][0]=sum[j][0]/sum[j][3]; C[j][1]=sum[j][1]/sum[j][3]; C[j][2]=sum[j][2]/sum[j][3]; } }
+      if (inside) {
+        const a = Rinv(u0, v);
+        const b = Rinv(umax + 2, v);
+        const L = Math.hypot(b[0]-a[0], b[1]-a[1]);
+        if (L >= cfg.minSeg) segments.push([a,b]);
+      }
     }
-    // frequency for default selection
-    const counts=new Array(k).fill(0);
-    for(let i=0;i<a.length;i+=4){ let bi=0,bd=1e9; for(let j=0;j<k;j++){ const d=(a[i]-C[j][0])**2+(a[i+1]-C[j][1])**2+(a[i+2]-C[j][2])**2; if(d<bd){bd=d;bi=j;} } counts[bi]++; }
-    return {centroids:C, counts};
-  }
 
-  function buildPaletteUI(){
-    const box=$('#palette-box'); const wrap=$('#palette'); box.style.display='block'; wrap.innerHTML='';
-    const k=+$('#color-count').value||5;
-    const {centroids,counts}=computePalette(k);
-    S.palette=centroids;
-    // default keep: top 3 by freq
-    const order=[...centroids.keys()].sort((i,j)=> (counts?.[j]||0)-(counts?.[i]||0));
-    S.keepColors=new Set(order.slice(0,Math.min(3,k)));
-    centroids.forEach((c,idx)=>{
-      const sw=document.createElement('button');
-      sw.className='chip'; sw.style.background=`rgb(${c[0]|0},${c[1]|0},${c[2]|0})`;
-      if(S.keepColors.has(idx)) sw.classList.add('chip--active');
-      sw.addEventListener('click',()=>{ if(S.keepColors.has(idx)) S.keepColors.delete(idx); else S.keepColors.add(idx); sw.classList.toggle('chip--active'); window.EAS_preview.render(); });
-      wrap.appendChild(sw);
-    });
-  }
+    // convert segments into running-stitch points, serpentine order to minimize jumps
+    const points = [];
+    let toggle = false;
+    for (const seg of segments) {
+      let [a, b] = seg;
+      if (toggle) { const t=a; a=b; b=t; }
+      toggle = !toggle;
 
-  $('#recolor').addEventListener('click',()=>{ buildPaletteUI(); window.EAS_preview.render(); });
-
-  function generate(){
-    hatch();
-    buildPaletteUI();           // palette appears only after Generate
-    window.EAS_preview.render();
-  }
-
-  function download(name,blob){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),800); }
-  function exportPNG(){ document.getElementById('stitchvis').toBlob(b=>download('easbroidery.png',b),'image/png'); }
-  function exportSVG(){
-    const paths=S.stitchPaths||[]; const segs=paths.map(seg=>`<path d="${seg.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+','+p[1].toFixed(1)).join('')}" fill="none" stroke="#000" stroke-width="0.4"/>`).join('');
-    const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">${segs}</svg>`; download('easbroidery.svg',new Blob([svg],{type:'image/svg+xml'}));
-  }
-  function exportJSON(){ download('easbroidery.json',new Blob([JSON.stringify({stitches:S.stitches||[],angle:S.dirAngle,keep:[...(S.keepColors||[])]})],{type:'application/json'})); }
-  function exportDST(){
-    const pts=(S.stitches&&S.stitches.length?S.stitches:hatch().flat()); if(!pts.length){alert('No stitches');return;}
-    let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9; for(const [x,y] of pts){ if(x<minx)minx=x; if(y<miny)miny=y; if(x>maxx)maxx=x; if(y>maxy)maxy=y; }
-    const cx=(minx+maxx)/2, cy=(miny+maxy)/2;
-    const bytes=[]; let px=0,py=0;
-    function enc(dx,dy,flags=0){
-      while(Math.abs(dx)>121||Math.abs(dy)>121){ const sx=Math.max(-121,Math.min(121,dx)); const sy=Math.max(-121,Math.min(121,dy)); enc(sx,sy,flags); dx-=sx; dy-=sy; }
-      let b1=0,b2=0,b3=0x80;
-      function bits(v){ let a=Math.abs(v),s=v>=0; const set=(P,bit)=>{ if(P===1){b1|=s?bit:bit<<1;} else if(P===2){b2|=s?bit:bit<<1;} else {b3|=s?bit:bit<<1;} }; const use=(u,P,bit)=>{while(a>=u){set(P,bit);a-=u;}}; use(81,3,1);use(27,2,16);use(9,2,1);use(3,1,16);use(1,1,1);}
-      bits(dx); bits(dy); if(flags&1) b3|=0x20; if(flags&2) b3|=0x10; bytes.push(b1,b2,b3);
+      const dx = b[0]-a[0], dy=b[1]-a[1];
+      const L = Math.hypot(dx, dy);
+      const steps = Math.max(1, Math.round(L / cfg.step));
+      for (let i=0;i<=steps;i++) {
+        const t = i/steps;
+        points.push([a[0]+dx*t, a[1]+dy*t]);
+      }
     }
-    for(const [x,y] of pts){ const dx=Math.round(x-cx-px), dy=Math.round(y-cy-py); enc(dx,dy); px+=dx; py+=dy; }
-    bytes.push(0x00,0x00,0xF3);
-    const header=new Uint8Array(512).fill(0x20); header[511]=0x1A;
-    const out=new Uint8Array(512+bytes.length); out.set(header,0); out.set(bytes,512);
-    download('easbroidery.dst',new Blob([out],{type:'application/octet-stream'}));
+
+    // split long edges (machine-friendly)
+    const stitched = [];
+    if (points.length) {
+      let [px,py] = points[0];
+      stitched.push([px,py]);
+      for (let i=1;i<points.length;i++) {
+        const [nx,ny] = points[i];
+        const mids = splitRun(px,py,nx,ny,cfg.maxStitch);
+        for (const m of mids) stitched.push(m);
+        [px,py] = [nx,ny];
+      }
+    }
+
+    return {
+      points: stitched,     // [[x,y],...]
+      segments,             // raw hatch spans for overlay
+      stats: { count: stitched.length, segs: segments.length, w: W, h: H }
+    };
   }
 
-  window.EAS_processing = { setShellTransform, generate, exportPNG, exportSVG, exportJSON, exportDST };
+  // ---------- preview draw ----------
+  function preview(canvas, res, opts = {}) {
+    if (!canvas || !res) return;
+    const cfg = Object.assign({ stroke: '#c06458', seg: '#e4b1aa' }, opts);
+    canvas.width = canvas.clientWidth || canvas.width;
+    canvas.height = canvas.clientHeight || canvas.height;
+
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    // scale to fit
+    const sx = canvas.width / res.stats.w;
+    const sy = canvas.height / res.stats.h;
+    const k = Math.min(sx, sy);
+    ctx.setTransform(k,0,0,k,0,0);
+
+    // segments (light)
+    ctx.lineWidth = 1 / k;
+    ctx.strokeStyle = cfg.seg;
+    ctx.globalAlpha = 0.35;
+    ctx.beginPath();
+    for (const [[x1,y1],[x2,y2]] of res.segments) {
+      ctx.moveTo(x1,y1); ctx.lineTo(x2,y2);
+    }
+    ctx.stroke();
+
+    // stitch path
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = cfg.stroke;
+    ctx.lineWidth = 1.5 / k;
+    ctx.beginPath();
+    let first = true;
+    for (const [x,y] of res.points) {
+      if (first) { ctx.moveTo(x,y); first=false; }
+      else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  }
+
+  // ---------- exporters ----------
+  function exportJSON(res) {
+    return JSON.stringify({
+      width: res.stats.w, height: res.stats.h,
+      stitchCount: res.stats.count,
+      points: res.points
+    }, null, 2);
+  }
+
+  function exportSVG(res, w, h) {
+    w = w || res.stats.w; h = h || res.stats.h;
+    const d = [];
+    if (res.points.length) {
+      const [x0,y0] = res.points[0];
+      d.push(`M${x0.toFixed(1)} ${y0.toFixed(1)}`);
+      for (let i=1;i<res.points.length;i++) {
+        const [x,y] = res.points[i];
+        d.push(`L${x.toFixed(1)} ${y.toFixed(1)}`);
+      }
+    }
+    return `
+<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${res.stats.w} ${res.stats.h}">
+  <path d="${d.join(' ')}" fill="none" stroke="#c06458" stroke-width="1.2"/>
+</svg>`.trim();
+  }
+
+  // Minimal DST writer (absolute → relative, 0.1 mm units approx)
+  function exportDST(res, w, h) {
+    // scale to 0.1mm-ish: assume 1024px ≈ 100mm → 0.1mm units = *10
+    const scale = 1000 / Math.max(res.stats.w, res.stats.h);
+    const pts = res.points.map(([x,y]) => [x*scale, y*scale]);
+    let bytes = [];
+
+    function enc(dx, dy, flags) {
+      // DST encodes in 0.1mm steps using 7-bit signed for dx,dy split across 3 bytes.
+      // This is a compact, minimal writer that clamps values.
+      dx = clamp(Math.round(dx), -121, 121);
+      dy = clamp(Math.round(dy), -121, 121);
+      // 3-byte stitch record
+      const b1 = ((dx & 0x1F) | ((dy & 0x1F) << 5)) & 0xFF;
+      const b2 = (((dx >> 5) & 0x03) | (((dy >> 5) & 0x03) << 2) | (flags || 0)) & 0xFF;
+      const b3 = 0; // simple
+      bytes.push(b1, b2, b3);
+    }
+
+    // header 512 bytes (ASCII)
+    const header = new Uint8Array(512);
+    const encASCII = (str, off) => {
+      for (let i=0;i<str.length && off+i<header.length;i++) header[off+i]=str.charCodeAt(i);
+    };
+    encASCII(`LA:Easbroidery`, 0);
+    encASCII(`ST:${String(pts.length).padStart(7,' ')}`, 0x2E);
+    encASCII(`+X:0000`, 0x38); encASCII(`-X:0000`, 0x40);
+    encASCII(`+Y:0000`, 0x48); encASCII(`-Y:0000`, 0x50);
+    encASCII(`AX:+0000`, 0x58); encASCII(`AY:+0000`, 0x62);
+    encASCII(`MX:+0000`, 0x6C); encASCII(`MY:+0000`, 0x76);
+    encASCII(`PD:******`, 0x80);
+    encASCII(String.fromCharCode(0x1A), 0x200 - 1); // EOF in header
+
+    // stitches as deltas
+    let [px,py] = pts[0];
+    for (let i=1;i<pts.length;i++) {
+      const [nx,ny] = pts[i];
+      enc(nx-px, ny-py, 0);
+      [px,py]=[nx,ny];
+    }
+    // END record
+    bytes.push(0x00, 0x00, 0xF3);
+
+    const body = new Uint8Array(bytes);
+    const out = new Uint8Array(header.length + body.length);
+    out.set(header,0); out.set(body,header.length);
+    return out;
+  }
+
+  // expose
+  P.generate = generate;
+  P.preview = preview;
+  P.exportJSON = exportJSON;
+  P.exportSVG = exportSVG;
+  P.exportDST = exportDST;
 })();

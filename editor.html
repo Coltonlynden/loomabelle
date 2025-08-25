@@ -1,138 +1,152 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Easbroidery — Editor</title>
-  <link rel="stylesheet" href="styles.css"/>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .editor-shell{max-width:1000px;margin:24px auto;padding:0 16px}
+    .card{background:#f7efe8;border:1px solid #e7d8cd;border-radius:14px;padding:14px;margin:14px 0}
+    .stage{position:relative; width:100%; max-width:640px; margin:8px auto}
+    .stage > canvas{position:absolute;left:0;top:0;width:100%;height:auto;image-rendering:crisp-edges}
+    .stage-holder{position:relative; padding-top:100%} /* 1:1 preview box */
+    .controls small{opacity:.7}
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    .row > *{flex:1 1 260px}
+    .sticky-bar{position:sticky;bottom:0;z-index:5;background:#f6e9e1;border-top:1px solid #e1d2c8;padding:10px 12px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+    .btn{border:1px solid #d6b2a7;background:#d78e84;color:#fff;border-radius:26px;padding:10px 18px;font-weight:600}
+    .chip{display:inline-block;padding:6px 10px;border:1px solid #d6b2a7;border-radius:18px;background:#f3dbd5;margin:4px 6px 0 0;cursor:pointer;user-select:none}
+    .chip--active{background:#d78e84;color:#fff}
+    .hidden{display:none !important}
+    .palette{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .sw{width:22px;height:22px;border-radius:50%;border:1px solid #c4b6ad;cursor:pointer}
+    .sw.off{outline:2px solid #b0a39c;opacity:.4}
+    /* live canvas element sized to 1:1 like stage */
+    #live{width:100%;height:auto;border-radius:10px;border:1px dashed #d6c7ba;background:#fff}
+  </style>
 </head>
 <body>
-<header class="site-header">
-  <nav class="site-nav">
-    <a href="index.html">Home</a>
-    <a href="features.html">Features</a>
-    <a href="pricing.html">Pricing</a>
-  </nav>
-  <a class="brand" href="index.html" aria-label="Easbroidery home">
-    <img class="logo" src="assets/logo.png" alt="">
-    <span class="wordmark">EASBROIDERY</span>
-  </a>
-</header>
-
-<main class="editor">
-  <!-- LEFT: controls -->
-  <section class="box">
-    <div class="box__summary">1. Upload</div>
-    <div class="stack">
-      <div class="row">
-        <input id="file" type="file" accept="image/*"/>
-        <button id="autohighlight" class="btn btn--small">Auto highlight</button>
-      </div>
-      <label class="row">Detail <input id="detail" type="range" min="0" max="1" step="0.01" value="0.5"></label>
-      <div class="viewbar row">
-        <button id="zoom-out" class="btn btn--small">−</button>
-        <button id="zoom-reset" class="btn btn--small">100%</button>
-        <button id="zoom-in" class="btn btn--small">+</button>
-        <span class="muted">• Hold Alt and drag to pan.</span>
-      </div>
+  <header class="nav">
+    <div class="nav-inner">
+      <a href="index.html" class="brand"><img src="assets/logo.png" alt="Easbroidery" width="36" height="36" /> EASBROIDERY</a>
+      <nav><a href="index.html">Home</a><a href="features.html">Features</a><a href="pricing.html">Pricing</a></nav>
     </div>
+  </header>
 
-    <div class="box__summary">2. Brush / Text / Direction</div>
-    <div class="stack" id="brush-controls">
-      <div class="row">
-        <button class="chip" data-mode="mask">Mask</button>
-        <button class="chip" data-mode="text">Text</button>
-        <button class="chip" data-mode="direction">Direction</button>
-      </div>
+  <main class="editor-shell">
 
-      <!-- Mask tools -->
-      <div class="tools-mask">
-        <label>Size <input id="brush-size" type="range" min="2" max="80" value="18"></label>
-        <div class="row">
-          <button id="paint" class="chip chip--active">Paint</button>
-          <button id="erase" class="chip">Erase</button>
-          <button id="wand"  class="chip">Wand</button>
-          <button id="btn-undo" class="chip">Undo</button>
-          <button id="btn-redo" class="chip">Redo</button>
-          <button id="btn-clear-mask" class="chip">Clear</button>
-          <button id="btn-fill-mask"  class="chip">Fill</button>
+    <!-- 1. Upload + View -->
+    <section class="card">
+      <h3>1. Upload & view</h3>
+      <div class="row controls">
+        <div>
+          <input id="file" type="file" accept="image/*" />
+          <button id="autohighlight" class="chip">Auto highlight</button>
+          <small>Tip: Alt+drag to pan when zoomed.</small>
         </div>
-        <div class="row">
-          <label><input id="toggle-mask" type="checkbox" checked> Show mask</label>
-          <label><input id="toggle-edges" type="checkbox"> Show edges</label>
+        <div>
+          <span class="chip" id="zoom-out">–</span>
+          <span class="chip" id="zoom-reset">100%</span>
+          <span class="chip" id="zoom-in">+</span>
         </div>
       </div>
 
-      <!-- Text tools -->
-      <div class="tools-text hidden">
-        <label>Text <input id="text-string" class="textfield" placeholder="Add text"></label>
-        <button id="apply-text" class="btn">Apply</button>
-        <label>Curve <input id="text-curve" type="range" min="-1" max="1" step="0.02" value="0"></label>
-        <label>Size <input id="text-size" type="range" min="20" max="120" value="64"></label>
-        <label>Angle <input id="text-angle" type="range" min="-90" max="90" value="0"></label>
+      <div class="stage">
+        <div class="stage-holder"></div>
+        <!-- stacking order: base -> edges -> mask (alpha) -> display (composited image used for on‑screen view only) -->
+        <canvas id="canvas" width="1024" height="1024"></canvas>
+        <canvas id="edges"  width="1024" height="1024"></canvas>
+        <canvas id="mask"   width="1024" height="1024"></canvas>
+        <canvas id="stage"  width="1024" height="1024"></canvas>
       </div>
 
-      <!-- Direction tools -->
-      <div class="tools-direction hidden">
-        <label>Angle <input id="dir-angle" type="range" min="0" max="180" value="45"></label>
-        <div class="row"><span class="muted">Angle:</span><strong id="dir-angle-value">45°</strong></div>
-        <label class="row"><input id="toggle-dir" type="checkbox" checked> Show direction overlay</label>
+      <div class="controls">
+        <label class="chip"><input type="checkbox" id="toggle-mask" checked /> Show mask</label>
+        <label class="chip"><input type="checkbox" id="toggle-edges" /> Show edges</label>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- RIGHT: stage + preview + palette -->
-  <section>
-    <div class="canvas-shell" id="shell">
-      <canvas id="canvas"></canvas>
-      <canvas id="mask"></canvas>
-      <canvas id="overlay"></canvas>
-      <canvas id="edges"></canvas>
-    </div>
+    <!-- 2. Brush / Text / Direction -->
+    <section class="card">
+      <h3>2. Brush / Text / Direction</h3>
 
-    <div class="stage__preview">
-      <div class="box__summary">Live preview</div>
-      <div class="preview-stack">
-        <canvas id="stitchvis"></canvas>
+      <div id="brush-controls" class="controls">
+        <span class="chip chip--active" data-mode="mask">Mask</span>
+        <span class="chip" data-mode="text">Text</span>
+        <span class="chip" data-mode="direction">Direction</span>
       </div>
-    </div>
 
-    <!-- Palette is attached to Live preview -->
-    <section class="box" id="palette-box" style="margin-top:12px; display:none">
-      <div class="box__summary">3. Colors</div>
-      <div class="stack">
-        <div class="row muted">Click swatches to include/exclude. Recompute changes the palette; stitches remain.</div>
-        <div id="palette" class="row"></div>
+      <div class="tools-mask controls">
         <div class="row">
-          <label>Colors <input id="color-count" type="range" min="2" max="8" value="5"></label>
-          <button id="recolor" class="btn btn--small">Recompute</button>
+          <div>
+            <div>Size</div>
+            <input id="brush-size" type="range" min="4" max="120" value="22" />
+          </div>
+          <div>
+            <span id="paint" class="chip chip--active">Paint</span>
+            <span id="erase" class="chip">Erase</span>
+            <span id="wand"  class="chip">Wand</span>
+            <span id="btn-undo" class="chip">Undo</span>
+            <span id="btn-redo" class="chip">Redo</span>
+            <span id="btn-clear-mask" class="chip">Clear</span>
+            <span id="btn-fill-mask" class="chip">Fill</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="tools-text controls hidden">
+        <div class="row">
+          <div><input id="text-string" class="chip" style="min-width:220px" placeholder="Add text" /></div>
+          <div>Curve <input id="text-curve" type="range" min="-180" max="180" value="0" /></div>
+          <div>Size <input id="text-size" type="range" min="12" max="160" value="64" /></div>
+          <div>Angle <input id="text-angle" type="range" min="-180" max="180" value="0" /></div>
+          <div><span id="apply-text" class="chip">Apply</span></div>
+        </div>
+      </div>
+
+      <div class="tools-direction controls hidden">
+        <div class="row">
+          <div>Angle <input id="dir-angle" type="range" min="0" max="180" value="45" /></div>
+          <div><strong id="dir-angle-value">45°</strong></div>
+          <label class="chip"><input type="checkbox" id="toggle-dir" checked /> Show direction overlay</label>
         </div>
       </div>
     </section>
-  </section>
-</main>
 
-<!-- Fixed bottom export bar -->
-<div class="stitch-bar">
-  <div class="stitch-bar__row">
-    <div class="row">
-      <label><input id="toggle-stitch" type="checkbox" checked> Show stitch preview</label>
+    <!-- 3. Live preview + palette -->
+    <section class="card">
+      <h3>Live preview</h3>
+      <canvas id="live" width="1024" height="1024"></canvas>
+
+      <h3 style="margin-top:16px">3. Colors</h3>
+      <div class="controls">
+        <div class="palette" id="palette"></div>
+        <div style="margin-top:6px">
+          Colors <input id="color-k" type="range" min="2" max="12" value="6" />
+          <span class="chip" id="recompute">Recompute</span>
+        </div>
+        <small>Click swatches to include/exclude. Recompute changes the palette; stitches remain.</small>
+      </div>
+    </section>
+
+    <!-- Sticky export -->
+    <div class="sticky-bar">
+      <button id="btn-make" class="btn">Generate stitches</button>
+      <span id="dl-png"  class="chip">PNG</span>
+      <span id="dl-svg"  class="chip">SVG</span>
+      <span id="dl-json" class="chip">Stitches JSON</span>
+      <span id="dl-dst"  class="chip">DST</span>
     </div>
-    <div class="row">
-      <button id="btn-make" class="btn btn--primary">Generate stitches</button>
-      <button id="dl-png"  class="chip">PNG</button>
-      <button id="dl-svg"  class="chip">SVG</button>
-      <button id="dl-json" class="chip">Stitches JSON</button>
-      <button id="dl-dst"  class="chip">DST</button>
-    </div>
-  </div>
-</div>
 
-<footer class="site-footer">© Easbroidery</footer>
+  </main>
 
-<script src="processing.js"></script>
-<script src="script.preview.js"></script>
-<script src="script.draw.js"></script>
-<script src="script.upload.js"></script>
+  <!-- libs -->
+  <script src="lib/ort.min.js"></script>
+  <!-- app -->
+  <script src="script.upload.js"></script>
+  <script src="script.draw.js"></script>
+  <script src="script.preview.js"></script>
+  <script src="processing.js"></script>
 </body>
 </html>

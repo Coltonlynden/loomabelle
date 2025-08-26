@@ -11,7 +11,6 @@
   const bJS  = document.getElementById('btn-json');
   const bDST = document.getElementById('btn-dst');
 
-  // Direction inputs
   const dirAngle = document.getElementById('dirAngle');
   const dirSpace = document.getElementById('dirSpace');
 

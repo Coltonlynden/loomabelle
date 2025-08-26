@@ -20,101 +20,38 @@
   </header>
 
   <main class="editor">
-    <!-- Tools (left) -->
-    <aside class="tools card">
-      <h2 class="card__title">Brush / Text / Direction</h2>
-
-      <div class="seg">
-        <button class="chip chip--seg is-active" data-mode="mask">Mask</button>
-        <button class="chip chip--seg" data-mode="text">Text</button>
-        <button class="chip chip--seg" data-mode="dir">Direction</button>
-      </div>
-
-      <!-- Mask panel -->
-      <section class="panel" data-panel="mask">
-        <label class="row">
-          <span>Size</span>
-          <input id="brushSize" type="range" min="2" max="80" value="24" />
-        </label>
-
-        <div class="btnbar">
-          <button class="btn" data-tool="paint">Paint</button>
-          <button class="btn" data-tool="erase">Erase</button>
-          <button class="btn" data-tool="wand">Wand</button>
-          <button class="btn" data-tool="undo">Undo</button>
-          <button class="btn" data-tool="redo">Redo</button>
-          <button class="btn" data-tool="clear">Clear</button>
-          <button class="btn" data-tool="fill">Fill</button>
-        </div>
-
-        <div class="row row--check">
-          <label><input id="showMask" type="checkbox" checked /> Show mask</label>
-          <label><input id="showEdges" type="checkbox" /> Show edges</label>
-        </div>
-      </section>
-
-      <!-- Text panel -->
-      <section class="panel hidden" data-panel="text">
-        <label class="row">
-          <span>Text</span>
-          <input id="textInput" type="text" placeholder="Add text" />
-        </label>
-        <label class="row">
-          <span>Size</span>
-          <input id="textSize" type="range" min="10" max="200" value="72" />
-        </label>
-        <label class="row">
-          <span>Curve</span>
-          <input id="textCurve" type="range" min="-180" max="180" value="0" />
-        </label>
-        <button id="textApply" class="btn btn--primary">Apply / Update</button>
-        <p class="hint">Drag the text on the canvas. Alt/Option + drag to pan when zoomed.</p>
-      </section>
-
-      <!-- Direction panel -->
-      <section class="panel hidden" data-panel="dir">
-        <label class="row">
-          <span>Angle</span>
-          <input id="dirAngle" type="range" min="0" max="180" value="45" />
-        </label>
-        <label class="row">
-          <span>Pattern</span>
-          <select id="dirPattern">
-            <option value="fill">Fill (running)</option>
-            <option value="zigzag">Zig-zag</option>
-            <option value="satin">Satin band</option>
-          </select>
-        </label>
-        <label class="row row--check">
-          <input id="showDir" type="checkbox" checked />
-          <span>Show direction overlay</span>
-        </label>
-      </section>
-
-      <hr class="sep" />
-
-      <section class="panel">
-        <h3 class="card__subtitle">Hoop</h3>
-        <label class="row">
-          <span>Size</span>
-          <select id="hoopSelect">
-            <option value="100x100">4×4 in (100×100 mm)</option>
-            <option value="130x180">5×7 in (130×180 mm)</option>
-            <option value="160x260">6×10 in (160×260 mm)</option>
-            <option value="200x300">8×12 in (200×300 mm)</option>
-          </select>
-        </label>
-        <label class="row">
-          <span>Design scale</span>
-          <input id="designScale" type="range" min="25" max="100" value="85" />
-        </label>
-      </section>
-    </aside>
-
-    <!-- Stage (right) -->
     <section class="stage card">
-      <h2 class="card__title">1. Upload & edit</h2>
+      <details class="opts">
+        <summary>General options (hoop & machine)</summary>
+        <div class="opts__grid">
+          <label>Machine
+            <select id="machine">
+              <option>Brother</option>
+              <option>Baby Lock</option>
+              <option>Janome</option>
+              <option>Bernina</option>
+              <option>Pfaff</option>
+              <option>Husqvarna Viking</option>
+            </select>
+          </label>
+          <label>Hoop size
+            <select id="hoopSelect">
+              <option value="100x100">4×4 in (100×100 mm)</option>
+              <option value="130x180" selected>5×7 in (130×180 mm)</option>
+              <option value="160x260">6×10 in (160×260 mm)</option>
+              <option value="200x300">8×12 in (200×300 mm)</option>
+            </select>
+          </label>
+          <label>Units
+            <select id="units">
+              <option value="mm" selected>mm</option>
+              <option value="in">in</option>
+            </select>
+          </label>
+        </div>
+      </details>
 
+      <h2 class="card__title">1. Upload & edit</h2>
       <div class="row row--stack">
         <input id="fileInput" type="file" accept="image/*" />
         <button id="autoBtn" class="btn-outline">Auto highlight</button>
@@ -124,18 +61,62 @@
           <button id="zoomIn" class="chip">+</button>
         </span>
       </div>
-
       <p class="hint">Tip: Alt/Option + drag to pan when zoomed.</p>
 
+      <!-- tools ATTACHED to the edit box -->
+      <div class="tools-inline card">
+        <div class="seg">
+          <button class="chip chip--seg is-active" data-mode="mask">Mask</button>
+          <button class="chip chip--seg" data-mode="text">Text</button>
+          <button class="chip chip--seg" data-mode="dir">Direction</button>
+        </div>
+
+        <section class="panel" data-panel="mask">
+          <label class="row"><span>Brush</span><input id="brushSize" type="range" min="2" max="80" value="24"/></label>
+          <div class="btnbar">
+            <button class="btn" data-tool="paint">Paint</button>
+            <button class="btn" data-tool="erase">Erase</button>
+            <button class="btn" data-tool="wand">Wand</button>
+            <button class="btn" data-tool="undo">Undo</button>
+            <button class="btn" data-tool="redo">Redo</button>
+            <button class="btn" data-tool="clear">Clear</button>
+            <button class="btn" data-tool="fill">Fill</button>
+          </div>
+          <div class="row row--check">
+            <label><input id="showMask" type="checkbox" checked/> Show mask</label>
+            <label><input id="showEdges" type="checkbox"/> Show edges</label>
+          </div>
+        </section>
+
+        <section class="panel hidden" data-panel="text">
+          <label class="row"><span>Text</span><input id="textInput" type="text" placeholder="Add text"/></label>
+          <label class="row"><span>Size</span><input id="textSize" type="range" min="10" max="200" value="72"/></label>
+          <label class="row"><span>Curve</span><input id="textCurve" type="range" min="-180" max="180" value="0"/></label>
+          <button id="textApply" class="btn btn--primary">Apply / Update</button>
+        </section>
+
+        <section class="panel hidden" data-panel="dir">
+          <label class="row"><span>Angle</span><input id="dirAngle" type="range" min="0" max="180" value="45"/></label>
+          <label class="row"><span>Pattern</span>
+            <select id="dirPattern">
+              <option value="fill">Fill (running)</option>
+              <option value="zigzag">Zig-zag</option>
+              <option value="satin">Satin band</option>
+            </select>
+          </label>
+          <label class="row row--check"><input id="showDir" type="checkbox" checked/> <span>Show direction overlay</span></label>
+        </section>
+      </div>
+
+      <!-- edit canvas -->
       <div class="canvas-wrap" id="canvasWrap" aria-label="editing area">
         <canvas id="imgCanvas"></canvas>
         <canvas id="maskCanvas"></canvas>
         <canvas id="textCanvas"></canvas>
-        <canvas id="hoopCanvas"></canvas>
       </div>
 
       <h2 class="card__title mt">2. Live preview</h2>
-      <div class="canvas-wrap" id="previewWrap">
+      <div class="preview-hoop" id="previewFrame">
         <canvas id="previewCanvas"></canvas>
       </div>
     </section>
@@ -146,7 +127,6 @@
       <input id="showPreview" type="checkbox" checked />
       <span>Show stitch preview</span>
     </label>
-
     <div class="btnbar btnbar--wrap">
       <button id="genBtn" class="btn btn--primary">Generate stitches</button>
       <button id="pngBtn" class="chip">PNG</button>
@@ -156,7 +136,6 @@
     </div>
   </footer>
 
-  <!-- Modules: preview imports draw -->
   <script type="module" src="script.preview.js"></script>
 </body>
 </html>

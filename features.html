@@ -4,26 +4,37 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Easbroidery — Features</title>
+  <link rel="icon" href="assets/logo.png">
   <link rel="stylesheet" href="styles.css"/>
+  <script defer src="app.js"></script>
 </head>
-<body class="site">
-<header class="nav">
-  <a class="brand" href="index.html"><img src="assets/logo.png" alt=""><span>EASBROIDERY</span></a>
-  <nav class="links"><a href="index.html">Home</a><a class="active" href="features.html">Features</a><a href="pricing.html">Pricing</a></nav>
+<body class="shell">
+<header class="site-header">
+  <a class="brand" href="index.html">
+    <img src="assets/logo.png" alt="Easbroidery logo"><span>EASBROIDERY</span>
+  </a>
+  <nav class="nav">
+    <a href="index.html" data-nav="home">Home</a>
+    <a href="features.html" data-nav="features" class="active">Features</a>
+    <a href="pricing.html" data-nav="pricing">Pricing</a>
+  </nav>
 </header>
-<main class="wrap">
+
+<main class="container">
   <section class="card">
     <h1>Features</h1>
-    <ul class="bullets">
-      <li>Auto-highlight subject (ONNX U-2-Net or smart fallback).</li>
-      <li>Paint/erase/wand mask, undo/redo, scroll-lock while editing.</li>
-      <li>Curved text tool; drag to position; per-layer color.</li>
+    <ul class="list">
+      <li>Auto-highlight subject (U-2-Net ONNX with smart fallback).</li>
+      <li>Brush tools: Paint / Erase / Wand, Undo / Redo, scroll-lock while editing.</li>
+      <li>Text tool (curved), drag to position, per-layer color.</li>
       <li>Machine-style hoop preview with true physical sizing.</li>
-      <li>Stitch preview: running/fill hatching with direction overlay.</li>
-      <li>Exports: PNG, SVG, JSON, and DST.</li>
+      <li>Stitch preview: running/fill hatch with direction overlay.</li>
+      <li>Export PNG, SVG, JSON, and DST.</li>
+      <li>Works locally in your browser — no uploads to a server.</li>
     </ul>
   </section>
 </main>
-<footer class="wrap foot">© Easbroidery</footer>
+
+<footer class="site-footer">© Easbroidery</footer>
 </body>
 </html>

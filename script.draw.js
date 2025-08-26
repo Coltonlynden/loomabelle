@@ -1,145 +1,132 @@
-import {state, getImageData, paintMask, floodWand} from './processing.js';
-import {getEditContext, redraw} from './script.upload.js';
+/* Painting tools: paint / erase / wand, text & direction controls */
+document.addEventListener('DOMContentLoaded', ()=>{
+  const edit = document.getElementById('edit');
+  const ctx = edit.getContext('2d',{willReadFrequently:true});
 
-const $ = s=>document.querySelector(s);
-
-// tabs
-document.querySelectorAll('.seg-btn').forEach(b=>{
-  b.addEventListener('click', ()=>{
-    document.querySelectorAll('.seg-btn').forEach(x=>x.classList.remove('active'));
-    b.classList.add('active');
-    const t=b.dataset.tab;
-    document.querySelectorAll('[data-pane]').forEach(p=>p.classList.add('hidden'));
-    document.querySelector('#pane-'+t).classList.remove('hidden');
+  // tool buttons
+  document.querySelectorAll('.brush .toggle').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      document.querySelectorAll('.brush .toggle').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      EditorState.tool = b.dataset.tool;
+    });
   });
-});
 
-const {canvas,ctx} = getEditContext();
-let tool='paint';
-let brushSize = +$('#brushSize').value || 28;
-let drawing=false;
+  document.getElementById('size').oninput = e => EditorState.size=+e.target.value;
 
-$('#toolPaint').onclick=()=>tool='paint';
-$('#toolErase').onclick=()=>tool='erase';
-$('#toolWand').onclick=()=>tool='wand';
-$('#toolFill').onclick=()=>tool='fill';
-$('#brushSize').oninput=e=>brushSize=+e.target.value;
+  const lockScrollEl = document.getElementById('lockScroll');
+  let drawing=false;
 
-const undoStack=[], redoStack=[];
-function pushUndo(){
-  undoStack.push(state.mask.slice());
-  if(undoStack.length>20) undoStack.shift();
-  redoStack.length=0;
-}
-$('#undo').onclick=()=>{ if(!undoStack.length) return; redoStack.push(state.mask); state.mask=undoStack.pop(); redraw(); }
-$('#redo').onclick=()=>{ if(!redoStack.length) return; undoStack.push(state.mask); state.mask=redoStack.pop(); redraw(); }
-$('#clear').onclick=()=>{ pushUndo(); state.mask.fill(0); redraw(); }
-
-canvas.addEventListener('pointerdown', e=>{
-  const rect=canvas.getBoundingClientRect();
-  const x=Math.round((e.clientX-rect.left - state.panX)/state.zoom);
-  const y=Math.round((e.clientY-rect.top  - state.panY)/state.zoom);
-  drawing=true; canvas.setPointerCapture(e.pointerId);
-  pushUndo();
-
-  if(tool==='wand'){
-    const id = ctx.getImageData(0,0,canvas.width,canvas.height);
-    floodWand(id, Math.max(0,Math.min(canvas.width-1,x)), Math.max(0,Math.min(canvas.height-1,y)), 28);
-    redraw();
-    drawing=false;
-    return;
+  function applyHistory(){
+    if (!EditorState.mask) return;
+    EditorState.history.push(EditorState.mask.slice(0));
+    if (EditorState.history.length>50) EditorState.history.shift();
+    EditorState.redoStack.length=0;
   }
-  if(tool==='fill'){
-    state.mask.fill(255); redraw(); drawing=false; return;
-  }
-  drawAt(x,y);
-});
-canvas.addEventListener('pointermove', e=>{
-  if(!drawing) return;
-  const rect=canvas.getBoundingClientRect();
-  const x=Math.round((e.clientX-rect.left - state.panX)/state.zoom);
-  const y=Math.round((e.clientY-rect.top  - state.panY)/state.zoom);
-  drawAt(x,y);
-});
-canvas.addEventListener('pointerup', ()=>{ drawing=false; });
+  document.getElementById('undo').onclick=()=>{
+    if (EditorState.history.length){
+      EditorState.redoStack.push(EditorState.mask);
+      EditorState.mask = EditorState.history.pop();
+      window.__redraw();
+    }
+  };
+  document.getElementById('redo').onclick=()=>{
+    if (EditorState.redoStack.length){
+      EditorState.history.push(EditorState.mask);
+      EditorState.mask = EditorState.redoStack.pop();
+      window.__redraw();
+    }
+  };
+  document.getElementById('clear').onclick=()=>{
+    applyHistory();
+    EditorState.mask.fill(0);
+    window.__redraw();
+  };
 
-function drawAt(x,y){
-  paintMask(x,y,brushSize, tool==='paint'?1:0);
-  redraw();
-}
+  // pointer drawing
+  const toXY = (e)=>{
+    const rect = edit.getBoundingClientRect();
+    const x = Math.floor((e.clientX-rect.left) * edit.width / rect.width);
+    const y = Math.floor((e.clientY-rect.top) * edit.height/ rect.height);
+    return {x,y};
+  };
 
-// text tool (drag to move)
-let draggingText=null, dragDX=0, dragDY=0;
-$('#applyText').onclick=()=>{
-  const t=($('#textStr').value||'').trim(); if(!t) return;
-  state.textLayers.push({
-    text:t, x:canvas.width/2, y:canvas.height/2, size:+$('#textSize').value,
-    font:$('#textFont').value, angle:+$('#textAngle').value, curve:+$('#textCurve').value, color:$('#textColor').value
-  });
-  renderTextOverlay();
-};
-function renderTextOverlay(){
-  redraw();
-  // draw text on top
-  ctx.save();
-  ctx.translate(state.panX, state.panY);
-  ctx.scale(state.zoom, state.zoom);
-  for(const tl of state.textLayers){
-    ctx.save();
-    ctx.translate(tl.x, tl.y);
-    ctx.rotate(tl.angle*Math.PI/180);
-    ctx.font = `bold ${tl.size}px ${tl.font}`;
-    ctx.fillStyle = tl.color;
-    ctx.textAlign='center';
-    ctx.textBaseline='middle';
-    if(Math.abs(tl.curve) < 2){
-      ctx.fillText(tl.text,0,0);
-    }else{
-      // simple arc text
-      const r = 300;
-      const arc = tl.curve*Math.PI/180;
-      const ch = tl.text.split('');
-      const step = arc/(ch.length-1);
-      let a=-arc/2;
-      for(const c of ch){
-        ctx.save();
-        ctx.rotate(a);
-        ctx.fillText(c,0,-r);
-        ctx.restore();
-        a+=step;
+  function dab(x,y,val){
+    const r = Math.max(1, (EditorState.size|0));
+    const w=edit.width,h=edit.height, m=EditorState.mask;
+    for(let j=-r;j<=r;j++){
+      for(let i=-r;i<=r;i++){
+        const nx=x+i, ny=y+j;
+        if(nx<0||ny<0||nx>=w||ny>=h) continue;
+        if (i*i+j*j<=r*r) m[ny*w+nx]=val;
       }
     }
-    ctx.restore();
   }
-  ctx.restore();
-}
-canvas.addEventListener('pointerdown', e=>{
-  // hit test text layers (topmost)
-  const rect=canvas.getBoundingClientRect();
-  const x=(e.clientX-rect.left - state.panX)/state.zoom;
-  const y=(e.clientY-rect.top  - state.panY)/state.zoom;
-  for(let i=state.textLayers.length-1;i>=0;i--){
-    const t=state.textLayers[i];
-    const w=t.size * (t.text.length*0.6);
-    const h=t.size*1.2;
-    if(Math.abs(x-t.x)<w/2 && Math.abs(y-t.y)<h/2){
-      draggingText=t; dragDX=x-t.x; dragDY=y-t.y; canvas.setPointerCapture(e.pointerId); break;
+
+  edit.addEventListener('pointerdown', e=>{
+    if (lockScrollEl.checked) document.body.style.overflow='hidden';
+    edit.setPointerCapture(e.pointerId);
+    const {x,y}=toXY(e);
+    if (!EditorState.mask) return;
+    applyHistory();
+    drawing=true;
+    if (EditorState.tool==='wand'){
+      const id = ctx.getImageData(0,0,edit.width,edit.height);
+      const region = Proc.floodFill(id, x, y, 24);
+      for (let i=0;i<region.length;i++){
+        if (region[i]) EditorState.mask[i]=255;
+      }
+      window.__redraw();
+      return;
     }
-  }
-});
-canvas.addEventListener('pointermove', e=>{
-  if(!draggingText) return;
-  const rect=canvas.getBoundingClientRect();
-  const x=(e.clientX-rect.left - state.panX)/state.zoom;
-  const y=(e.clientY-rect.top  - state.panY)/state.zoom;
-  draggingText.x=x-dragDX; draggingText.y=y-dragDY;
-  renderTextOverlay();
-});
-canvas.addEventListener('pointerup', ()=> draggingText=null);
+    if (EditorState.tool==='text'||EditorState.tool==='direction') return;
+    dab(x,y, EditorState.tool==='erase'?0:255);
+    window.__redraw();
+  });
 
-// show/hide overlays
-$('#showMask').onchange=()=>redraw();
-$('#showEdges').onchange=()=>redraw();
+  edit.addEventListener('pointermove', e=>{
+    if (!drawing) return;
+    if (EditorState.tool==='text'||EditorState.tool==='direction'||EditorState.tool==='wand') return;
+    const {x,y}=toXY(e);
+    dab(x,y, EditorState.tool==='erase'?0:255);
+    window.__redraw();
+  });
 
-// expose to preview
-window.addEventListener('palette:ready', ()=> renderTextOverlay());
+  ['pointerup','pointercancel','pointerleave'].forEach(ev=>{
+    edit.addEventListener(ev, e=>{
+      drawing=false;
+      document.body.style.overflow='';
+    });
+  });
+
+  // text tool
+  document.getElementById('applyText').onclick = ()=>{
+    const txt = document.getElementById('text').value.trim();
+    if(!txt) return;
+    const size = +document.getElementById('textSize').value;
+    const angle = +document.getElementById('textAngle').value;
+    const curve = +document.getElementById('curve').value; // (not used in this simple baseline)
+    EditorState.textLayers.push({text:txt,size,angle,x:edit.width/2,y:edit.height/2,curve});
+    window.__redraw();
+  };
+
+  // direction overlay
+  const dirAngle = document.getElementById('dirAngle');
+  dirAngle.oninput = e=>{
+    EditorState.directionAngle = +e.target.value;
+    document.getElementById('showDir').checked = true;
+    drawPreviewHoop(); // update overlay
+  };
+
+  // auto highlight
+  document.getElementById('autoBtn').onclick = async ()=>{
+    if (!EditorState.bmp) return;
+    const m = await Proc.autoMask(EditorState.bmp, edit.width, edit.height);
+    EditorState.mask = m;
+    window.__redraw();
+  };
+
+  // show/hide overlay toggles
+  document.getElementById('showMask').onchange = window.__redraw;
+  document.getElementById('showEdges').onchange = window.__redraw;
+});

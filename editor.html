@@ -4,174 +4,123 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Easbroidery — Editor</title>
+  <link rel="icon" href="assets/logo.png">
   <link rel="stylesheet" href="styles.css"/>
-</head>
-<body class="site">
-  <header class="nav">
-    <a class="brand" href="index.html">
-      <img src="assets/logo.png" alt="Easbroidery logo"/>
-      <span>EASBROIDERY</span>
-    </a>
-    <nav class="links">
-      <a href="index.html">Home</a>
-      <a href="features.html">Features</a>
-      <a href="pricing.html">Pricing</a>
-    </nav>
-  </header>
-
-  <main class="wrap editor">
-
-    <!-- Collapsible general options (hoop, machine) -->
-    <details class="card opts" id="opts">
-      <summary>General options (machine & hoop)</summary>
-      <div class="row">
-        <label>Machine
-          <select id="machine">
-            <option value="brother">Brother / Baby Lock</option>
-            <option value="janome">Janome</option>
-            <option value="bernina">Bernina</option>
-            <option value="generic" selected>Generic</option>
-          </select>
-        </label>
-        <label>Hoop size
-          <select id="hoop">
-            <option value="100x100">100 × 100 mm (4×4)</option>
-            <option value="130x180" selected>130 × 180 mm (5×7)</option>
-            <option value="160x260">160 × 260 mm (6×10)</option>
-            <option value="200x300">200 × 300 mm (8×12)</option>
-          </select>
-        </label>
-        <label>Stitch spacing
-          <input id="spacing" type="number" min="0.5" step="0.1" value="1.2"> mm
-        </label>
-        <label>Angle
-          <input id="angle" type="range" min="0" max="180" value="45">
-          <span id="angleOut">45°</span>
-        </label>
-        <label><input id="dirOverlay" type="checkbox" checked> Show direction overlay</label>
-      </div>
-    </details>
-
-    <!-- LEFT: upload + edit canvas + tools attached -->
-    <section class="edit card">
-      <h2>1. Upload & refine</h2>
-
-      <div class="toolbar compact">
-        <label class="file"><input type="file" id="file" accept="image/*">Choose File</label>
-        <button class="btn ghost" id="auto">Auto highlight</button>
-        <div class="zoom">
-          <button class="btn ghost" id="zoomOut">−</button>
-          <span id="zoomPct">100%</span>
-          <button class="btn ghost" id="zoomIn">+</button>
-          <span class="tip">Tip: Alt/Option+drag to pan while zoomed</span>
-        </div>
-      </div>
-
-      <div class="canvas-wrap">
-        <canvas id="editCanvas" width="1024" height="768" aria-label="Edit canvas"></canvas>
-      </div>
-
-      <!-- Attach Brush/Text/Direction directly under edit canvas -->
-      <div class="tools">
-        <div class="seg">
-          <div class="seg-tabs">
-            <button class="seg-btn active" data-tab="mask">Mask</button>
-            <button class="seg-btn" data-tab="text">Text</button>
-            <button class="seg-btn" data-tab="dir">Direction</button>
-          </div>
-
-          <!-- Mask tools -->
-          <div class="seg-pane" id="pane-mask" data-pane>
-            <label>Size <input id="brushSize" type="range" min="2" max="120" value="28"></label>
-            <div class="chip-row">
-              <button class="chip" id="toolPaint">Paint</button>
-              <button class="chip" id="toolErase">Erase</button>
-              <button class="chip" id="toolWand">Wand</button>
-              <button class="chip" id="toolFill">Fill</button>
-              <button class="chip" id="undo">Undo</button>
-              <button class="chip" id="redo">Redo</button>
-              <button class="chip" id="clear">Clear</button>
-            </div>
-            <label><input id="showMask" type="checkbox" checked> Show mask</label>
-            <label><input id="showEdges" type="checkbox"> Show edges</label>
-          </div>
-
-          <!-- Text tools -->
-          <div class="seg-pane hidden" id="pane-text" data-pane>
-            <label>Text <input id="textStr" type="text" placeholder="Add text"></label>
-            <div class="row">
-              <label>Size <input id="textSize" type="range" min="8" max="160" value="64"></label>
-              <label>Curve <input id="textCurve" type="range" min="-100" max="100" value="0"></label>
-              <label>Angle <input id="textAngle" type="range" min="-180" max="180" value="0"></label>
-            </div>
-            <div class="row">
-              <label>Font
-                <select id="textFont">
-                  <option value="Georgia,serif">Serif</option>
-                  <option value="'Courier New',monospace">Mono</option>
-                  <option value="'Comic Sans MS','Segoe UI',sans-serif" selected>Cute</option>
-                </select>
-              </label>
-              <label>Color <input id="textColor" type="color" value="#333333"></label>
-              <button class="btn" id="applyText">Apply</button>
-            </div>
-            <small>Drag text on the edit canvas to position.</small>
-          </div>
-
-          <!-- Direction tools -->
-          <div class="seg-pane hidden" id="pane-dir" data-pane>
-            <p>Brush directions set local stitch flow. Painting records arrows; the preview uses them when hatching.</p>
-            <label>Arrow length <input id="dirLen" type="range" min="10" max="200" value="80"></label>
-            <div class="chip-row">
-              <button class="chip" id="toolDir">Direction brush</button>
-              <button class="chip" id="clearDir">Clear directions</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- RIGHT: live preview in a machine hoop -->
-    <section class="preview card">
-      <h2>2. Live preview</h2>
-      <div id="hoopWrap" class="hoop">
-        <canvas id="previewCanvas" width="900" height="700" aria-label="Hoop preview"></canvas>
-        <div class="hoop-hardware" aria-hidden="true"></div>
-      </div>
-
-      <!-- Palette selection after preview is created -->
-      <div class="palette" id="palette" hidden>
-        <h3>Colors</h3>
-        <div id="swatches" class="swatches"></div>
-        <div class="row">
-          <label>Limit
-            <input id="kColors" type="range" min="2" max="12" value="6">
-            <span id="kOut">6</span>
-          </label>
-          <button class="btn ghost" id="recompute">Recompute</button>
-        </div>
-        <small>Click a swatch to toggle it on/off for stitches.</small>
-      </div>
-    </section>
-
-  </main>
-
-  <!-- Sticky action bar -->
-  <div class="actionbar">
-    <label><input id="showStitch" type="checkbox" checked> Show stitch preview</label>
-    <button class="btn primary" id="make">Generate stitches</button>
-    <button class="btn" id="dlPNG">PNG</button>
-    <button class="btn" id="dlSVG">SVG</button>
-    <button class="btn" id="dlJSON">Stitches JSON</button>
-    <button class="btn" id="dlDST">DST</button>
-  </div>
-
-  <!-- Scripts (modular & organized) -->
   <script src="lib/ort.min.js"></script>
-  <script src="colors.js"></script>
-  <script src="processing.js"></script>
-  <script src="script.upload.js"></script>
-  <script src="script.draw.js"></script>
-  <script src="script.preview.js"></script>
+  <script defer src="app.js"></script>
+  <script defer src="processing.js"></script>
+  <script defer src="script.upload.js"></script>
+  <script defer src="script.draw.js"></script>
+  <script defer src="script.preview.js"></script>
+</head>
+<body class="shell">
+<header class="site-header">
+  <a class="brand" href="index.html">
+    <img src="assets/logo.png" alt="Easbroidery logo"><span>EASBROIDERY</span>
+  </a>
+  <nav class="nav">
+    <a href="index.html" data-nav="home">Home</a>
+    <a href="features.html" data-nav="features">Features</a>
+    <a href="pricing.html" data-nav="pricing">Pricing</a>
+  </nav>
+</header>
+
+<main class="container editor">
+  <!-- Collapsible general options -->
+  <details class="card options" open>
+    <summary>Hoop & machine options</summary>
+    <div class="row">
+      <label>Machine/Hoop
+        <select id="hoopSelect">
+          <option value="100x100">Brother 4&quot; x 4&quot; (100×100&nbsp;mm)</option>
+          <option value="130x180" selected>Brother 5&quot; x 7&quot; (130×180&nbsp;mm)</option>
+          <option value="160x260">Brother 6&quot; x 10&quot; (160×260&nbsp;mm)</option>
+          <option value="200x300">Generic 8&quot; x 12&quot; (200×300&nbsp;mm)</option>
+        </select>
+      </label>
+      <label>Stitch spacing (mm)
+        <input type="number" id="spacing" value="1.6" min="0.6" step="0.1">
+      </label>
+      <label>Angle
+        <input type="number" id="angle" value="45" step="1">
+      </label>
+      <label>
+        <input type="checkbox" id="showDir" checked> Show direction overlay
+      </label>
+      <button class="btn" id="autoBtn">Auto highlight</button>
+    </div>
+  </details>
+
+  <!-- 1. Upload & View -->
+  <section class="card">
+    <h2>1. Upload & edit</h2>
+
+    <div class="toolbar">
+      <input type="file" id="file" accept="image/*">
+      <div class="zoom">
+        <button class="chip" id="zoomOut">−</button>
+        <span class="chip" id="zoomPct">100%</span>
+        <button class="chip" id="zoomIn">+</button>
+        <span class="muted">Tip: hold <kbd>Alt</kbd> and drag to pan when zoomed.</span>
+      </div>
+    </div>
+
+    <div id="editWrap">
+      <!-- Canvas the user paints on; toolbar is ATTACHED just beneath -->
+      <canvas id="edit" width="1024" height="768"></canvas>
+
+      <div class="brush">
+        <div class="seg">
+          <button class="chip toggle active" data-tool="paint">Paint</button>
+          <button class="chip toggle" data-tool="erase">Erase</button>
+          <button class="chip toggle" data-tool="wand">Wand</button>
+          <button class="chip" id="undo">Undo</button>
+          <button class="chip" id="redo">Redo</button>
+          <button class="chip" id="clear">Clear</button>
+          <label class="grow">Size
+            <input type="range" id="size" min="6" max="64" value="24">
+          </label>
+          <label><input type="checkbox" id="showMask" checked> Show mask</label>
+          <label><input type="checkbox" id="showEdges"> Show edges</label>
+          <label><input type="checkbox" id="lockScroll" checked> Lock scroll while drawing</label>
+        </div>
+
+        <div class="seg texttools">
+          <button class="chip toggle" data-tool="text">Text</button>
+          <input class="input" id="text" placeholder="Add text">
+          <button class="chip" id="applyText">Apply</button>
+          <label>Curve <input type="range" id="curve" min="0" max="80" value="20"></label>
+          <label>Size <input type="range" id="textSize" min="10" max="160" value="64"></label>
+          <label>Angle <input type="range" id="textAngle" min="-90" max="90" value="0"></label>
+        </div>
+
+        <div class="seg dirtools">
+          <button class="chip toggle" data-tool="direction">Direction</button>
+          <label>Angle <input type="range" id="dirAngle" min="0" max="180" value="45"></label>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. Live preview (separate) -->
+  <section class="card">
+    <h2>2. Live preview</h2>
+    <div id="hoop" class="hoop">
+      <canvas id="preview" width="900" height="700"></canvas>
+      <div class="hoop-hardware"></div>
+    </div>
+
+    <div class="exportbar">
+      <label><input type="checkbox" id="showStitch" checked> Show stitch preview</label>
+      <button class="btn btn-primary" id="gen">Generate stitches</button>
+      <button class="chip" id="savePng">PNG</button>
+      <button class="chip" id="saveSvg">SVG</button>
+      <button class="chip" id="saveJson">Stitches JSON</button>
+      <button class="chip" id="saveDst">DST</button>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">© Easbroidery</footer>
 </body>
 </html>

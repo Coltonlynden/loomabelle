@@ -1,97 +1,100 @@
-(function(){
-  const hoopInner = document.querySelector('.hoop__inner');
-  const c = document.getElementById('previewCanvas');
-  const ctx = c.getContext('2d');
-  const genBtn = document.getElementById('genBtn');
-  const show = document.getElementById('showPreview');
-  const pngBtn=document.getElementById('pngBtn'), svgBtn=document.getElementById('svgBtn'),
-        jsonBtn=document.getElementById('jsonBtn'), dstBtn=document.getElementById('dstBtn');
+import {state, getImageData, buildPalette, hatchStitches, writeSVG, writeDST} from './processing.js';
 
-  let data=null;
+const $ = s=>document.querySelector(s);
+const pCanvas = $('#previewCanvas');
+const pctx = pCanvas.getContext('2d',{willReadFrequently:true});
 
-  function size(){
-    const w=hoopInner.clientWidth, h=hoopInner.clientHeight;
-    c.width=Math.max(2,Math.round(w*devicePixelRatio));
-    c.height=Math.max(2,Math.round(h*devicePixelRatio));
-    c.style.width=w+'px'; c.style.height=h+'px';
-    draw();
-  }
-  addEventListener('resize',()=>{ size(); Editor.fit(); });
-  size();
+const kSlider = $('#kColors'), kOut = $('#kOut');
+kSlider.oninput = ()=>{ kOut.textContent=kSlider.value; };
 
-  genBtn?.addEventListener('click',()=>{
-    const {base,mask,text,dir}=Editor.getLayers();
-    if(!base.width) return;
-    // compose masked+text
-    const off=document.createElement('canvas'); off.width=base.width; off.height=base.height;
-    const cx=off.getContext('2d'); cx.drawImage(base,0,0);
-    cx.globalCompositeOperation='destination-in'; cx.drawImage(mask,0,0);
-    cx.globalCompositeOperation='source-over'; cx.drawImage(text,0,0);
+let stitches=[];
 
-    const reduced = quantize(off, 8);     // 8-color simplification
-    const stitches= hatch(reduced, dir);  // running-stitch fill
-    data={img:reduced, stitches};
-    draw();
+function drawHoopBG(){
+  // grid for scale
+  pctx.clearRect(0,0,pCanvas.width,pCanvas.height);
+  const W=pCanvas.width,H=pCanvas.height;
+  pctx.fillStyle='#fff'; pctx.fillRect(20,20,W-40,H-40);
+  pctx.strokeStyle='#eadbd0'; pctx.lineWidth=1;
+  for(let y=40;y<H-40;y+=20){ pctx.beginPath(); pctx.moveTo(40,y); pctx.lineTo(W-40,y); pctx.stroke(); }
+  for(let x=40;x<W-40;x+=20){ pctx.beginPath(); pctx.moveTo(x,40); pctx.lineTo(x,H-40); pctx.stroke(); }
+}
+
+function rebuildPalette(){
+  const ec = document.getElementById('editCanvas');
+  const id = ec.getContext('2d').getImageData(0,0,ec.width,ec.height);
+  buildPalette(id, +kSlider.value);
+  const sw = $('#swatches');
+  sw.innerHTML='';
+  state.palette.forEach((rgb,i)=>{
+    const b=document.createElement('button');
+    b.style.background=`rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+    b.title=`#${rgb.map(v=>v.toString(16).padStart(2,'0')).join('')}`;
+    b.onclick=()=>{ state.enabled[i]=!state.enabled[i]; b.classList.toggle('off', !state.enabled[i]); };
+    sw.appendChild(b);
   });
+  document.getElementById('palette').hidden=false;
+}
+$('#recompute').onclick=rebuildPalette;
+window.addEventListener('palette:ready', rebuildPalette);
 
-  function draw(){
-    ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,c.width,c.height);
-    if(!data || !show?.checked) return;
-    const pad=20*devicePixelRatio; const iw=data.img.width, ih=data.img.height;
-    const sc=Math.min((c.width-pad*2)/iw, (c.height-pad*2)/ih);
-    const ox=(c.width-iw*sc)/2, oy=(c.height-ih*sc)/2;
-    ctx.drawImage(data.img, ox, oy, iw*sc, ih*sc);
-
-    ctx.lineWidth=1*devicePixelRatio; ctx.strokeStyle='#3b3b3b';
-    ctx.beginPath();
-    for(const s of data.stitches){ ctx.moveTo(ox+s.x0*sc, oy+s.y0*sc); ctx.lineTo(ox+s.x1*sc, oy+s.y1*sc); }
-    ctx.stroke();
-  }
-
-  // --- simple quantization ---
-  function quantize(cnv,k){
-    const g=cnv.getContext('2d'), w=cnv.width,h=cnv.height, id=g.getImageData(0,0,w,h);
-    const pal=kmeans(id.data,k);
-    for(let i=0;i<w*h;i++){
-      const a=id.data[i*4+3]; if(a<8) continue;
-      const r=id.data[i*4],g1=id.data[i*4+1],b=id.data[i*4+2]; const c=nearest(pal,r,g1,b);
-      id.data[i*4]=c[0]; id.data[i*4+1]=c[1]; id.data[i*4+2]=c[2]; id.data[i*4+3]=255;
+// Generate
+$('#make').onclick=()=>{
+  if(!state.img || !state.mask) return;
+  const ec = document.getElementById('editCanvas');
+  const W=ec.width, H=ec.height;
+  drawHoopBG();
+  // optional direction overlay
+  if($('#dirOverlay').checked){
+    const a = +document.getElementById('angle').value;
+    pctx.save();
+    pctx.globalAlpha=.12; pctx.translate(20,20);
+    pctx.fillStyle='#333';
+    const step=24;
+    for(let y=0;y<H;y+=step){
+      pctx.save(); pctx.translate(0,y); pctx.rotate(a*Math.PI/180);
+      pctx.fillRect(-W, -1, W*2, 2);
+      pctx.restore();
     }
-    g.putImageData(id,0,0);
-    return cnv;
+    pctx.restore();
   }
-  function kmeans(arr,k){ const C=[]; for(let i=0;i<k;i++) C.push([Math.random()*255,Math.random()*255,Math.random()*255]);
-    for(let it=0;it<6;it++){ const S=Array.from({length:k},()=>[0,0,0,0]); for(let i=0;i<arr.length;i+=4){ if(arr[i+3]<16) continue;
-      const r=arr[i],g=arr[i+1],b=arr[i+2]; let bi=0,bd=1e9; for(let j=0;j<k;j++){ const c=C[j],d=(r-c[0])**2+(g-c[1])**2+(b-c[2])**2; if(d<bd){bd=d;bi=j;} } const s=S[bi]; s[0]+=r;s[1]+=g;s[2]+=b;s[3]++; }
-      for(let j=0;j<k;j++){ const s=S[j]; if(s[3]) C[j]=[s[0]/s[3],s[1]/s[3],s[2]/s[3]]; } }
-    return C;
+  // stitches
+  const spacingMM = +document.getElementById('spacing').value;
+  // convert mm to px inside preview by simple scale assumption (pCanvas draws 1:1 with edit canvas inside frame)
+  const spacingPx = Math.max(1, Math.round(spacingMM * 3)); // approx 3 px per mm
+  const ang = +document.getElementById('angle').value;
+  stitches = hatchStitches(state.mask, W, H, spacingPx, ang, state.dirFld);
+
+  // draw simulation
+  pctx.save(); pctx.translate(20,20);
+  pctx.strokeStyle='#3b3b3b'; pctx.lineWidth=1;
+  pctx.beginPath();
+  for(let i=0;i<stitches.length;i++){
+    const [x,y]=stitches[i];
+    if(i===0) pctx.moveTo(x,y); else pctx.lineTo(x,y);
   }
-  const nearest=(p,r,g,b)=>p.reduce((best,c)=>((r-c[0])**2+(g-c[1])**2+(b-c[2])**2 < best.d)?{c, d:(r-c[0])**2+(g-c[1])**2+(b-c[2])**2}:best,{c:p[0],d:1e9}).c;
+  pctx.stroke();
+  pctx.restore();
+};
 
-  // --- simple running-stitch hatch (preview) ---
-  function hatch(bmp,dir){
-    const cvs=document.createElement('canvas'); cvs.width=bmp.width; cvs.height=bmp.height;
-    cvs.getContext('2d').drawImage(bmp,0,0);
-    const {data:wdata,width:w,height:h}=cvs.getContext('2d').getImageData(0,0,cvs.width,cvs.height);
-    const cov=new Uint8Array(w*h); for(let i=0;i<w*h;i++) cov[i]=wdata[i*4+3]>0?1:0;
-
-    const th=(dir.angle*Math.PI)/180, dx=Math.cos(th), dy=Math.sin(th), step=3, out=[];
-    for(let y=-h; y<h*2; y+=step){
-      let on=false,x0=0,y0=0;
-      for(let x=-w; x<w*2; x++){
-        const px=Math.round(x*dx - y*dy), py=Math.round(x*dy + y*dx);
-        if(px<0||py<0||px>=w||py>=h){ if(on){on=false;} continue; }
-        const inside=cov[py*w+px];
-        if(inside && !on){on=true; x0=px; y0=py;}
-        else if(!inside && on){on=false; out.push({x0,y0,x1:px,y1:py});}
-      }
-    }
-    return out;
-  }
-
-  // downloads
-  pngBtn.onclick=()=>{ const a=document.createElement('a'); a.download='preview.png'; a.href=c.toDataURL('image/png'); a.click(); };
-  svgBtn.onclick=()=>{ if(!data) return; const W=c.width,H=c.height; let d=''; for(const s of data.stitches){ d+=`M${s.x0},${s.y0} L${s.x1},${s.y1} `;} const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><path d="${d}" stroke="#333" stroke-width="${devicePixelRatio}" fill="none"/></svg>`; const a=document.createElement('a'); a.download='preview.svg'; a.href='data:image/svg+xml,'+encodeURIComponent(svg); a.click(); };
-  jsonBtn.onclick=()=>{ const a=document.createElement('a'); a.download='stitches.json'; a.href='data:application/json,'+encodeURIComponent(JSON.stringify(data?.stitches||[])); a.click(); };
-  dstBtn.onclick=()=>{ const s=data?.stitches||[]; let out='x0,y0,x1,y1\n'; for(const p of s) out+=`${p.x0},${p.y0},${p.x1},${p.y1}\n`; const a=document.createElement('a'); a.download='design.dst'; a.href='data:text/plain,'+encodeURIComponent(out); a.click(); };
-})();
+// downloads
+$('#dlPNG').onclick=()=>{
+  const a=document.createElement('a');
+  a.download='preview.png';
+  a.href=pCanvas.toDataURL('image/png');
+  a.click();
+};
+$('#dlSVG').onclick=()=>{
+  const ec = document.getElementById('editCanvas');
+  const svg = writeSVG(stitches, ec.width, ec.height);
+  const a=document.createElement('a'); a.download='stitches.svg';
+  a.href=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'})); a.click();
+};
+$('#dlJSON').onclick=()=>{
+  const a=document.createElement('a'); a.download='stitches.json';
+  a.href=URL.createObjectURL(new Blob([JSON.stringify({stitches}),{type:'application/json'}])); a.click();
+};
+$('#dlDST').onclick=()=>{
+  const bin = writeDST(stitches);
+  const a=document.createElement('a'); a.download='stitches.dst';
+  a.href=URL.createObjectURL(new Blob([bin],{type:'application/octet-stream'})); a.click();
+};

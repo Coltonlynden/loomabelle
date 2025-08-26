@@ -1,147 +1,168 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Easbroidery — Editor</title>
-  <link rel="stylesheet" href="styles.css"/>
+  <link rel="stylesheet" href="styles.css" />
 </head>
-<body class="sh">
-<header class="nav">
-  <a class="brand" href="index.html"><img src="assets/logo.png" class="logo" alt=""><span>EASBROIDERY</span></a>
-  <nav class="links">
-    <a class="nav-link" href="index.html">Home</a>
-    <a class="nav-link" href="features.html">Features</a>
-    <a class="nav-link" href="pricing.html">Pricing</a>
-  </nav>
-</header>
+<body class="theme-peach">
+  <header class="site-header">
+    <a href="index.html" class="brand">
+      <img src="assets/logo.png" alt="Easbroidery" class="brand__logo" />
+      <span class="brand__name">EASBROIDERY</span>
+    </a>
+    <nav class="nav">
+      <a href="index.html">Home</a>
+      <a href="features.html">Features</a>
+      <a href="pricing.html">Pricing</a>
+    </nav>
+  </header>
 
-<main class="editor">
-  <aside class="steps">
-    <div class="step">1. Upload</div>
-    <div class="step">2. Select &amp; refine</div>
-    <div class="step">3. Text &amp; direction</div>
-    <div class="step">4. Stitches &amp; export</div>
-  </aside>
+  <!-- Workspace -->
+  <main class="editor">
+    <!-- Left column: tools (collapses on mobile) -->
+    <aside class="tools card">
+      <h2 class="card__title">Brush / Text / Direction</h2>
 
-  <section class="work">
-    <section class="card">
-      <h2>Image</h2>
-      <div class="row">
-        <input id="file" type="file" accept="image/*">
-        <button id="btn-autoh" class="chip">Auto highlight</button>
+      <div class="seg">
+        <div class="seg__tabs" role="tablist">
+          <button class="chip chip--seg is-active" data-mode="mask" id="tab-mask">Mask</button>
+          <button class="chip chip--seg" data-mode="text" id="tab-text">Text</button>
+          <button class="chip chip--seg" data-mode="dir"  id="tab-dir">Direction</button>
+        </div>
       </div>
 
-      <label class="lbl">Detail</label>
-      <input id="detail" type="range" min="0" max="1" step="0.01" value="0.35">
+      <!-- Mask panel -->
+      <section class="panel" data-panel="mask">
+        <label class="row">
+          <span>Size</span>
+          <input id="brushSize" type="range" min="2" max="80" value="24" />
+        </label>
 
-      <div class="viewbar">
-        <button id="zout" class="chip">−</button>
-        <span id="zlabel" class="chip">100%</span>
-        <button id="zin" class="chip">+</button>
-        <span class="hint">• Hold Alt and drag to pan.</span>
+        <div class="btnbar">
+          <button class="btn" data-tool="paint">Paint</button>
+          <button class="btn" data-tool="erase">Erase</button>
+          <button class="btn" data-tool="wand">Wand</button>
+          <button class="btn" data-tool="undo">Undo</button>
+          <button class="btn" data-tool="redo">Redo</button>
+          <button class="btn" data-tool="clear">Clear</button>
+          <button class="btn" data-tool="fill">Fill</button>
+        </div>
+
+        <div class="row row--check">
+          <label><input id="showMask" type="checkbox" checked /> Show mask</label>
+          <label><input id="showEdges" type="checkbox" /> Show edges</label>
+        </div>
+      </section>
+
+      <!-- Text panel -->
+      <section class="panel hidden" data-panel="text">
+        <label class="row">
+          <span>Text</span>
+          <input id="textInput" type="text" placeholder="Add text" />
+        </label>
+        <label class="row">
+          <span>Size</span>
+          <input id="textSize" type="range" min="10" max="200" value="72" />
+        </label>
+        <label class="row">
+          <span>Curve</span>
+          <input id="textCurve" type="range" min="-180" max="180" value="0" />
+        </label>
+        <button id="textApply" class="btn btn--primary">Apply / Update</button>
+        <p class="hint">Drag the text on the canvas. Pinch/scroll to zoom. Two-finger drag to pan.</p>
+      </section>
+
+      <!-- Direction panel -->
+      <section class="panel hidden" data-panel="dir">
+        <label class="row">
+          <span>Angle</span>
+          <input id="dirAngle" type="range" min="0" max="180" value="45" />
+        </label>
+        <label class="row">
+          <span>Pattern</span>
+          <select id="dirPattern">
+            <option value="fill">Fill (running)</option>
+            <option value="zigzag">Zig-zag</option>
+            <option value="satin">Satin band</option>
+          </select>
+        </label>
+        <label class="row row--check">
+          <input id="showDir" type="checkbox" checked />
+          <span>Show direction overlay</span>
+        </label>
+      </section>
+
+      <hr class="sep" />
+
+      <section class="panel">
+        <h3 class="card__subtitle">Hoop</h3>
+        <label class="row">
+          <span>Size</span>
+          <select id="hoopSelect">
+            <option value="100x100">4×4 in (100×100 mm)</option>
+            <option value="130x180">5×7 in (130×180 mm)</option>
+            <option value="160x260">6×10 in (160×260 mm)</option>
+            <option value="200x300">8×12 in (200×300 mm)</option>
+          </select>
+        </label>
+        <label class="row">
+          <span>Design scale</span>
+          <input id="designScale" type="range" min="25" max="100" value="85" />
+        </label>
+      </section>
+    </aside>
+
+    <!-- Right column: canvases -->
+    <section class="stage card">
+      <h2 class="card__title">1. Upload & edit</h2>
+
+      <div class="row row--stack">
+        <input id="fileInput" type="file" accept="image/*" />
+        <button id="autoBtn" class="btn-outline">Auto highlight</button>
+        <span class="zoombar">
+          <button id="zoomOut" class="chip">−</button>
+          <span id="zoomPct" class="chip">100%</span>
+          <button id="zoomIn" class="chip">+</button>
+        </span>
       </div>
+      <p class="hint">Tip: Alt/Option + drag to pan when zoomed.</p>
 
-      <div class="editbox">
-        <canvas id="imageCanvas"></canvas>
+      <!-- Canvas stack -->
+      <div class="canvas-wrap" id="canvasWrap" aria-label="editing area">
+        <canvas id="imgCanvas"></canvas>
         <canvas id="maskCanvas"></canvas>
-        <canvas id="edgesCanvas" class="hide"></canvas>
+        <canvas id="textCanvas"></canvas>
+        <canvas id="hoopCanvas"></canvas>
+      </div>
+
+      <h2 class="card__title mt">2. Live preview</h2>
+      <div class="canvas-wrap" id="previewWrap">
+        <canvas id="previewCanvas"></canvas>
       </div>
     </section>
+  </main>
 
-    <section class="card">
-      <h2>Brush</h2>
+  <!-- Sticky export bar -->
+  <footer class="exportbar">
+    <label class="row row--check">
+      <input id="showPreview" type="checkbox" checked />
+      <span>Show stitch preview</span>
+    </label>
 
-      <div class="tabs">
-        <button class="tab on" data-mode="mask">Mask</button>
-        <button class="tab" data-mode="text">Text</button>
-        <button class="tab" data-mode="direction">Direction</button>
-      </div>
+    <div class="btnbar btnbar--wrap">
+      <button id="genBtn" class="btn btn--primary">Generate stitches</button>
+      <button id="pngBtn" class="chip">PNG</button>
+      <button id="svgBtn" class="chip">SVG</button>
+      <button id="jsonBtn" class="chip">Stitches JSON</button>
+      <button id="dstBtn" class="chip">DST</button>
+    </div>
+  </footer>
 
-      <div id="maskOpts">
-        <div class="grid2 gap">
-          <div>
-            <label class="lbl">Size</label>
-            <input id="size" type="range" min="4" max="120" value="34">
-          </div>
-          <div class="btnrow small">
-            <button class="chip act" data-tool="paint">Paint</button>
-            <button class="chip" data-tool="erase">Erase</button>
-            <button class="chip" data-tool="wand">Wand</button>
-            <button class="chip" id="undo">Undo</button>
-            <button class="chip" id="redo">Redo</button>
-            <button class="chip" id="clear">Clear</button>
-            <button class="chip" id="fill">Fill</button>
-          </div>
-        </div>
-
-        <div class="row">
-          <label class="sw"><input id="showMask" type="checkbox" checked> <span>Show mask</span></label>
-          <label class="sw"><input id="showEdges" type="checkbox"> <span>Show edges</span></label>
-        </div>
-      </div>
-
-      <div id="textOpts" class="hide">
-        <input id="txt" class="input" placeholder="Add text">
-        <button id="applyText" class="btn-s">Apply</button>
-
-        <div class="grid3 gap">
-          <div>
-            <label class="lbl">Curve</label>
-            <input id="txtCurve" type="range" min="-1" max="1" step="0.02" value="0">
-          </div>
-          <div>
-            <label class="lbl">Size</label>
-            <input id="txtSize" type="range" min="8" max="140" value="40">
-          </div>
-          <div>
-            <label class="lbl">Angle</label>
-            <input id="txtAngle" type="range" min="0" max="180" step="1" value="45">
-          </div>
-        </div>
-
-        <label class="lbl">Pattern</label>
-        <select id="txtPattern">
-          <option value="fill">Fill (running)</option>
-          <option value="outline">Outline</option>
-        </select>
-        <label class="sw"><input id="showDir" type="checkbox" checked> <span>Show direction overlay</span></label>
-      </div>
-
-      <div id="dirOpts" class="hide">
-        <div class="grid2 gap">
-          <div>
-            <label class="lbl">Angle</label>
-            <input id="dirAngle" type="range" min="0" max="180" step="1" value="45">
-          </div>
-          <div>
-            <label class="lbl">Spacing</label>
-            <input id="dirSpace" type="range" min="3" max="14" step="1" value="6">
-          </div>
-        </div>
-        <p class="hint">Mask regions, then change direction here.</p>
-      </div>
-    </section>
-
-    <section class="card">
-      <h2>Live preview</h2>
-      <canvas id="liveCanvas" class="live"></canvas>
-    </section>
-  </section>
-</main>
-
-<div class="dock">
-  <label class="sw"><input id="toggleStitch" type="checkbox" checked> <span>Show stitch preview</span></label>
-  <button id="btn-generate" class="btn">Generate stitches</button>
-  <button id="btn-png" class="chip">PNG</button>
-  <button id="btn-svg" class="chip">SVG</button>
-  <button id="btn-json" class="chip">Stitches JSON</button>
-  <button id="btn-dst" class="chip">DST</button>
-</div>
-
-<script src="processing.js"></script>
-<script src="script.upload.js"></script>
-<script src="script.draw.js"></script>
-<script src="script.preview.js"></script>
+  <script src="colors.js"></script>
+  <script src="processing.js"></script>
+  <script src="script.draw.js"></script>
+  <script src="script.preview.js"></script>
 </body>
 </html>

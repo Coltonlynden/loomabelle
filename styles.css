@@ -23,6 +23,39 @@ h1,h2{margin:.2rem 0 1rem;color:var(--ink)}
 input[type="range"]{width:100%}
 .hint{opacity:.75;font-size:.9rem}
 
+/* ---------- Canvas stack fixes ---------- */
+.canvas-wrap{position:relative;width:100%;aspect-ratio:1/1;background:#fff;border:1px dashed #d9b8a8;border-radius:16px;overflow:hidden}
+.canvas-wrap canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated}
+#imgCanvas{z-index:0}
+#maskCanvas{z-index:1;pointer-events:auto;opacity:.45;mix-blend-mode:multiply}
+#textCanvas{z-index:2;pointer-events:auto}
+
+/* mask visibility class (JS toggles .is-hidden) */
+.is-hidden{opacity:0!important}
+
+/* ---------- Hoop preview ---------- */
+.hoop{position:relative;margin-top:12px}
+.hoop__svg{width:100%;height:auto;display:block}
+.hoop__inner{position:absolute;inset:90px 90px;display:grid;place-items:center}
+.hoop__inner canvas{width:100%;height:100%;background:#fff;border-radius:24px}
+
+/* ---------- Buttons wrap nicely on small screens ---------- */
+.btnbar, .exportbar .btnbar{display:flex;flex-wrap:wrap;gap:.5rem}
+.btn, .chip{white-space:nowrap}
+
+/* ---------- Hero & inset placement ---------- */
+.hero{padding:1rem}
+.hero__grid{position:relative}
+.hero__copy h1{font-size:clamp(1.9rem,3.8vw,3.2rem);margin:.2rem 0 .6rem}
+.hero__example{margin:.75rem 0 1rem;border-radius:18px;overflow:hidden}
+.hero__example img{display:block;width:100%;height:auto}
+.hero__inset{position:absolute;top:10%;right:6%;width:min(34vw,240px)}
+.hero__inset img{display:block;width:100%;height:auto;border-radius:50%;box-shadow:0 6px 24px rgba(0,0,0,.15);border:10px solid #fff}
+
+@media (max-width:720px){
+  .hero__inset{top:12%;right:7%;width:160px}
+}
+
 /* hero */
 .hero{max-width:1200px;margin:1rem auto;padding:0 1rem;display:grid;grid-template-columns:1fr 1fr;gap:2rem;align-items:start}
 .hero__title{font-size:clamp(28px,4.2vw,56px);line-height:1.05;margin-bottom:.6rem}

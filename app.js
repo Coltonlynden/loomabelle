@@ -1,4 +1,10 @@
-// minimal: just update any dynamic readouts on pages that don't use the editor code
+// tiny helper to keep nav active
 document.addEventListener('DOMContentLoaded', () => {
-  // nothing required here for now
+  const here = location.pathname.split('/').pop() || 'index.html';
+  const key = here.includes('features') ? 'features'
+            : here.includes('pricing')  ? 'pricing'
+            : 'home';
+  document.querySelectorAll('.nav a').forEach(a=>{
+    a.classList.toggle('active', a.dataset.nav===key);
+  });
 });

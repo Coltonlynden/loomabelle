@@ -1,15 +1,14 @@
 (function () {
   const mask = document.getElementById('maskCanvas');
-  const tabs = [...document.querySelectorAll('.tab')];
   if (!mask) return;
 
+  const tabs = [...document.querySelectorAll('.tab')];
   const m = mask.getContext('2d', { willReadFrequently: true });
   const size = document.getElementById('size');
   const showMask = document.getElementById('showMask');
   const showEdges = document.getElementById('showEdges');
 
   const btns = [...document.querySelectorAll('[data-tool]')];
-
   let tool = 'paint';
   let mode = 'mask';
   let drawing = false;
@@ -20,7 +19,6 @@
   btns.forEach(b=> b.addEventListener('click', ()=> setTool(b.dataset.tool)));
   setTool('paint');
 
-  // TAB LOGIC — show only the panel for the active tab
   function showPanel() {
     document.getElementById('maskOpts').classList.toggle('hide', mode!=='mask');
     document.getElementById('textOpts').classList.toggle('hide', mode!=='text');
@@ -77,7 +75,7 @@
     if (tool==='paint') dot(p.x,p.y,s,false);
     else if (tool==='erase') dot(p.x,p.y,s,true);
     else if (tool==='wand') flood(Math.round(p.x), Math.round(p.y), e.shiftKey);
-    push(); // snapshot for undo
+    push();
   });
   mask.addEventListener('pointermove', (e)=>{
     if (!drawing || mode!=='mask') return;
@@ -87,7 +85,6 @@
   });
   ['pointerup','pointercancel','pointerleave'].forEach(ev=> mask.addEventListener(ev, ()=> drawing=false));
 
-  // Clear/fill/undo/redo
   document.getElementById('clear')?.addEventListener('click', ()=>{m.clearRect(0,0,mask.width,mask.height); push();});
   document.getElementById('fill') ?.addEventListener('click', ()=>{m.globalCompositeOperation='source-over'; m.fillStyle='rgba(217,137,131,0.35)'; m.fillRect(0,0,mask.width,mask.height); push();});
 

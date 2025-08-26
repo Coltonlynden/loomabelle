@@ -1,41 +1,45 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Easbroidery</title>
-  <link rel="stylesheet" href="styles.css"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Easbroidery — Digitize photos into embroidery files</title>
+  <link rel="stylesheet" href="styles.css" />
 </head>
-<body class="sh">
-<header class="nav">
-  <a class="brand" href="index.html">
-    <img src="assets/logo.png" class="logo" alt="Easbroidery logo">
-    <span>EASBROIDERY</span>
-  </a>
-  <nav class="links">
-    <a class="nav-link" href="index.html">Home</a>
-    <a class="nav-link" href="features.html">Features</a>
-    <a class="nav-link" href="pricing.html">Pricing</a>
-  </nav>
-</header>
+<body class="theme-peach">
+  <header class="site-header">
+    <a href="index.html" class="brand">
+      <img src="assets/logo.png" alt="Easbroidery" class="brand__logo" />
+      <span class="brand__name">EASBROIDERY</span>
+    </a>
+    <nav class="nav">
+      <a href="index.html">Home</a>
+      <a href="features.html">Features</a>
+      <a href="pricing.html">Pricing</a>
+    </nav>
+  </header>
 
-<main class="hero">
-  <section class="hero-left">
-    <h1>Digitize photos into<br>embroidery files</h1>
-    <p class="sub">Use AI-style math to convert your photos into embroidery designs with ease.</p>
-    <p class="body">Upload a photo, refine the subject, add curved text, and export stitch files. Runs entirely in your browser.</p>
-    <a class="btn" href="editor.html">Upload photo</a>
-  </section>
+  <main class="hero">
+    <section class="hero__content">
+      <h1 class="hero__title">Digitize photos into<br/>embroidery files</h1>
+      <p class="hero__lead">
+        Use AI-style math to convert your photos into embroidery designs with ease.
+        Upload a photo, refine the subject, add curved text, and export stitch files.
+        Runs entirely in your browser.
+      </p>
+      <a class="btn btn--primary hero__cta" href="editor.html">Upload photo</a>
+    </section>
 
-  <section class="hero-right">
-    <figure class="hero-wrap">
-      <!-- use the filename you asked for -->
-      <img class="hero-bg" src="assets/hero-photo.jpg" alt="Sweatshirt with embroidery">
-      <img class="hero-inset" src="assets/hero-inset.jpg" alt="Dog inset">
+    <figure class="hero__art">
+      <img class="hero__photo" src="assets/hero-photo.jpg" alt="Sweatshirt with embroidery" />
+      <div class="hero__bubble">
+        <img src="assets/hero-inset.jpg" alt="Inset detail" />
+      </div>
     </figure>
-  </section>
-</main>
+  </main>
 
-<footer class="ft">© Easbroidery</footer>
+  <footer class="site-footer">
+    <small>© Easbroidery</small>
+  </footer>
 </body>
 </html>

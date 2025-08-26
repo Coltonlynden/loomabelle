@@ -1,62 +1,116 @@
-/* Same engine as before; unchanged API */
-(function () {
-  const E = (window.EAS ||= {}); const P = (E.paths ||= {});
-  const DEF = { angleDeg:45, hatchSpacing:6, step:3, minSeg:8, maxStitch:12 };
-  const toRad = (a)=>a*Math.PI/180, clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-
-  function sampler(canvas){
-    const ctx=canvas.getContext('2d',{willReadFrequently:true});
-    const {width:W,height:H}=canvas; const d=ctx.getImageData(0,0,W,H).data;
-    return (x,y)=>{x=(x+.5)|0; y=(y+.5)|0; if(x<0||y<0||x>=W||y>=H) return 0; return d[(y*W+x)*4+3];};
+// stitch generation + preview + exports
+window.EAS = window.EAS || {};
+EAS.paths = (function(){
+  function toMaskAlpha(mask){
+    const ctx=mask.getContext('2d',{willReadFrequently:true});
+    const {width:w,height:h}=mask;
+    const A=ctx.getImageData(0,0,w,h).data;
+    const M=new Uint8ClampedArray(w*h);
+    for(let i=0,j=0;i<M.length;i++,j+=4) M[i]=A[j+3];
+    return {w,h,M};
   }
-  function split(ax,ay,bx,by,lim){const dx=bx-ax,dy=by-ay,L=Math.hypot(dx,dy);if(L<=lim)return[[bx,by]];
-    const n=Math.ceil(L/lim),o=[];for(let i=1;i<=n;i++)o.push([ax+(dx*i)/n,ay+(dy*i)/n]);return o;}
 
-  P.generate=function(mask,opts={}){
-    const cfg={...DEF,...opts},W=mask.width,H=mask.height,A=sampler(mask);
-    const ang=toRad(cfg.angleDeg),s=Math.sin(ang),c=Math.cos(ang),cx=W/2,cy=H/2;
-    const R=(x,y)=>{const dx=x-cx,dy=y-cy;return[dx*c+dy*s,-dx*s+dy*c];};
-    const Ri=(u,v)=>[u*c-v*s+cx,u*s+v*c+cy];
-    const corners=[[0,0],[W,0],[0,H],[W,H]].map(([x,y])=>R(x,y));
-    let u0=Math.min(...corners.map(p=>p[0]))-2, u1=Math.max(...corners.map(p=>p[0]))+2;
-    let v0=Math.min(...corners.map(p=>p[1]))-2, v1=Math.max(...corners.map(p=>p[1]))+2;
-    const segs=[];
-    for(let v=v0;v<=v1;v+=cfg.hatchSpacing){
-      let on=false, start=u0;
-      for(let u=u0;u<=u1;u+=1){
-        const [x,y]=Ri(u,v); const m=A(x,y)>127;
-        if(!on && m){on=true;start=u;}
-        else if(on && !m){on=false; const a=Ri(start,v), b=Ri(u,v); if(Math.hypot(b[0]-a[0],b[1]-a[1])>=cfg.minSeg) segs.push([a,b]);}
+  function scanHatch(mask, opt){
+    const {w,h,M}=toMaskAlpha(mask);
+    const ang=((opt.angleDeg||45)*Math.PI)/180, sp=Math.max(3,opt.hatchSpacing|0), step=Math.max(2,opt.step|0);
+    const cos=Math.cos(ang), sin=Math.sin(ang);
+    const bb={w,h};
+    // rotate canvas grid: iterate lines in rotated space and transform back to image space
+    const lines=[];
+    const diag=Math.hypot(w,h);
+    const count=Math.ceil((diag)/sp)+2;
+    const cx=w/2, cy=h/2;
+    for(let li=-count;li<=count;li++){
+      const t=li*sp;
+      const x1=cx + (-diag)*cos - (t)*sin;
+      const y1=cy + (-diag)*sin + (t)*cos;
+      const x2=cx + ( diag)*cos - (t)*sin;
+      const y2=cy + ( diag)*sin + (t)*cos;
+
+      // sample along the line, create small segments inside mask
+      const seg=[];
+      const len=Math.hypot(x2-x1,y2-y1);
+      const n=Math.ceil(len/step);
+      let inMask=false, run=[];
+      for(let i=0;i<=n;i++){
+        const x=x1+(x2-x1)*i/n|0, y=y1+(y2-y1)*i/n|0;
+        if(x<0||y<0||x>=w||y>=h){ if(inMask){seg.push(run); run=[]; inMask=false;} continue; }
+        const a=M[y*w+x];
+        if(a>10){ // inside
+          if(!inMask){ inMask=true; run=[[x,y]]; } else run.push([x,y]);
+        }else{
+          if(inMask){ seg.push(run); run=[]; inMask=false; }
+        }
       }
-      if(on){const a=Ri(start,v),b=Ri(u1,v); if(Math.hypot(b[0]-a[0],b[1]-a[1])>=cfg.minSeg) segs.push([a,b]);}
+      if(inMask) seg.push(run);
+      if(seg.length) lines.push(...seg);
     }
-    const pts=[]; let flip=false;
-    for(let [a,b] of segs){ if(flip)[a,b]=[b,a]; flip=!flip;
-      const dx=b[0]-a[0],dy=b[1]-a[1],L=Math.hypot(dx,dy),n=Math.max(1,Math.round(L/cfg.step));
-      for(let i=0;i<=n;i++) pts.push([a[0]+dx*i/n,a[1]+dy*i/n]); }
-    const out=[]; if(pts.length){ let [px,py]=pts[0]; out.push([px,py]);
-      for(let i=1;i<pts.length;i++){const[nx,ny]=pts[i]; for(const p of split(px,py,nx,ny,cfg.maxStitch)) out.push(p); [px,py]=[nx,ny];}}
-    return {points:out,segments:segs,stats:{w:W,h:H,count:out.length,segs:segs.length}};
-  };
+    const stitches=[]; let sx=0,sy=0;
+    for(let i=0;i<lines.length;i++){
+      const L=(i%2===0)?lines[i]:lines[i].slice().reverse();
+      for(let j=0;j<L.length;j++){
+        const [x,y]=L[j];
+        stitches.push([x,y]);
+        sx=x; sy=y;
+      }
+    }
+    return {stitches, stats:{w,h,count:stitches.length}};
+  }
 
-  P.preview=function(canvas,res,opts={}){
-    const ctx=canvas.getContext('2d'); const {w:W,h:H}=res.stats;
-    const r=canvas.getBoundingClientRect(); if(r.width&&r.height){canvas.width=r.width;canvas.height=r.height;}
-    const k=Math.min((canvas.width||W)/W,(canvas.height||H)/H)||1; ctx.setTransform(k,0,0,k,0,0); ctx.clearRect(0,0,W,H);
-    ctx.lineWidth=1/k; ctx.strokeStyle=opts.seg||'#e4b1aa'; ctx.globalAlpha=.35; ctx.beginPath();
-    for(const[[x1,y1],[x2,y2]] of res.segments){ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);} ctx.stroke();
-    ctx.globalAlpha=1; ctx.strokeStyle=opts.stroke||'#c06458'; ctx.lineWidth=1.4/k; ctx.beginPath();
-    let first=true; for(const [x,y] of res.points){ if(first){ctx.moveTo(x,y); first=false;} else ctx.lineTo(x,y);} ctx.stroke();
-  };
+  function preview(canvas, res){
+    const ctx=canvas.getContext('2d');
+    canvas.width=res.stats.w; canvas.height=res.stats.h;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.lineWidth=1; ctx.strokeStyle="#c66"; ctx.globalAlpha=0.9;
+    ctx.beginPath();
+    for(const [x,y] of res.stitches) ctx.lineTo(x+0.5,y+0.5);
+    ctx.stroke();
+  }
 
-  P.exportJSON=(r)=>JSON.stringify({width:r.stats.w,height:r.stats.h,points:r.points},null,2);
-  P.exportSVG=function(r){const d=[]; if(r.points.length){const[x0,y0]=r.points[0]; d.push(`M${x0.toFixed(1)} ${y0.toFixed(1)}`); for(let i=1;i<r.points.length;i++){const[x,y]=r.points[i]; d.push(`L${x.toFixed(1)} ${y.toFixed(1)}`);} }
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${r.stats.w} ${r.stats.h}"><path d="${d.join(' ')}" fill="none" stroke="#c06458" stroke-width="1.2"/></svg>`;};
-  P.exportDST=function(r){const s=1000/Math.max(r.stats.w,r.stats.h); const pts=r.points.map(([x,y])=>[x*s,y*s]);
-    const H=new Uint8Array(512); const put=(t,o)=>{for(let i=0;i<t.length;i++)H[o+i]=t.charCodeAt(i);} ;
-    put('LA:Easbroidery',0); put(`ST:${String(pts.length).padStart(7,' ')}`,0x2E); H[511]=0x1A;
-    const B=[]; const enc=(dx,dy)=>{dx=clamp(Math.round(dx),-121,121); dy=clamp(Math.round(dy),-121,121);
-      const b1=((dx&0x1F)|((dy&0x1F)<<5))&0xFF; const b2=(((dx>>5)&0x03)|(((dy>>5)&0x03)<<2))&0xFF; B.push(b1,b2,0);};
-    let[px,py]=pts[0]||[0,0]; for(let i=1;i<pts.length;i++){const[nx,ny]=pts[i]; enc(nx-px,ny-py); [px,py]=[nx,ny];}
-    B.push(0,0,0xF3); const body=new Uint8Array(B); const out=new Uint8Array(512+body.length); out.set(H,0); out.set(body,512); return out;};
+  function toSVG(res){
+    const {w,h}=res.stats;
+    let d="M";
+    for(const [x,y] of res.stitches) d+=`${x},${y} `;
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+  <path d="${d}" fill="none" stroke="#c66" stroke-width="1"/>
+</svg>`;
+  }
+
+  // minimal DST writer from polyline
+  function toDST(res){
+    // Very small encoder, running stitch only. +/-121 limits per jump.
+    function encodeDelta(dx,dy){
+      const clamp = v => Math.max(-121, Math.min(121, v));
+      dx=clamp(dx); dy=clamp(dy);
+      // pack into 3 bytes per Tajima DST
+      const b1 = ((dx & 0x1F)     ) | ((dy & 0x07) << 5);
+      const b2 = ((dx & 0x20) >>5) | ((dx & 0xC0)>>3) | ((dy & 0x38)<<2);
+      const b3 = ((dy & 0xC0) >>6);
+      return [b1,b2,b3];
+    }
+    const bytes=[];
+    // header 512 bytes
+    const header = ("LA:STITCHES;"+Array(512).join(" ")).slice(0,512);
+    for(let i=0;i<512;i++) bytes.push(header.charCodeAt(i));
+    let px=res.stitches[0][0], py=res.stitches[0][y=1,0]; // dummy to appease lints
+    px=res.stitches[0][0]; py=res.stitches[0][1];
+    for(let i=1;i<res.stitches.length;i++){
+      const [x,y]=res.stitches[i];
+      const dx=x-px, dy=y-py;
+      bytes.push(...encodeDelta(dx,dy));
+      px=x; py=y;
+    }
+    // end command
+    bytes.push(0x00,0x00,0xF3);
+    return new Uint8Array(bytes);
+  }
+
+  return {
+    generate: scanHatch,
+    preview: preview,
+    exportSVG: toSVG,
+    exportJSON: (r)=>JSON.stringify(r),
+    exportDST: toDST
+  };
 })();

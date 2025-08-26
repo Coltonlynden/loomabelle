@@ -1,161 +1,176 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Easbroidery — Editor</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css"/>
 </head>
-<body class="theme-peach">
-  <header class="site-header">
-    <a href="index.html" class="brand">
-      <img src="assets/logo.png" alt="Easbroidery" class="brand__logo" />
-      <span class="brand__name">EASBROIDERY</span>
+<body class="site">
+  <header class="nav">
+    <a class="brand" href="index.html">
+      <img src="assets/logo.png" alt="Easbroidery logo"/>
+      <span>EASBROIDERY</span>
     </a>
-    <nav class="nav">
+    <nav class="links">
       <a href="index.html">Home</a>
       <a href="features.html">Features</a>
       <a href="pricing.html">Pricing</a>
     </nav>
   </header>
 
-  <main class="editor">
-    <section class="stage card">
-      <details class="opts">
-        <summary>General options (hoop & machine)</summary>
-        <div class="opts__grid">
-          <label>Machine
-            <select id="machine">
-              <option>Brother</option><option>Baby Lock</option><option>Janome</option>
-              <option>Bernina</option><option>Pfaff</option><option>Husqvarna Viking</option>
-            </select>
-          </label>
-          <label>Hoop size
-            <select id="hoopSelect">
-              <option value="100x100">4×4 in (100×100 mm)</option>
-              <option value="130x180" selected>5×7 in (130×180 mm)</option>
-              <option value="160x260">6×10 in (160×260 mm)</option>
-              <option value="200x300">8×12 in (200×300 mm)</option>
-            </select>
-          </label>
-          <label>Units
-            <select id="units">
-              <option value="mm" selected>mm</option>
-              <option value="in">in</option>
-            </select>
-          </label>
+  <main class="wrap editor">
+
+    <!-- Collapsible general options (hoop, machine) -->
+    <details class="card opts" id="opts">
+      <summary>General options (machine & hoop)</summary>
+      <div class="row">
+        <label>Machine
+          <select id="machine">
+            <option value="brother">Brother / Baby Lock</option>
+            <option value="janome">Janome</option>
+            <option value="bernina">Bernina</option>
+            <option value="generic" selected>Generic</option>
+          </select>
+        </label>
+        <label>Hoop size
+          <select id="hoop">
+            <option value="100x100">100 × 100 mm (4×4)</option>
+            <option value="130x180" selected>130 × 180 mm (5×7)</option>
+            <option value="160x260">160 × 260 mm (6×10)</option>
+            <option value="200x300">200 × 300 mm (8×12)</option>
+          </select>
+        </label>
+        <label>Stitch spacing
+          <input id="spacing" type="number" min="0.5" step="0.1" value="1.2"> mm
+        </label>
+        <label>Angle
+          <input id="angle" type="range" min="0" max="180" value="45">
+          <span id="angleOut">45°</span>
+        </label>
+        <label><input id="dirOverlay" type="checkbox" checked> Show direction overlay</label>
+      </div>
+    </details>
+
+    <!-- LEFT: upload + edit canvas + tools attached -->
+    <section class="edit card">
+      <h2>1. Upload & refine</h2>
+
+      <div class="toolbar compact">
+        <label class="file"><input type="file" id="file" accept="image/*">Choose File</label>
+        <button class="btn ghost" id="auto">Auto highlight</button>
+        <div class="zoom">
+          <button class="btn ghost" id="zoomOut">−</button>
+          <span id="zoomPct">100%</span>
+          <button class="btn ghost" id="zoomIn">+</button>
+          <span class="tip">Tip: Alt/Option+drag to pan while zoomed</span>
         </div>
-      </details>
-
-      <h2 class="card__title">1. Upload & edit</h2>
-      <div class="row row--stack">
-        <input id="fileInput" type="file" accept="image/*" />
-        <button id="autoBtn" class="btn-outline">Auto highlight</button>
-        <span class="zoombar">
-          <button id="zoomOut" class="chip">−</button>
-          <span id="zoomPct" class="chip">100%</span>
-          <button id="zoomIn" class="chip">+</button>
-        </span>
       </div>
-      <p class="hint">Tip: Alt/Option + drag to pan when zoomed.</p>
 
-      <!-- tools attached -->
-      <div class="tools-inline card">
-        <div class="seg" id="modeTabs">
-          <button class="chip chip--seg is-active" data-mode="mask">Mask</button>
-          <button class="chip chip--seg" data-mode="text">Text</button>
-          <button class="chip chip--seg" data-mode="dir">Direction</button>
-        </div>
+      <div class="canvas-wrap">
+        <canvas id="editCanvas" width="1024" height="768" aria-label="Edit canvas"></canvas>
+      </div>
 
-        <section class="panel" data-panel="mask">
-          <label class="row"><span>Brush</span><input id="brushSize" type="range" min="2" max="80" value="24"/></label>
-          <div class="btnbar">
-            <button class="btn" data-tool="paint">Paint</button>
-            <button class="btn" data-tool="erase">Erase</button>
-            <button class="btn" data-tool="wand">Wand</button>
-            <button class="btn" data-tool="undo">Undo</button>
-            <button class="btn" data-tool="redo">Redo</button>
-            <button class="btn" data-tool="clear">Clear</button>
-            <button class="btn" data-tool="fill">Fill</button>
+      <!-- Attach Brush/Text/Direction directly under edit canvas -->
+      <div class="tools">
+        <div class="seg">
+          <div class="seg-tabs">
+            <button class="seg-btn active" data-tab="mask">Mask</button>
+            <button class="seg-btn" data-tab="text">Text</button>
+            <button class="seg-btn" data-tab="dir">Direction</button>
           </div>
-          <div class="row row--check">
-            <label><input id="showMask" type="checkbox" checked/> Show mask</label>
-            <label><input id="showEdges" type="checkbox"/> Show edges</label>
+
+          <!-- Mask tools -->
+          <div class="seg-pane" id="pane-mask" data-pane>
+            <label>Size <input id="brushSize" type="range" min="2" max="120" value="28"></label>
+            <div class="chip-row">
+              <button class="chip" id="toolPaint">Paint</button>
+              <button class="chip" id="toolErase">Erase</button>
+              <button class="chip" id="toolWand">Wand</button>
+              <button class="chip" id="toolFill">Fill</button>
+              <button class="chip" id="undo">Undo</button>
+              <button class="chip" id="redo">Redo</button>
+              <button class="chip" id="clear">Clear</button>
+            </div>
+            <label><input id="showMask" type="checkbox" checked> Show mask</label>
+            <label><input id="showEdges" type="checkbox"> Show edges</label>
           </div>
-        </section>
 
-        <section class="panel hidden" data-panel="text">
-          <label class="row"><span>Text</span><input id="textInput" type="text" placeholder="Add text"/></label>
-          <label class="row"><span>Size</span><input id="textSize" type="range" min="10" max="200" value="72"/></label>
-          <label class="row"><span>Curve</span><input id="textCurve" type="range" min="-180" max="180" value="0"/></label>
-          <button id="textApply" class="btn btn--primary">Apply / Update</button>
-        </section>
+          <!-- Text tools -->
+          <div class="seg-pane hidden" id="pane-text" data-pane>
+            <label>Text <input id="textStr" type="text" placeholder="Add text"></label>
+            <div class="row">
+              <label>Size <input id="textSize" type="range" min="8" max="160" value="64"></label>
+              <label>Curve <input id="textCurve" type="range" min="-100" max="100" value="0"></label>
+              <label>Angle <input id="textAngle" type="range" min="-180" max="180" value="0"></label>
+            </div>
+            <div class="row">
+              <label>Font
+                <select id="textFont">
+                  <option value="Georgia,serif">Serif</option>
+                  <option value="'Courier New',monospace">Mono</option>
+                  <option value="'Comic Sans MS','Segoe UI',sans-serif" selected>Cute</option>
+                </select>
+              </label>
+              <label>Color <input id="textColor" type="color" value="#333333"></label>
+              <button class="btn" id="applyText">Apply</button>
+            </div>
+            <small>Drag text on the edit canvas to position.</small>
+          </div>
 
-        <section class="panel hidden" data-panel="dir">
-          <label class="row"><span>Angle</span><input id="dirAngle" type="range" min="0" max="180" value="45"/></label>
-          <label class="row"><span>Pattern</span>
-            <select id="dirPattern">
-              <option value="fill">Fill (running)</option>
-              <option value="zigzag">Zig-zag</option>
-              <option value="satin">Satin band</option>
-            </select>
-          </label>
-          <label class="row row--check"><input id="showDir" type="checkbox" checked/> <span>Show direction overlay</span></label>
-        </section>
-      </div>
-
-      <div class="canvas-wrap" id="canvasWrap">
-        <canvas id="imgCanvas"></canvas>
-        <canvas id="maskCanvas"></canvas>
-        <canvas id="textCanvas"></canvas>
-      </div>
-
-      <h2 class="card__title mt">2. Live preview</h2>
-
-      <!-- cute machine hoop frame (SVG) with canvas inside -->
-      <div class="hoop">
-        <svg class="hoop__svg" viewBox="0 0 1200 800" aria-hidden="true">
-          <!-- outer rail -->
-          <rect x="30" y="30" width="1140" height="740" rx="70" ry="70" fill="none" stroke="#5f5f5f" stroke-width="28"/>
-          <!-- inner rail -->
-          <rect x="90" y="90" width="1020" height="620" rx="50" ry="50" fill="none" stroke="#bdbdbd" stroke-width="12"/>
-          <!-- tick marks -->
-          <g stroke="#9a9a9a" stroke-width="2" opacity=".7">
-            <line x1="90" y1="200" x2="1110" y2="200"/>
-            <line x1="90" y1="400" x2="1110" y2="400"/>
-            <line x1="90" y1="600" x2="1110" y2="600"/>
-            <line x1="300" y1="90" x2="300" y2="710"/>
-            <line x1="600" y1="90" x2="600" y2="710"/>
-            <line x1="900" y1="90" x2="900" y2="710"/>
-          </g>
-          <!-- clamp (cute) -->
-          <g transform="translate(1080,360)">
-            <rect x="-26" y="-60" width="52" height="120" rx="12" fill="#d7d7d7" stroke="#8b8b8b" stroke-width="4"/>
-            <circle r="20" fill="#f4c7bf" stroke="#8b8b8b" stroke-width="4"/>
-          </g>
-        </svg>
-        <div class="hoop__inner">
-          <canvas id="previewCanvas"></canvas>
+          <!-- Direction tools -->
+          <div class="seg-pane hidden" id="pane-dir" data-pane>
+            <p>Brush directions set local stitch flow. Painting records arrows; the preview uses them when hatching.</p>
+            <label>Arrow length <input id="dirLen" type="range" min="10" max="200" value="80"></label>
+            <div class="chip-row">
+              <button class="chip" id="toolDir">Direction brush</button>
+              <button class="chip" id="clearDir">Clear directions</button>
+            </div>
+          </div>
         </div>
       </div>
     </section>
+
+    <!-- RIGHT: live preview in a machine hoop -->
+    <section class="preview card">
+      <h2>2. Live preview</h2>
+      <div id="hoopWrap" class="hoop">
+        <canvas id="previewCanvas" width="900" height="700" aria-label="Hoop preview"></canvas>
+        <div class="hoop-hardware" aria-hidden="true"></div>
+      </div>
+
+      <!-- Palette selection after preview is created -->
+      <div class="palette" id="palette" hidden>
+        <h3>Colors</h3>
+        <div id="swatches" class="swatches"></div>
+        <div class="row">
+          <label>Limit
+            <input id="kColors" type="range" min="2" max="12" value="6">
+            <span id="kOut">6</span>
+          </label>
+          <button class="btn ghost" id="recompute">Recompute</button>
+        </div>
+        <small>Click a swatch to toggle it on/off for stitches.</small>
+      </div>
+    </section>
+
   </main>
 
-  <footer class="exportbar">
-    <label class="row row--check">
-      <input id="showPreview" type="checkbox" checked />
-      <span>Show stitch preview</span>
-    </label>
-    <div class="btnbar btnbar--wrap">
-      <button id="genBtn" class="btn btn--primary">Generate stitches</button>
-      <button id="pngBtn" class="chip">PNG</button>
-      <button id="svgBtn" class="chip">SVG</button>
-      <button id="jsonBtn" class="chip">Stitches JSON</button>
-      <button id="dstBtn" class="chip">DST</button>
-    </div>
-  </footer>
+  <!-- Sticky action bar -->
+  <div class="actionbar">
+    <label><input id="showStitch" type="checkbox" checked> Show stitch preview</label>
+    <button class="btn primary" id="make">Generate stitches</button>
+    <button class="btn" id="dlPNG">PNG</button>
+    <button class="btn" id="dlSVG">SVG</button>
+    <button class="btn" id="dlJSON">Stitches JSON</button>
+    <button class="btn" id="dlDST">DST</button>
+  </div>
 
-  <!-- IMPORTANT: load scripts as plain scripts so all browsers work -->
+  <!-- Scripts (modular & organized) -->
+  <script src="lib/ort.min.js"></script>
+  <script src="colors.js"></script>
+  <script src="processing.js"></script>
+  <script src="script.upload.js"></script>
   <script src="script.draw.js"></script>
   <script src="script.preview.js"></script>
 </body>

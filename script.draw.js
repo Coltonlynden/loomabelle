@@ -1,128 +1,107 @@
-// Brush/Text/Direction + fixed paint/erase/wand + zoom/pan hooks
-(function(){
-  const $  = (s, r=document)=>r.querySelector(s);
-  const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
-  const S = (window.EAS ||= {}).state ||= {};
+/* Restored brush: paint / erase / wand on the MASK canvas with a soft pink overlay */
+(function () {
+  const mask = document.getElementById('maskCanvas');
+  const imgBox = document.querySelector('.editbox');
+  if (!mask || !imgBox) return;
 
-  // mode switching (only relevant group shown)
-  const groups = {
-    mask: $('.tools-mask'),
-    text: $('.tools-text'),
-    direction: $('.tools-direction')
-  };
-  function setMode(m){
-    S.mode = m;
-    $$('#brush-controls .chip[data-mode]').forEach(c => c.classList.toggle('chip--active', c.dataset.mode===m));
-    Object.entries(groups).forEach(([k,el])=>el.classList.toggle('hidden', k!==m));
-  }
-  $$('#brush-controls .chip[data-mode]').forEach(c => c.addEventListener('click', ()=>setMode(c.dataset.mode)));
-  setMode('mask');
+  const m = mask.getContext('2d', { willReadFrequently: true });
+  const size = document.getElementById('size');
+  const showMask = document.getElementById('showMask');
+  const showEdges = document.getElementById('showEdges');
 
-  // brush settings
-  S.brushSize = 22; S.tool='paint';
-  $('#brush-size').addEventListener('input', e=> S.brushSize = +e.target.value);
-  $('#paint').addEventListener('click', ()=> setTool('paint'));
-  $('#erase').addEventListener('click', ()=> setTool('erase'));
-  $('#wand').addEventListener('click',  ()=> setTool('wand'));
+  const btns = [...document.querySelectorAll('[data-tool]')];
+  const tabs = [...document.querySelectorAll('.tab')];
+
+  let tool = 'paint';
+  let mode = 'mask';
+  let drawing = false;
+
   function setTool(t){
-    S.tool=t;
-    ['paint','erase','wand'].forEach(id => $('#'+id).classList.toggle('chip--active', id===t));
+    tool = t;
+    btns.forEach(b=>b.classList.toggle('act', b.dataset.tool===t));
+  }
+  btns.forEach(b=> b.addEventListener('click', ()=> setTool(b.dataset.tool)));
+  setTool('paint');
+
+  tabs.forEach(t=>{
+    t.addEventListener('click', ()=>{
+      tabs.forEach(x=>x.classList.remove('on'));
+      t.classList.add('on');
+      mode = t.dataset.mode;                      // only hides/shows options; layout same
+      document.getElementById('textOpts').classList.toggle('hide', mode!=='text');
+    });
+  });
+
+  showMask?.addEventListener('change', ()=> mask.style.opacity = showMask.checked?1:0);
+  showEdges?.addEventListener('change', ()=>{
+    document.getElementById('edgesCanvas').classList.toggle('hide', !showEdges.checked);
+  });
+
+  function pos(e){
+    const r = mask.getBoundingClientRect();
+    return { x: Math.max(0, Math.min(mask.width, (e.clientX - r.left) * (mask.width / r.width))),
+             y: Math.max(0, Math.min(mask.height, (e.clientY - r.top ) * (mask.height/ r.height))) };
   }
 
-  // canvas refs
-  const mask = $('#mask');
-  const mctx = mask.getContext('2d', { willReadFrequently: true });
-  const base = $('#canvas').getContext('2d', { willReadFrequently: true });
-
-  // painting helpers
-  const W=1024,H=1024;
-  mask.width=W;mask.height=H;
-  const UNDO=[], REDO=[];
-  function pushUndo(){ try{UNDO.push(mctx.getImageData(0,0,W,H)); if(UNDO.length>40) UNDO.shift(); REDO.length=0;}catch{} }
-  $('#btn-undo').addEventListener('click',()=>{ if(!UNDO.length) return; REDO.push(mctx.getImageData(0,0,W,H)); mctx.putImageData(UNDO.pop(),0,0); window.EAS_preview.render(); });
-  $('#btn-redo').addEventListener('click',()=>{ if(!REDO.length) return; UNDO.push(mctx.getImageData(0,0,W,H)); mctx.putImageData(REDO.pop(),0,0); window.EAS_preview.render(); });
-  $('#btn-clear-mask').addEventListener('click',()=>{ pushUndo(); mctx.clearRect(0,0,W,H); window.EAS_preview.render(); });
-  $('#btn-fill-mask').addEventListener('click',()=>{ pushUndo(); mctx.globalCompositeOperation='source-over'; mctx.fillStyle='#000'; mctx.fillRect(0,0,W,H); window.EAS_preview.render(); });
-
-  function pos(ev, el){
-    const r = el.getBoundingClientRect();
-    const p = ev.touches ? ev.touches[0] : ev;
-    return { x: (p.clientX - r.left) * W / r.width, y: (p.clientY - r.top) * H / r.height };
-  }
-  function dab(x,y,r,erase){
-    mctx.save();
-    mctx.globalCompositeOperation = erase ? 'destination-out' : 'source-over';
-    mctx.beginPath(); mctx.arc(x,y,r,0,Math.PI*2); mctx.fillStyle='#000'; mctx.fill();
-    mctx.restore();
+  function dot(x,y,s,erase=false){
+    m.globalCompositeOperation = erase ? 'destination-out' : 'source-over';
+    m.fillStyle = 'rgba(217,137,131,0.35)'; // blush highlight
+    m.beginPath(); m.arc(x,y,s/2,0,Math.PI*2); m.fill();
   }
 
-  let painting=false, last=null;
-  function down(ev){
-    if(S.mode!=='mask') return;
-    ev.preventDefault();
-    const p = pos(ev, mask);
-    if(S.tool==='wand'){ flood(p.x|0, p.y|0); window.EAS_preview.render(); return; }
-    pushUndo(); painting=true; last=p; dab(p.x,p.y,S.brushSize,S.tool==='erase'); window.EAS_preview.render();
-  }
-  function move(ev){
-    if(!painting) return;
-    ev.preventDefault();
-    const p = pos(ev, mask);
-    const dx=p.x-last.x, dy=p.y-last.y; const d=Math.hypot(dx,dy);
-    const steps = Math.max(1,(d/(S.brushSize*0.4))|0);
-    for(let i=1;i<=steps;i++) dab(last.x+dx*i/steps, last.y+dy*i/steps, S.brushSize, S.tool==='erase');
-    last=p; window.EAS_preview.render();
-  }
-  function up(){ painting=false; }
+  function flood(x0,y0,erase=false){
+    // simple alpha flood on current mask
+    const {width:w, height:h} = mask;
+    const img = m.getImageData(0,0,w,h);
+    const A = img.data;
+    const idx = (x,y)=> (y*w + x)*4 + 3;
+    const target = A[idx(x0,y0)];
+    const wanted = erase ? 0 : 200;
+    if (erase && target===0) return;
+    if (!erase && target>180) return;
 
-  mask.addEventListener('mousedown',down); window.addEventListener('mousemove',move); window.addEventListener('mouseup',up);
-  mask.addEventListener('touchstart',down,{passive:false}); window.addEventListener('touchmove',move,{passive:false}); window.addEventListener('touchend',up,{passive:false});
-
-  // flood fill wand using ORIGINAL image (S.srcData) for stable colors
-  function flood(x,y){
-    const S0 = (window.EAS||{}).state; if(!S0.srcData) return;
-    pushUndo();
-    const src=S0.srcData.data;
-    const out=mctx.getImageData(0,0,W,H); const m=out.data;
-    const seen=new Uint8Array(W*H);
-    const q=[[x,y]];
-    const i0=(y*W+x)<<2; const r0=src[i0], g0=src[i0+1], b0=src[i0+2];
-    const tol=38;
+    const q = [[x0,y0]]; const seen = new Uint8Array(w*h); seen[y0*w+x0]=1;
     while(q.length){
-      const [X,Y]=q.pop();
-      if(X<0||Y<0||X>=W||Y>=H) continue;
-      const p=Y*W+X; if(seen[p]) continue; seen[p]=1;
-      const i=(p<<2);
-      const dr=Math.abs(src[i]-r0)+Math.abs(src[i+1]-g0)+Math.abs(src[i+2]-b0);
-      if(dr>tol) continue;
-      m[i]=0;m[i+1]=0;m[i+2]=0;m[i+3]=255;
-      q.push([X+1,Y],[X-1,Y],[X,Y+1],[X,Y-1]);
+      const [x,y]=q.pop();
+      A[idx(x,y)] = wanted;        // set alpha
+      if (x>0   && !seen[y*w+x-1]){ seen[y*w+x-1]=1; q.push([x-1,y]); }
+      if (x<w-1 && !seen[y*w+x+1]){ seen[y*w+x+1]=1; q.push([x+1,y]); }
+      if (y>0   && !seen[(y-1)*w+x]){ seen[(y-1)*w+x]=1; q.push([x,y-1]); }
+      if (y<h-1 && !seen[(y+1)*w+x]){ seen[(y+1)*w+x]=1; q.push([x,y+1]); }
     }
-    mctx.putImageData(out,0,0);
+    m.putImageData(img,0,0);
   }
 
-  // text + direction bindings
-  const T = (S.text ||= { content:'', curve:0, size:64, angle:0 });
-  $('#text-string').addEventListener('input',e=>{T.content=e.target.value; window.EAS_preview.render();});
-  $('#text-curve').addEventListener('input',e=>{T.curve=+e.target.value; window.EAS_preview.render();});
-  $('#text-size').addEventListener('input',e=>{T.size=+e.target.value; window.EAS_preview.render();});
-  $('#text-angle').addEventListener('input',e=>{T.angle=+e.target.value; window.EAS_preview.render();});
-  $('#apply-text').addEventListener('click',()=>window.EAS_preview.render());
+  mask.addEventListener('pointerdown', (e)=>{
+    if (mode!=='mask') return;
+    mask.setPointerCapture(e.pointerId);
+    drawing = true;
+    const s = Number(size?.value||36);
+    const p = pos(e);
+    if (tool==='paint') dot(p.x,p.y,s,false);
+    else if (tool==='erase') dot(p.x,p.y,s,true);
+    else if (tool==='wand') flood(Math.round(p.x), Math.round(p.y), e.shiftKey);
+  });
+  mask.addEventListener('pointermove', (e)=>{
+    if (!drawing || mode!=='mask') return;
+    const s = Number(size?.value||36);
+    const p = pos(e);
+    dot(p.x,p.y,s, tool==='erase');
+  });
+  ['pointerup','pointercancel','pointerleave'].forEach(ev=> mask.addEventListener(ev, ()=> drawing=false));
 
-  const dirA=$('#dir-angle'), dirV=$('#dir-angle-value'), dirT=$('#toggle-dir');
-  dirA.addEventListener('input',e=>{S.dirAngle=+e.target.value; dirV.textContent=S.dirAngle+'°'; window.EAS_preview.render();});
-  dirT.addEventListener('change',()=>{S.showDir = dirT.checked; window.EAS_preview.render();});
+  // utility buttons
+  document.getElementById('clear')?.addEventListener('click', ()=> m.clearRect(0,0,mask.width,mask.height));
+  document.getElementById('fill') ?.addEventListener('click', ()=>{
+    m.globalCompositeOperation='source-over';
+    m.fillStyle='rgba(217,137,131,0.35)'; m.fillRect(0,0,mask.width,mask.height);
+  });
 
-  // zoom/pan hooks used by processing/preview
-  S.zoom=1; S.panX=0; S.panY=0;
-  $('#zoom-in').addEventListener('click',()=>{S.zoom=Math.min(S.zoom+0.1,3); window.EAS_preview.render();});
-  $('#zoom-out').addEventListener('click',()=>{S.zoom=Math.max(S.zoom-0.1,0.4); window.EAS_preview.render();});
-  $('#zoom-reset').addEventListener('click',()=>{S.zoom=1;S.panX=0;S.panY=0; window.EAS_preview.render();});
-
-  // generate / export buttons
-  $('#btn-make').addEventListener('click',()=> window.EAS_processing.generate());
-  $('#dl-png').addEventListener('click', ()=> window.EAS_processing.exportPNG());
-  $('#dl-svg').addEventListener('click', ()=> window.EAS_processing.exportSVG());
-  $('#dl-json').addEventListener('click',()=> window.EAS_processing.exportJSON());
-  $('#dl-dst').addEventListener('click', ()=> window.EAS_processing.exportDST());
+  // very small undo/redo using ImageData stack
+  const hist=[]; let hi=-1;
+  function push(){ try{ hist.splice(hi+1); hist.push(m.getImageData(0,0,mask.width,mask.height)); hi=hist.length-1; }catch{} }
+  function load(k){ if (k>=0 && k<hist.length){ hi=k; m.putImageData(hist[k],0,0);} }
+  mask.addEventListener('pointerdown', push);
+  document.getElementById('undo')?.addEventListener('click', ()=> load(hi-1));
+  document.getElementById('redo')?.addEventListener('click', ()=> load(hi+1));
 })();

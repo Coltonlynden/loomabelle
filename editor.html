@@ -19,18 +19,15 @@
     </nav>
   </header>
 
-  <!-- Workspace -->
   <main class="editor">
-    <!-- Left column: tools (collapses on mobile) -->
+    <!-- Tools (left) -->
     <aside class="tools card">
       <h2 class="card__title">Brush / Text / Direction</h2>
 
       <div class="seg">
-        <div class="seg__tabs" role="tablist">
-          <button class="chip chip--seg is-active" data-mode="mask" id="tab-mask">Mask</button>
-          <button class="chip chip--seg" data-mode="text" id="tab-text">Text</button>
-          <button class="chip chip--seg" data-mode="dir"  id="tab-dir">Direction</button>
-        </div>
+        <button class="chip chip--seg is-active" data-mode="mask">Mask</button>
+        <button class="chip chip--seg" data-mode="text">Text</button>
+        <button class="chip chip--seg" data-mode="dir">Direction</button>
       </div>
 
       <!-- Mask panel -->
@@ -71,7 +68,7 @@
           <input id="textCurve" type="range" min="-180" max="180" value="0" />
         </label>
         <button id="textApply" class="btn btn--primary">Apply / Update</button>
-        <p class="hint">Drag the text on the canvas. Pinch/scroll to zoom. Two-finger drag to pan.</p>
+        <p class="hint">Drag the text on the canvas. Alt/Option + drag to pan when zoomed.</p>
       </section>
 
       <!-- Direction panel -->
@@ -114,7 +111,7 @@
       </section>
     </aside>
 
-    <!-- Right column: canvases -->
+    <!-- Stage (right) -->
     <section class="stage card">
       <h2 class="card__title">1. Upload & edit</h2>
 
@@ -127,9 +124,9 @@
           <button id="zoomIn" class="chip">+</button>
         </span>
       </div>
+
       <p class="hint">Tip: Alt/Option + drag to pan when zoomed.</p>
 
-      <!-- Canvas stack -->
       <div class="canvas-wrap" id="canvasWrap" aria-label="editing area">
         <canvas id="imgCanvas"></canvas>
         <canvas id="maskCanvas"></canvas>
@@ -144,7 +141,6 @@
     </section>
   </main>
 
-  <!-- Sticky export bar -->
   <footer class="exportbar">
     <label class="row row--check">
       <input id="showPreview" type="checkbox" checked />
@@ -160,9 +156,7 @@
     </div>
   </footer>
 
-  <script src="colors.js"></script>
-  <script src="processing.js"></script>
-  <script src="script.draw.js"></script>
-  <script src="script.preview.js"></script>
+  <!-- Modules: preview imports draw -->
+  <script type="module" src="script.preview.js"></script>
 </body>
 </html>

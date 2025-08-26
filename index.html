@@ -4,13 +4,16 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Easbroidery — Digitize photos into embroidery files</title>
+  <link rel="preload" href="assets/hero-photo.jpg" as="image">
+  <link rel="preload" href="assets/hero-inset.jpg" as="image">
+  <link rel="icon" href="assets/logo.png">
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body class="theme-peach">
+<body class="theme">
   <header class="site-header">
-    <a href="index.html" class="brand">
-      <img src="assets/logo.png" alt="Easbroidery" class="brand__logo" />
-      <span class="brand__name">EASBROIDERY</span>
+    <a class="brand" href="index.html">
+      <img src="assets/logo.png" alt="Easbroidery logo" />
+      <span>EASBROIDERY</span>
     </a>
     <nav class="nav">
       <a href="index.html">Home</a>
@@ -20,29 +23,35 @@
   </header>
 
   <main class="hero">
-    <div class="hero__grid card">
-      <div class="hero__copy">
-        <h1>Digitize photos into<br/>embroidery files</h1>
-        <p class="lede">
-          Use AI-style math to convert your photos into embroidery designs with ease.
-          Upload a photo, refine the subject, add curved text, and export stitch files.
-          Runs entirely in your browser.
-        </p>
-        <!-- EXAMPLE image sits here (below text, above button) -->
-        <figure class="hero__example">
-          <img src="assets/hero.jpg" width="1200" height="900" alt="Sweatshirt with embroidery" />
-        </figure>
+    <section class="hero-card">
+      <h1>Digitize photos into<br><span class="soft">embroidery files</span></h1>
+      <p class="lede">
+        Use AI-style math to convert your photos into embroidery designs with ease.
+        Upload a photo, refine the subject, add curved text, and export stitch files.
+        Runs entirely in your browser.
+      </p>
 
-        <p><a class="btn btn--primary" href="editor.html">Upload photo</a></p>
-      </div>
+      <!-- Example image under text, above Upload button -->
+      <figure class="example">
+        <img src="assets/hero-photo.jpg" alt="Sweatshirt with embroidery" />
+        <figcaption>Sweatshirt with embroidery</figcaption>
+      </figure>
 
-      <!-- inset moved UP and RIGHT -->
-      <div class="hero__inset">
-        <img src="assets/hero-photo.jpg" alt="Inset sample" />
+      <p><a class="btn btn-primary" href="editor.html">Upload photo</a></p>
+    </section>
+
+    <!-- Photo card on the right with a small inset moved down a touch -->
+    <aside class="hero-visual">
+      <div class="card">
+        <img src="assets/hero-photo.jpg" alt="Example garment" />
+        <div class="inset">
+          <img src="assets/hero-inset.jpg" alt="Inset embroidery" />
+        </div>
       </div>
-    </div>
+    </aside>
   </main>
 
-  <footer class="site-foot">© Easbroidery</footer>
+  <footer class="site-footer">© Easbroidery</footer>
+  <script src="app.js" type="module"></script>
 </body>
 </html>

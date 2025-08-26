@@ -1,96 +1,38 @@
-/* Easbroidery — wire existing UI to the path engine.
-   Layout is unchanged. This file only finds your current elements and attaches handlers.
-*/
+/* Restored preview wiring — no layout changes */
 (function () {
   const P = (window.EAS && window.EAS.paths) || {};
-  if (!P.generate) return;
+  const mask = document.getElementById('maskCanvas');
+  const live = document.getElementById('liveCanvas');
+  const gen  = document.getElementById('btn-generate');
+  const chk  = document.getElementById('toggleStitch');
+  const bPNG = document.getElementById('btn-png');
+  const bSVG = document.getElementById('btn-svg');
+  const bJS  = document.getElementById('btn-json');
+  const bDST = document.getElementById('btn-dst');
 
-  // tolerate your original ids/classes
-  const q = (selArr) => {
-    for (const s of selArr) {
-      const el = document.querySelector(s);
-      if (el) return el;
-    }
-    return null;
-  };
-
-  // canvases already present in your layout
-  const maskCanvas = q(['#editCanvas', '#maskCanvas', '#mask', 'canvas.edit']);
-  const liveCanvas = q(['#previewCanvas', '#liveCanvas', '#live', 'canvas.live']);
-
-  // optional controls (if absent, defaults are used)
-  const angleInput   = q(['#angle',   'input[name="angle"]']);
-  const spacingInput = q(['#spacing', 'input[name="spacing"]']);
-  const stepInput    = q(['#step',    'input[name="step"]']);
-
-  // buttons that already exist in your layout
-  const btnGen  = q(['#btn-generate', '.btn-generate']);
-  const btnPNG  = q(['#btn-png', '.btn-png']);
-  const btnSVG  = q(['#btn-svg', '.btn-svg']);
-  const btnJSON = q(['#btn-json', '.btn-json']);
-  const btnDST  = q(['#btn-dst', '.btn-dst']);
-
-  const showPreviewChk = q(['#toggle-stitch', 'input[name="showStitch"]']);
+  if (!mask || !live || !P || !P.generate) return;
 
   let last = null;
 
-  function currentOpts() {
-    const angle = angleInput ? Number(angleInput.value || angleInput.dataset.value || 45) : 45;
-    const spacing = spacingInput ? Number(spacingInput.value || spacingInput.dataset.value || 6) : 6;
-    const step = stepInput ? Number(stepInput.value || stepInput.dataset.value || 3) : 3;
-    return { angleDeg: angle, hatchSpacing: spacing, step };
-  }
-
   function generate() {
-    if (!maskCanvas) return;
-    last = P.generate(maskCanvas, currentOpts());
-    if (liveCanvas && (!showPreviewChk || showPreviewChk.checked)) {
-      P.preview(liveCanvas, last);
-    } else if (liveCanvas) {
-      const ctx = liveCanvas.getContext('2d');
-      ctx.clearRect(0,0,liveCanvas.width, liveCanvas.height);
-    }
+    last = P.generate(mask, { angleDeg: 45, hatchSpacing: 6, step: 3, maxStitch: 12 });
+    if (chk?.checked) P.preview(live, last);
   }
 
-  // wire events
-  if (btnGen) btnGen.addEventListener('click', generate);
-  [angleInput, spacingInput, stepInput].forEach((el)=> el && el.addEventListener('input', generate));
-  if (showPreviewChk) showPreviewChk.addEventListener('change', () => { if (last && liveCanvas && showPreviewChk.checked) P.preview(liveCanvas, last); });
+  gen?.addEventListener('click', generate);
+  chk?.addEventListener('change', ()=> { if (chk.checked && last) P.preview(live,last); else live.getContext('2d').clearRect(0,0,live.width,live.height); });
 
-  function download(name, blob) {
-    const a = document.createElement('a');
-    a.download = name; a.href = URL.createObjectURL(blob);
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+  function dl(name, blob) {
+    const a = document.createElement('a'); a.download = name; a.href = URL.createObjectURL(blob);
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 800);
   }
 
-  if (btnPNG) btnPNG.addEventListener('click', () => {
-    if (!liveCanvas || !last) return;
-    // redraw once at full resolution
-    const temp = document.createElement('canvas');
-    temp.width = last.stats.w; temp.height = last.stats.h;
-    P.preview(temp, last);
-    temp.toBlob((b)=> download('easbroidery.png', b), 'image/png');
-  });
-
-  if (btnSVG) btnSVG.addEventListener('click', () => {
+  bPNG?.addEventListener('click', ()=>{
     if (!last) return;
-    const svg = P.exportSVG(last);
-    download('easbroidery.svg', new Blob([svg], { type: 'image/svg+xml' }));
+    const c = document.createElement('canvas'); c.width = last.stats.w; c.height = last.stats.h;
+    P.preview(c,last); c.toBlob(b=> dl('stitches.png', b), 'image/png');
   });
-
-  if (btnJSON) btnJSON.addEventListener('click', () => {
-    if (!last) return;
-    const json = P.exportJSON(last);
-    download('stitches.json', new Blob([json], { type: 'application/json' }));
-  });
-
-  if (btnDST) btnDST.addEventListener('click', () => {
-    if (!last) return;
-    const u8 = P.exportDST(last);
-    download('easbroidery.dst', new Blob([u8], { type: 'application/octet-stream' }));
-  });
-
-  // run once if the page already has a mask
-  if (maskCanvas && maskCanvas.width && maskCanvas.height) generate();
+  bSVG?.addEventListener('click', ()=> last && dl('stitches.svg', new Blob([P.exportSVG(last)],{type:'image/svg+xml'})));
+  bJS ?.addEventListener('click', ()=> last && dl('stitches.json', new Blob([P.exportJSON(last)],{type:'application/json'})));
+  bDST?.addEventListener('click', ()=> last && dl('stitches.dst', new Blob([P.exportDST(last)],{type:'application/octet-stream'})));
 })();

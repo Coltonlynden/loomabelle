@@ -1,116 +1,130 @@
-// stitch generation + preview + exports
-window.EAS = window.EAS || {};
-EAS.paths = (function(){
-  function toMaskAlpha(mask){
-    const ctx=mask.getContext('2d',{willReadFrequently:true});
-    const {width:w,height:h}=mask;
-    const A=ctx.getImageData(0,0,w,h).data;
-    const M=new Uint8ClampedArray(w*h);
-    for(let i=0,j=0;i<M.length;i++,j+=4) M[i]=A[j+3];
-    return {w,h,M};
+/* Image & mask helpers + auto-highlight via ONNX Runtime Web (U2Netp).
+   Falls back to fast luminance/edge heuristic when model isn't available. */
+const Proc = (() => {
+  const S = {};
+
+  S.loadImageBitmap = async (fileOrURL) => {
+    const src = typeof fileOrURL === 'string'
+      ? fileOrURL
+      : URL.createObjectURL(fileOrURL);
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.decoding = 'async';
+    img.src = src;
+    await img.decode();
+    const bmp = await createImageBitmap(img);
+    if (typeof fileOrURL !== 'string') URL.revokeObjectURL(src);
+    return bmp;
+  };
+
+  // Draw bitmap into canvas, fit/contain
+  S.drawContain = (ctx, bmp) => {
+    const {canvas} = ctx;
+    const iw=bmp.width, ih=bmp.height, cw=canvas.width, ch=canvas.height;
+    const s=Math.min(cw/iw, ch/ih), w=iw*s, h=ih*s, x=(cw-w)/2, y=(ch-h)/2;
+    ctx.clearRect(0,0,cw,ch); ctx.drawImage(bmp, x,y,w,h);
+    return {x,y,w,h, scale:s};
+  };
+
+  // ONNX U2Netp: 320x320 -> 1x320x320 mask
+  let onnxSession=null;
+  async function ensureModel(){
+    if (onnxSession) return onnxSession;
+    if (!globalThis.ort) throw new Error('ORT missing');
+    const bytes = await fetch('models/u2netp.onnx').then(r=>r.arrayBuffer());
+    onnxSession = await ort.InferenceSession.create(bytes, {executionProviders:['wasm']});
+    return onnxSession;
   }
 
-  function scanHatch(mask, opt){
-    const {w,h,M}=toMaskAlpha(mask);
-    const ang=((opt.angleDeg||45)*Math.PI)/180, sp=Math.max(3,opt.hatchSpacing|0), step=Math.max(2,opt.step|0);
-    const cos=Math.cos(ang), sin=Math.sin(ang);
-    const bb={w,h};
-    // rotate canvas grid: iterate lines in rotated space and transform back to image space
-    const lines=[];
-    const diag=Math.hypot(w,h);
-    const count=Math.ceil((diag)/sp)+2;
-    const cx=w/2, cy=h/2;
-    for(let li=-count;li<=count;li++){
-      const t=li*sp;
-      const x1=cx + (-diag)*cos - (t)*sin;
-      const y1=cy + (-diag)*sin + (t)*cos;
-      const x2=cx + ( diag)*cos - (t)*sin;
-      const y2=cy + ( diag)*sin + (t)*cos;
-
-      // sample along the line, create small segments inside mask
-      const seg=[];
-      const len=Math.hypot(x2-x1,y2-y1);
-      const n=Math.ceil(len/step);
-      let inMask=false, run=[];
-      for(let i=0;i<=n;i++){
-        const x=x1+(x2-x1)*i/n|0, y=y1+(y2-y1)*i/n|0;
-        if(x<0||y<0||x>=w||y>=h){ if(inMask){seg.push(run); run=[]; inMask=false;} continue; }
-        const a=M[y*w+x];
-        if(a>10){ // inside
-          if(!inMask){ inMask=true; run=[[x,y]]; } else run.push([x,y]);
-        }else{
-          if(inMask){ seg.push(run); run=[]; inMask=false; }
+  S.autoMask = async (bmp, outW, outH) => {
+    try{
+      await ensureModel();
+      const W=320,H=320;
+      const off = new OffscreenCanvas(W,H);
+      const ox=off.getContext('2d', {willReadFrequently:true});
+      ox.drawImage(bmp,0,0,W,H);
+      const rgba = ox.getImageData(0,0,W,H).data;
+      // NHWC -> NCHW float32 normalized
+      const input = new Float32Array(1*3*H*W);
+      for(let i=0,p=0;i<rgba.length;i+=4, p++){
+        input[0*H*W + p] = rgba[i]  /255;  // R
+        input[1*H*W + p] = rgba[i+1]/255;  // G
+        input[2*H*W + p] = rgba[i+2]/255;  // B
+      }
+      const tensor = new ort.Tensor('float32', input, [1,3,H,W]);
+      const kv = await onnxSession.run({ 'input': tensor });
+      const pred = kv[Object.keys(kv)[0]].data; // 1*1*H*W
+      // upscale to outW/outH
+      const m = new Uint8ClampedArray(outW*outH);
+      // simple nearest upscale
+      for(let y=0;y<outH;y++){
+        for(let x=0;x<outW;x++){
+          const sx = Math.floor(x*outW/W);
+          const sy = Math.floor(y*outH/H);
+          const v = pred[sy*W+sx];
+          m[y*outW+x] = v>0.5 ? 255 : 0;
         }
       }
-      if(inMask) seg.push(run);
-      if(seg.length) lines.push(...seg);
+      return m;
+    }catch(err){
+      // Fallback: fast luminance + edge magnitude threshold
+      const off = new OffscreenCanvas(outW,outH);
+      const ox=off.getContext('2d',{willReadFrequently:true});
+      ox.drawImage(bmp,0,0,outW,outH);
+      const {data} = ox.getImageData(0,0,outW,outH);
+      const g = new Float32Array(outW*outH);
+      for(let i=0,p=0;i<data.length;i+=4,p++){
+        g[p] = 0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2];
+      }
+      // sobel magnitude
+      const mag = new Float32Array(outW*outH);
+      const kx=[-1,0,1,-2,0,2,-1,0,1], ky=[-1,-2,-1,0,0,0,1,2,1];
+      for(let y=1;y<outH-1;y++){
+        for(let x=1;x<outW-1;x++){
+          let sx=0, sy=0, q=0;
+          for(let j=-1;j<=1;j++){
+            for(let i=-1;i<=1;i++){
+              const v=g[(y+j)*outW+(x+i)];
+              sx+=v*kx[++q-1]; sy+=v*ky[q-1];
+            }
+          }
+          mag[y*outW+x]=Math.hypot(sx,sy);
+        }
+      }
+      // adaptive threshold
+      let sum=0; for(let i=0;i<mag.length;i++) sum+=mag[i];
+      const t=sum/mag.length*1.2;
+      const m = new Uint8ClampedArray(outW*outH);
+      for(let i=0;i<mag.length;i++) m[i]=mag[i]>t?255:0;
+      return m;
     }
-    const stitches=[]; let sx=0,sy=0;
-    for(let i=0;i<lines.length;i++){
-      const L=(i%2===0)?lines[i]:lines[i].slice().reverse();
-      for(let j=0;j<L.length;j++){
-        const [x,y]=L[j];
-        stitches.push([x,y]);
-        sx=x; sy=y;
+  };
+
+  // Flood fill for wand
+  S.floodFill = (imgData, x, y, tol=24) => {
+    const {width:w,height:h,data} = imgData;
+    const idx = (x,y)=>((y*w+x)<<2);
+    const target = data.slice(idx(x,y), idx(x,y)+3);
+    const out = new Uint8ClampedArray(w*h);
+    const Q=[[x,y]]; out[y*w+x]=1;
+    while(Q.length){
+      const [cx,cy]=Q.pop();
+      const nb=[[1,0],[-1,0],[0,1],[0,-1]];
+      for(const [dx,dy] of nb){
+        const nx=cx+dx, ny=cy+dy;
+        if(nx<0||ny<0||nx>=w||ny>=h) continue;
+        if(out[ny*w+nx]) continue;
+        const k=idx(nx,ny);
+        const dr=Math.abs(data[k]-target[0]),
+              dg=Math.abs(data[k+1]-target[1]),
+              db=Math.abs(data[k+2]-target[2]);
+        if(dr+dg+db<=tol*3){
+          out[ny*w+nx]=1; Q.push([nx,ny]);
+        }
       }
     }
-    return {stitches, stats:{w,h,count:stitches.length}};
-  }
-
-  function preview(canvas, res){
-    const ctx=canvas.getContext('2d');
-    canvas.width=res.stats.w; canvas.height=res.stats.h;
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    ctx.lineWidth=1; ctx.strokeStyle="#c66"; ctx.globalAlpha=0.9;
-    ctx.beginPath();
-    for(const [x,y] of res.stitches) ctx.lineTo(x+0.5,y+0.5);
-    ctx.stroke();
-  }
-
-  function toSVG(res){
-    const {w,h}=res.stats;
-    let d="M";
-    for(const [x,y] of res.stitches) d+=`${x},${y} `;
-    return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
-  <path d="${d}" fill="none" stroke="#c66" stroke-width="1"/>
-</svg>`;
-  }
-
-  // minimal DST writer from polyline
-  function toDST(res){
-    // Very small encoder, running stitch only. +/-121 limits per jump.
-    function encodeDelta(dx,dy){
-      const clamp = v => Math.max(-121, Math.min(121, v));
-      dx=clamp(dx); dy=clamp(dy);
-      // pack into 3 bytes per Tajima DST
-      const b1 = ((dx & 0x1F)     ) | ((dy & 0x07) << 5);
-      const b2 = ((dx & 0x20) >>5) | ((dx & 0xC0)>>3) | ((dy & 0x38)<<2);
-      const b3 = ((dy & 0xC0) >>6);
-      return [b1,b2,b3];
-    }
-    const bytes=[];
-    // header 512 bytes
-    const header = ("LA:STITCHES;"+Array(512).join(" ")).slice(0,512);
-    for(let i=0;i<512;i++) bytes.push(header.charCodeAt(i));
-    let px=res.stitches[0][0], py=res.stitches[0][y=1,0]; // dummy to appease lints
-    px=res.stitches[0][0]; py=res.stitches[0][1];
-    for(let i=1;i<res.stitches.length;i++){
-      const [x,y]=res.stitches[i];
-      const dx=x-px, dy=y-py;
-      bytes.push(...encodeDelta(dx,dy));
-      px=x; py=y;
-    }
-    // end command
-    bytes.push(0x00,0x00,0xF3);
-    return new Uint8Array(bytes);
-  }
-
-  return {
-    generate: scanHatch,
-    preview: preview,
-    exportSVG: toSVG,
-    exportJSON: (r)=>JSON.stringify(r),
-    exportDST: toDST
+    return out; // 0/1 mask
   };
+
+  return S;
 })();

@@ -1,40 +1,39 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Easbroidery — Features</title>
-  <link rel="icon" href="assets/logo.png">
-  <link rel="stylesheet" href="styles.css"/>
-  <script defer src="app.js"></script>
+  <link rel="stylesheet" href="styles.css" />
 </head>
-<body class="shell">
-<header class="site-header">
-  <a class="brand" href="index.html">
-    <img src="assets/logo.png" alt="Easbroidery logo"><span>EASBROIDERY</span>
-  </a>
-  <nav class="nav">
-    <a href="index.html" data-nav="home">Home</a>
-    <a href="features.html" data-nav="features" class="active">Features</a>
-    <a href="pricing.html" data-nav="pricing">Pricing</a>
-  </nav>
-</header>
+<body class="theme-peach">
+  <header class="site-header">
+    <a href="index.html" class="brand">
+      <img src="assets/logo.png" alt="Easbroidery" class="brand__logo" />
+      <span class="brand__name">EASBROIDERY</span>
+    </a>
+    <nav class="nav">
+      <a href="index.html">Home</a>
+      <a href="features.html">Features</a>
+      <a href="pricing.html">Pricing</a>
+    </nav>
+  </header>
 
-<main class="container">
-  <section class="card">
+  <main class="container">
     <h1>Features</h1>
-    <ul class="list">
-      <li>Auto-highlight subject (U-2-Net ONNX with smart fallback).</li>
-      <li>Brush tools: Paint / Erase / Wand, Undo / Redo, scroll-lock while editing.</li>
-      <li>Text tool (curved), drag to position, per-layer color.</li>
-      <li>Machine-style hoop preview with true physical sizing.</li>
-      <li>Stitch preview: running/fill hatch with direction overlay.</li>
-      <li>Export PNG, SVG, JSON, and DST.</li>
-      <li>Works locally in your browser — no uploads to a server.</li>
+    <ul class="feature-list">
+      <li>Upload any photo (on-device — nothing leaves your browser).</li>
+      <li>Auto-highlight subject + manual Paint / Erase / Magic-wand refine.</li>
+      <li>Curved, draggable text with live preview.</li>
+      <li>Embroidery-hoop preview (4×4, 5×7, 6×10, 8×12) with scale control.</li>
+      <li>Direction/angle control with overlay.</li>
+      <li>Export PNG, SVG, Stitches JSON, and experimental DST.</li>
+      <li>Mobile-friendly, responsive UI.</li>
     </ul>
-  </section>
-</main>
+  </main>
 
-<footer class="site-footer">© Easbroidery</footer>
+  <footer class="site-footer">
+    <small>© Easbroidery</small>
+  </footer>
 </body>
 </html>

@@ -1,4 +1,5 @@
-// Reserved for future off-main-thread stitch generation.
-// Current baseline computes stitches on main thread in script.preview.js.
-// Keeping this file so nothing else references a missing path.
-self.onmessage = () => { /* no-op */ };
+// Reserved for heavy ops (PES/DST writers). Runs client-side only.
+self.onmessage = e => {
+  const {type} = e.data || {};
+  if(type==='ping') postMessage({ok:true});
+};

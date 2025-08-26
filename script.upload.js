@@ -1,95 +1,125 @@
-/* Handles file input, zoom/pan, and keeps a master bitmap + mask */
-const EditorState = {
-  bmp:null,
-  zoom:1, offX:0, offY:0,
-  drawRect:{x:0,y:0,w:0,h:0,scale:1},
-  tool:'paint',
-  size:24,
-  mask:null, // Uint8ClampedArray (0/255)
-  history:[], redoStack:[],
-  textLayers:[],
-  directionAngle:45
-};
 
-document.addEventListener('DOMContentLoaded', () => {
+// --- NEW: Bind current editor file input and dispatch event to drawing layer ---
+(function(){
+  const fileInput = document.getElementById('fileInput');
+  if(!fileInput) return;
+  fileInput.addEventListener('change', (e)=>{
+    const f = e.target && e.target.files ? e.target.files[0] : null;
+    if(!f) return;
+    // Notify draw layer without direct coupling
+    try{
+      const ev = new CustomEvent('editor:file', { detail: { file: f } });
+      window.dispatchEvent(ev);
+    }catch(err){ /* ignore */ }
+  });
+})();
+// --- END NEW ---
+
+(function(){
   const file = document.getElementById('file');
-  const edit = document.getElementById('edit');
-  const ctx = edit.getContext('2d',{willReadFrequently:true});
+  const imgC = document.getElementById('imageCanvas');
+  const maskC= document.getElementById('maskCanvas');
+  const edgesC=document.getElementById('edgesCanvas');
+  const autoh = document.getElementById('btn-autoh');
+  const detail= document.getElementById('detail');
+  const zIn = document.getElementById('zin');
+  const zOut= document.getElementById('zout');
+  const zLab= document.getElementById('zlabel');
 
-  function redraw(){
-    ctx.save();
-    ctx.clearRect(0,0,edit.width,edit.height);
-    if (EditorState.bmp){
-      EditorState.drawRect = Proc.drawContain(ctx, EditorState.bmp);
-    } else {
-      ctx.fillStyle="#fff"; ctx.fillRect(0,0,edit.width,edit.height);
-    }
-    drawMaskOverlay(ctx);
-    drawTextLayers(ctx);
-    ctx.restore();
+  if(!file||!imgC||!maskC) return;
+
+  const S={
+    img:null,w:0,h:0,zoom:1, panX:0,panY:0, dragging:false, lastX:0,lastY:0
+  };
+
+  function fitCanvas(w,h){
+    imgC.width=w; imgC.height=h;
+    maskC.width=w; maskC.height=h;
+    edgesC.width=w; edgesC.height=h;
   }
 
-  file.addEventListener('change', async e=>{
-    const f = e.target.files[0];
-    if (!f) return;
-    EditorState.bmp = await Proc.loadImageBitmap(f);
-    // init mask for canvas size
-    EditorState.mask = new Uint8ClampedArray(edit.width*edit.height);
-    EditorState.history=[]; EditorState.redoStack=[];
-    redraw();
+  function draw(){
+    if(!S.img) return;
+    const g=imgC.getContext('2d'); g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,imgC.width,imgC.height);
+    g.save();
+    g.translate(S.panX,S.panY);
+    g.scale(S.zoom,S.zoom);
+    g.drawImage(S.img,0,0,S.w,S.h);
+    g.restore();
+  }
+
+  function loadImage(fileObj){
+    const url=URL.createObjectURL(fileObj);
+    const img=new Image(); img.onload=()=>{
+      S.img=img; S.w=img.width; S.h=img.height;
+      fitCanvas(S.w,S.h);
+      S.zoom=1; S.panX=0; S.panY=0; zLab.textContent='100%';
+      const m=maskC.getContext('2d'); m.clearRect(0,0,maskC.width,maskC.height);
+      draw(); detectEdges();
+      URL.revokeObjectURL(url);
+    };
+    img.src=url;
+  }
+
+  function detectEdges(){
+    const g=edgesC.getContext('2d',{willReadFrequently:true});
+    const base=imgC.getContext('2d').getImageData(0,0,imgC.width,imgC.height);
+    const {width:w,height:h,data:A}=base;
+    const G=new Uint8ClampedArray(w*h);
+    // Sobel
+    function at(x,y,c=0){const i=(y*w+x)*4; return A[i+c];}
+    for(let y=1;y<h-1;y++){
+      for(let x=1;x<w-1;x++){
+        const gx= -at(x-1,y-1)+at(x+1,y-1) + -2*at(x-1,y)+2*at(x+1,y) + -at(x-1,y+1)+at(x+1,y+1);
+        const gy= -at(x-1,y-1)-2*at(x,y-1)-at(x+1,y-1) + at(x-1,y+1)+2*at(x,y+1)+at(x+1,y+1);
+        G[y*w+x]= Math.min(255, Math.hypot(gx,gy)|0);
+      }
+    }
+    const img=g.createImageData(w,h);
+    for(let i=0;i<w*h;i++){
+      const v=G[i]; img.data[i*4+0]=img.data[i*4+1]=img.data[i*4+2]=v; img.data[i*4+3]=80;
+    }
+    g.putImageData(img,0,0);
+  }
+
+  file.addEventListener('change', e=>{
+    const f=e.target.files&&e.target.files[0]; if(f) loadImage(f);
+  });
+
+  autoh?.addEventListener('click', ()=>{
+    if(!S.img) return;
+    // magic-wand like from image center, tolerance tied to detail slider
+    const g=imgC.getContext('2d',{willReadFrequently:true});
+    const {width:w,height:h}=imgC;
+    const src=g.getImageData(0,0,w,h); const A=src.data;
+    const m=maskC.getContext('2d'); const M=m.getImageData(0,0,w,h);
+    const B=M.data;
+
+    const cx=w>>1, cy=h>>1, tol=20+Math.floor(80*(1-detail.value));
+    const idx=(x,y)=> (y*w+x)*4;
+    const seed=idx(cx,cy);
+    const R=A[seed], G=A[seed+1], Bl=A[seed+2];
+
+    const vis=new Uint8Array(w*h);
+    const q=[[cx,cy]]; vis[cy*w+cx]=1;
+
+    while(q.length){
+      const [x,y]=q.pop(); const j=idx(x,y);
+      const dr=Math.abs(A[j]-R)+Math.abs(A[j+1]-G)+Math.abs(A[j+2]-Bl);
+      if(dr<tol*3){ B[j+3]=180; // mark
+        if(x>0 && !vis[y*w+x-1]){vis[y*w+x-1]=1; q.push([x-1,y]);}
+        if(x<w-1 && !vis[y*w+x+1]){vis[y*w+x+1]=1; q.push([x+1,y]);}
+        if(y>0 && !vis[(y-1)*w+x]){vis[(y-1)*w+x]=1; q.push([x,y-1]);}
+        if(y<h-1 && !vis[(y+1)*w+x]){vis[(y+1)*w+x]=1; q.push([x,y+1]);}
+      }
+    }
+    m.putImageData(M,0,0);
   });
 
   // zoom/pan
-  const zoomPct = document.getElementById('zoomPct');
-  document.getElementById('zoomIn').onclick = ()=>{EditorState.zoom=Math.min(3,EditorState.zoom+0.1); zoomPct.textContent=Math.round(EditorState.zoom*100)+'%';};
-  document.getElementById('zoomOut').onclick= ()=>{EditorState.zoom=Math.max(0.5,EditorState.zoom-0.1); zoomPct.textContent=Math.round(EditorState.zoom*100)+'%';};
-
-  // expose redraw for other modules
-  window.__redraw = redraw;
-  redraw();
-});
-
-function drawMaskOverlay(ctx){
-  const showMask = document.getElementById('showMask')?.checked;
-  const showEdges = document.getElementById('showEdges')?.checked;
-  const {canvas} = ctx;
-  if (!EditorState.mask || !showMask) return;
-  const w=canvas.width,h=canvas.height;
-  const id = ctx.getImageData(0,0,w,h);
-  for (let i=0,p=0;i<id.data.length;i+=4,p++){
-    if (EditorState.mask[p]===255){
-      id.data[i+0] = id.data[i+0]*.5 + 220*.5;
-      id.data[i+1] = id.data[i+1]*.5 + 120*.5;
-      id.data[i+2] = id.data[i+2]*.5 + 120*.5;
-    }
-  }
-  ctx.putImageData(id,0,0);
-  if (showEdges){
-    ctx.strokeStyle='rgba(0,0,0,.25)'; ctx.lineWidth=1;
-    ctx.setLineDash([6,4]);
-    // quick edge contour
-    const w4=w<<0; ctx.beginPath();
-    for(let y=1;y<h-1;y++){
-      for(let x=1;x<w-1;x++){
-        const p=y*w+x;
-        if (EditorState.mask[p]!==EditorState.mask[p+1]){ ctx.moveTo(x,y); ctx.lineTo(x+1,y); }
-        if (EditorState.mask[p]!==EditorState.mask[p+w]){ ctx.moveTo(x,y); ctx.lineTo(x,y+1); }
-      }
-    }
-    ctx.stroke(); ctx.setLineDash([]);
-  }
-}
-
-function drawTextLayers(ctx){
-  if (!EditorState.textLayers.length) return;
-  ctx.save();
-  ctx.fillStyle='#000'; ctx.globalAlpha=.8; ctx.textAlign='center';
-  for (const t of EditorState.textLayers){
-    ctx.font = `${t.size}px serif`;
-    ctx.translate(t.x, t.y);
-    if (t.angle) ctx.rotate(t.angle*Math.PI/180);
-    ctx.fillText(t.text, 0, 0);
-    ctx.setTransform(1,0,0,1,0,0);
-  }
-  ctx.restore();
-}
+  zIn?.addEventListener('click', ()=>{S.zoom=Math.min(8,S.zoom*1.25); zLab.textContent=((S.zoom*100)|0)+'%'; draw();});
+  zOut?.addEventListener('click', ()=>{S.zoom=Math.max(0.25,S.zoom/1.25); zLab.textContent=((S.zoom*100)|0)+'%'; draw();});
+  imgC.addEventListener('pointerdown', e=>{ if(!e.altKey) return; S.dragging=true; S.lastX=e.clientX; S.lastY=e.clientY; imgC.setPointerCapture(e.pointerId); });
+  imgC.addEventListener('pointermove', e=>{ if(!S.dragging) return; S.panX+=e.clientX-S.lastX; S.panY+=e.clientY-S.lastY; S.lastX=e.clientX; S.lastY=e.clientY; draw();});
+  ['pointerup','pointercancel','pointerleave'].forEach(ev=> imgC.addEventListener(ev, ()=> S.dragging=false));
+})();

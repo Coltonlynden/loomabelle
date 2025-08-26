@@ -26,12 +26,8 @@
         <div class="opts__grid">
           <label>Machine
             <select id="machine">
-              <option>Brother</option>
-              <option>Baby Lock</option>
-              <option>Janome</option>
-              <option>Bernina</option>
-              <option>Pfaff</option>
-              <option>Husqvarna Viking</option>
+              <option>Brother</option><option>Baby Lock</option><option>Janome</option>
+              <option>Bernina</option><option>Pfaff</option><option>Husqvarna Viking</option>
             </select>
           </label>
           <label>Hoop size
@@ -63,9 +59,9 @@
       </div>
       <p class="hint">Tip: Alt/Option + drag to pan when zoomed.</p>
 
-      <!-- tools ATTACHED to the edit box -->
+      <!-- tools attached -->
       <div class="tools-inline card">
-        <div class="seg">
+        <div class="seg" id="modeTabs">
           <button class="chip chip--seg is-active" data-mode="mask">Mask</button>
           <button class="chip chip--seg" data-mode="text">Text</button>
           <button class="chip chip--seg" data-mode="dir">Direction</button>
@@ -108,16 +104,39 @@
         </section>
       </div>
 
-      <!-- edit canvas -->
-      <div class="canvas-wrap" id="canvasWrap" aria-label="editing area">
+      <div class="canvas-wrap" id="canvasWrap">
         <canvas id="imgCanvas"></canvas>
         <canvas id="maskCanvas"></canvas>
         <canvas id="textCanvas"></canvas>
       </div>
 
       <h2 class="card__title mt">2. Live preview</h2>
-      <div class="preview-hoop" id="previewFrame">
-        <canvas id="previewCanvas"></canvas>
+
+      <!-- cute machine hoop frame (SVG) with canvas inside -->
+      <div class="hoop">
+        <svg class="hoop__svg" viewBox="0 0 1200 800" aria-hidden="true">
+          <!-- outer rail -->
+          <rect x="30" y="30" width="1140" height="740" rx="70" ry="70" fill="none" stroke="#5f5f5f" stroke-width="28"/>
+          <!-- inner rail -->
+          <rect x="90" y="90" width="1020" height="620" rx="50" ry="50" fill="none" stroke="#bdbdbd" stroke-width="12"/>
+          <!-- tick marks -->
+          <g stroke="#9a9a9a" stroke-width="2" opacity=".7">
+            <line x1="90" y1="200" x2="1110" y2="200"/>
+            <line x1="90" y1="400" x2="1110" y2="400"/>
+            <line x1="90" y1="600" x2="1110" y2="600"/>
+            <line x1="300" y1="90" x2="300" y2="710"/>
+            <line x1="600" y1="90" x2="600" y2="710"/>
+            <line x1="900" y1="90" x2="900" y2="710"/>
+          </g>
+          <!-- clamp (cute) -->
+          <g transform="translate(1080,360)">
+            <rect x="-26" y="-60" width="52" height="120" rx="12" fill="#d7d7d7" stroke="#8b8b8b" stroke-width="4"/>
+            <circle r="20" fill="#f4c7bf" stroke="#8b8b8b" stroke-width="4"/>
+          </g>
+        </svg>
+        <div class="hoop__inner">
+          <canvas id="previewCanvas"></canvas>
+        </div>
       </div>
     </section>
   </main>
@@ -136,6 +155,8 @@
     </div>
   </footer>
 
-  <script type="module" src="script.preview.js"></script>
+  <!-- IMPORTANT: load scripts as plain scripts so all browsers work -->
+  <script src="script.draw.js"></script>
+  <script src="script.preview.js"></script>
 </body>
 </html>

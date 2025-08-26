@@ -1,132 +1,108 @@
-/* Restored upload + scaling + autohighlight plumbing */
-(function () {
-  const imgEl = document.getElementById('imageCanvas');
-  const maskEl = document.getElementById('maskCanvas');
-  const edgeEl = document.getElementById('edgesCanvas');
-
+(function(){
   const file = document.getElementById('file');
-  const detail = document.getElementById('detail');
-  const autoBtn = document.getElementById('btn-autoh');
+  const imgC = document.getElementById('imageCanvas');
+  const maskC= document.getElementById('maskCanvas');
+  const edgesC=document.getElementById('edgesCanvas');
+  const autoh = document.getElementById('btn-autoh');
+  const detail= document.getElementById('detail');
+  const zIn = document.getElementById('zin');
+  const zOut= document.getElementById('zout');
+  const zLab= document.getElementById('zlabel');
 
-  const zOut = document.getElementById('zout');
-  const zIn  = document.getElementById('zin');
-  const zLabel = document.getElementById('zlabel');
+  if(!file||!imgC||!maskC) return;
 
-  if (!imgEl) return;
+  const S={
+    img:null,w:0,h:0,zoom:1, panX:0,panY:0, dragging:false, lastX:0,lastY:0
+  };
 
-  const imgCtx = imgEl.getContext('2d');
-  const maskCtx = maskEl.getContext('2d', { willReadFrequently: true });
-  const edgeCtx = edgeEl.getContext('2d');
-
-  let img = new Image();
-  let zoom = 1, panX = 0, panY = 0, isPanning = false;
-
-  function fitCanvasToBox() {
-    const box = imgEl.parentElement.getBoundingClientRect();
-    [imgEl, maskEl, edgeEl].forEach(c => { c.width = box.width; c.height = box.height; });
+  function fitCanvas(w,h){
+    imgC.width=w; imgC.height=h;
+    maskC.width=w; maskC.height=h;
+    edgesC.width=w; edgesC.height=h;
   }
 
-  function drawImage() {
-    imgCtx.setTransform(1,0,0,1,0,0);
-    imgCtx.clearRect(0,0,imgEl.width,imgEl.height);
-
-    if (!img.naturalWidth) return;
-    const iw = img.naturalWidth, ih = img.naturalHeight;
-    const k = Math.min(imgEl.width/iw, imgEl.height/ih);
-    const w = iw*k*zoom, h = ih*k*zoom;
-    const x = (imgEl.width - w)/2 + panX, y = (imgEl.height - h)/2 + panY;
-
-    imgCtx.imageSmoothingEnabled = true;
-    imgCtx.imageSmoothingQuality = 'high';
-    imgCtx.drawImage(img, x, y, w, h);
+  function draw(){
+    if(!S.img) return;
+    const g=imgC.getContext('2d'); g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,imgC.width,imgC.height);
+    g.save();
+    g.translate(S.panX,S.panY);
+    g.scale(S.zoom,S.zoom);
+    g.drawImage(S.img,0,0,S.w,S.h);
+    g.restore();
   }
 
-  function clearMask() {
-    maskCtx.clearRect(0,0,maskEl.width,maskEl.height);
+  function loadImage(fileObj){
+    const url=URL.createObjectURL(fileObj);
+    const img=new Image(); img.onload=()=>{
+      S.img=img; S.w=img.width; S.h=img.height;
+      fitCanvas(S.w,S.h);
+      S.zoom=1; S.panX=0; S.panY=0; zLab.textContent='100%';
+      const m=maskC.getContext('2d'); m.clearRect(0,0,maskC.width,maskC.height);
+      draw(); detectEdges();
+      URL.revokeObjectURL(url);
+    };
+    img.src=url;
   }
 
-  function computeEdges() {
-    edgeCtx.clearRect(0,0,edgeEl.width,edgeEl.height);
-    // light diagonal texture (visual only, like original)
-    const pat = edgeCtx.createLinearGradient(0,0,edgeEl.width,edgeEl.height);
-    pat.addColorStop(0,'rgba(97,70,61,.08)');
-    pat.addColorStop(1,'rgba(97,70,61,0)');
-    edgeCtx.fillStyle = pat;
-    edgeCtx.fillRect(0,0,edgeEl.width,edgeEl.height);
-  }
-
-  function refresh() {
-    fitCanvasToBox();
-    drawImage();
-    if (document.getElementById('showMask')?.checked) maskEl.style.opacity = 1; else maskEl.style.opacity = 0;
-    if (document.getElementById('showEdges')?.checked) edgeEl.classList.remove('hide'); else edgeEl.classList.add('hide');
-  }
-
-  // zoom / pan
-  function setZoom(z){ zoom = Math.max(.25, Math.min(4, z)); zLabel.textContent = `${Math.round(zoom*100)}%`; drawImage(); }
-  zOut?.addEventListener('click', ()=> setZoom(zoom*0.85));
-  zIn?.addEventListener('click',  ()=> setZoom(zoom*1.15));
-
-  imgEl.parentElement.addEventListener('pointerdown',(e)=>{ if (e.altKey){ isPanning=true; imgEl.setPointerCapture(e.pointerId); }});
-  imgEl.parentElement.addEventListener('pointerup',()=>{ isPanning=false; });
-  imgEl.parentElement.addEventListener('pointermove',(e)=>{ if(!isPanning) return; panX += e.movementX; panY += e.movementY; drawImage(); });
-
-  // file load
-  file?.addEventListener('change', (e)=>{
-    const f = e.target.files && e.target.files[0];
-    if (!f) return;
-    const url = URL.createObjectURL(f);
-    img = new Image();
-    img.onload = ()=>{ URL.revokeObjectURL(url); setZoom(1); panX=panY=0; refresh(); };
-    img.src = url;
-  });
-
-  // simple subject autohighlight using luminance + guided threshold
-  autoBtn?.addEventListener('click', ()=>{
-    if (!imgEl.width) return;
-    // draw current image to a temp canvas to sample pixels
-    const t = document.createElement('canvas');
-    t.width = maskEl.width; t.height = maskEl.height;
-    const tctx = t.getContext('2d');
-    tctx.drawImage(imgEl,0,0);
-    const { data } = tctx.getImageData(0,0,t.width,t.height);
-
-    const D = Number(detail?.value || 0.35);
-    // compute local mean luminance; pick a threshold and expand a bit
-    const alpha = new Uint8ClampedArray(t.width*t.height);
-    for (let y=0;y<t.height;y++){
-      for (let x=0;x<t.width;x++){
-        const i = (y*t.width + x)*4;
-        const L = 0.2126*data[i] + 0.7152*data[i+1] + 0.0722*data[i+2];
-        alpha[y*t.width+x] = L;
+  function detectEdges(){
+    const g=edgesC.getContext('2d',{willReadFrequently:true});
+    const base=imgC.getContext('2d').getImageData(0,0,imgC.width,imgC.height);
+    const {width:w,height:h,data:A}=base;
+    const G=new Uint8ClampedArray(w*h);
+    // Sobel
+    function at(x,y,c=0){const i=(y*w+x)*4; return A[i+c];}
+    for(let y=1;y<h-1;y++){
+      for(let x=1;x<w-1;x++){
+        const gx= -at(x-1,y-1)+at(x+1,y-1) + -2*at(x-1,y)+2*at(x+1,y) + -at(x-1,y+1)+at(x+1,y+1);
+        const gy= -at(x-1,y-1)-2*at(x,y-1)-at(x+1,y-1) + at(x-1,y+1)+2*at(x,y+1)+at(x+1,y+1);
+        G[y*w+x]= Math.min(255, Math.hypot(gx,gy)|0);
       }
     }
-    // Otsu-ish threshold
-    let hist = new Array(256).fill(0);
-    for (let i=0;i<alpha.length;i++) hist[alpha[i]|0]++;
-    let sum=0, sumB=0, wB=0, maximum=0, thresh=127, total=alpha.length;
-    for(let i=0;i<256;i++) sum += i*hist[i];
-    for(let i=0;i<256;i++){
-      wB += hist[i]; if(!wB) continue;
-      const wF = total - wB; if(!wF) break;
-      sumB += i*hist[i];
-      const mB = sumB / wB, mF = (sum - sumB) / wF;
-      const between = wB*wF*(mB-mF)*(mB-mF);
-      if (between > maximum){ maximum = between; thresh = i; }
+    const img=g.createImageData(w,h);
+    for(let i=0;i<w*h;i++){
+      const v=G[i]; img.data[i*4+0]=img.data[i*4+1]=img.data[i*4+2]=v; img.data[i*4+3]=80;
     }
-    // draw mask with pleasant blush tint
-    maskCtx.clearRect(0,0,maskEl.width,maskEl.height);
-    maskCtx.fillStyle = 'rgba(217,137,131,0.35)';
-    maskCtx.beginPath();
-    for (let y=0;y<t.height;y++){
-      for (let x=0;x<t.width;x++){
-        const a = alpha[y*t.width+x] > (thresh*(0.85+0.3*D));
-        if (a) maskCtx.fillRect(x,y,1,1);
-      }
-    }
+    g.putImageData(img,0,0);
+  }
+
+  file.addEventListener('change', e=>{
+    const f=e.target.files&&e.target.files[0]; if(f) loadImage(f);
   });
 
-  // first layout
-  window.addEventListener('resize', refresh);
-  refresh(); computeEdges();
+  autoh?.addEventListener('click', ()=>{
+    if(!S.img) return;
+    // magic-wand like from image center, tolerance tied to detail slider
+    const g=imgC.getContext('2d',{willReadFrequently:true});
+    const {width:w,height:h}=imgC;
+    const src=g.getImageData(0,0,w,h); const A=src.data;
+    const m=maskC.getContext('2d'); const M=m.getImageData(0,0,w,h);
+    const B=M.data;
+
+    const cx=w>>1, cy=h>>1, tol=20+Math.floor(80*(1-detail.value));
+    const idx=(x,y)=> (y*w+x)*4;
+    const seed=idx(cx,cy);
+    const R=A[seed], G=A[seed+1], Bl=A[seed+2];
+
+    const vis=new Uint8Array(w*h);
+    const q=[[cx,cy]]; vis[cy*w+cx]=1;
+
+    while(q.length){
+      const [x,y]=q.pop(); const j=idx(x,y);
+      const dr=Math.abs(A[j]-R)+Math.abs(A[j+1]-G)+Math.abs(A[j+2]-Bl);
+      if(dr<tol*3){ B[j+3]=180; // mark
+        if(x>0 && !vis[y*w+x-1]){vis[y*w+x-1]=1; q.push([x-1,y]);}
+        if(x<w-1 && !vis[y*w+x+1]){vis[y*w+x+1]=1; q.push([x+1,y]);}
+        if(y>0 && !vis[(y-1)*w+x]){vis[(y-1)*w+x]=1; q.push([x,y-1]);}
+        if(y<h-1 && !vis[(y+1)*w+x]){vis[(y+1)*w+x]=1; q.push([x,y+1]);}
+      }
+    }
+    m.putImageData(M,0,0);
+  });
+
+  // zoom/pan
+  zIn?.addEventListener('click', ()=>{S.zoom=Math.min(8,S.zoom*1.25); zLab.textContent=((S.zoom*100)|0)+'%'; draw();});
+  zOut?.addEventListener('click', ()=>{S.zoom=Math.max(0.25,S.zoom/1.25); zLab.textContent=((S.zoom*100)|0)+'%'; draw();});
+  imgC.addEventListener('pointerdown', e=>{ if(!e.altKey) return; S.dragging=true; S.lastX=e.clientX; S.lastY=e.clientY; imgC.setPointerCapture(e.pointerId); });
+  imgC.addEventListener('pointermove', e=>{ if(!S.dragging) return; S.panX+=e.clientX-S.lastX; S.panY+=e.clientY-S.lastY; S.lastX=e.clientX; S.lastY=e.clientY; draw();});
+  ['pointerup','pointercancel','pointerleave'].forEach(ev=> imgC.addEventListener(ev, ()=> S.dragging=false));
 })();

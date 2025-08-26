@@ -1,100 +1,186 @@
-import {state, getImageData, buildPalette, hatchStitches, writeSVG, writeDST} from './processing.js';
+/* Stitch preview + exports + hoop sizing */
+const Hoop = {
+  sizeMM:[130,180], // default 5x7
+  setByKey(key){
+    const [w,h]=key.split('x').map(Number);
+    this.sizeMM=[w,h];
+    drawPreviewHoop();
+  }
+};
 
-const $ = s=>document.querySelector(s);
-const pCanvas = $('#previewCanvas');
-const pctx = pCanvas.getContext('2d',{willReadFrequently:true});
-
-const kSlider = $('#kColors'), kOut = $('#kOut');
-kSlider.oninput = ()=>{ kOut.textContent=kSlider.value; };
-
-let stitches=[];
-
-function drawHoopBG(){
-  // grid for scale
-  pctx.clearRect(0,0,pCanvas.width,pCanvas.height);
-  const W=pCanvas.width,H=pCanvas.height;
-  pctx.fillStyle='#fff'; pctx.fillRect(20,20,W-40,H-40);
-  pctx.strokeStyle='#eadbd0'; pctx.lineWidth=1;
-  for(let y=40;y<H-40;y+=20){ pctx.beginPath(); pctx.moveTo(40,y); pctx.lineTo(W-40,y); pctx.stroke(); }
-  for(let x=40;x<W-40;x+=20){ pctx.beginPath(); pctx.moveTo(x,40); pctx.lineTo(x,H-40); pctx.stroke(); }
-}
-
-function rebuildPalette(){
-  const ec = document.getElementById('editCanvas');
-  const id = ec.getContext('2d').getImageData(0,0,ec.width,ec.height);
-  buildPalette(id, +kSlider.value);
-  const sw = $('#swatches');
-  sw.innerHTML='';
-  state.palette.forEach((rgb,i)=>{
-    const b=document.createElement('button');
-    b.style.background=`rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
-    b.title=`#${rgb.map(v=>v.toString(16).padStart(2,'0')).join('')}`;
-    b.onclick=()=>{ state.enabled[i]=!state.enabled[i]; b.classList.toggle('off', !state.enabled[i]); };
-    sw.appendChild(b);
+document.addEventListener('DOMContentLoaded', ()=>{
+  document.getElementById('hoopSelect').addEventListener('change', e=>{
+    Hoop.setByKey(e.target.value);
   });
-  document.getElementById('palette').hidden=false;
-}
-$('#recompute').onclick=rebuildPalette;
-window.addEventListener('palette:ready', rebuildPalette);
+  document.getElementById('showDir').addEventListener('change', drawPreviewHoop);
+  document.getElementById('angle').addEventListener('input', e=>{
+    EditorState.directionAngle = +e.target.value; drawPreviewHoop();
+  });
 
-// Generate
-$('#make').onclick=()=>{
-  if(!state.img || !state.mask) return;
-  const ec = document.getElementById('editCanvas');
-  const W=ec.width, H=ec.height;
-  drawHoopBG();
-  // optional direction overlay
-  if($('#dirOverlay').checked){
-    const a = +document.getElementById('angle').value;
-    pctx.save();
-    pctx.globalAlpha=.12; pctx.translate(20,20);
-    pctx.fillStyle='#333';
-    const step=24;
-    for(let y=0;y<H;y+=step){
-      pctx.save(); pctx.translate(0,y); pctx.rotate(a*Math.PI/180);
-      pctx.fillRect(-W, -1, W*2, 2);
-      pctx.restore();
+  document.getElementById('gen').onclick = generateStitches;
+  document.getElementById('savePng').onclick = ()=>saveCanvas('preview','preview.png');
+  document.getElementById('saveSvg').onclick = saveSVG;
+  document.getElementById('saveJson').onclick = saveJSON;
+  document.getElementById('saveDst').onclick = saveDST;
+
+  Hoop.setByKey(document.getElementById('hoopSelect').value);
+});
+
+function drawPreviewHoop(){
+  const c = document.getElementById('preview');
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0,0,c.width,c.height);
+  // background grid for scale feel
+  ctx.fillStyle='#fff'; ctx.fillRect(0,0,c.width,c.height);
+  ctx.strokeStyle='#ead4c8'; ctx.lineWidth=1;
+  for(let x=0;x<c.width;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,c.height);ctx.stroke();}
+  for(let y=0;y<c.height;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(c.width,y);ctx.stroke();}
+
+  // mask preview underlay
+  if (EditorState.bmp){
+    const r = Proc.drawContain(ctx, EditorState.bmp);
+    if (document.getElementById('showStitch').checked){
+      // translucent to emphasize stitches
+      ctx.fillStyle='rgba(255,255,255,.7)';
+      ctx.fillRect(0,0,c.width,c.height);
     }
-    pctx.restore();
   }
-  // stitches
-  const spacingMM = +document.getElementById('spacing').value;
-  // convert mm to px inside preview by simple scale assumption (pCanvas draws 1:1 with edit canvas inside frame)
-  const spacingPx = Math.max(1, Math.round(spacingMM * 3)); // approx 3 px per mm
-  const ang = +document.getElementById('angle').value;
-  stitches = hatchStitches(state.mask, W, H, spacingPx, ang, state.dirFld);
 
-  // draw simulation
-  pctx.save(); pctx.translate(20,20);
-  pctx.strokeStyle='#3b3b3b'; pctx.lineWidth=1;
-  pctx.beginPath();
-  for(let i=0;i<stitches.length;i++){
-    const [x,y]=stitches[i];
-    if(i===0) pctx.moveTo(x,y); else pctx.lineTo(x,y);
+  // optional direction overlay
+  if (document.getElementById('showDir').checked){
+    ctx.save();
+    ctx.globalAlpha=.2; ctx.strokeStyle='#333'; ctx.lineWidth=1;
+    const ang = (EditorState.directionAngle||45)*Math.PI/180;
+    const d = Math.cos(ang), e = Math.sin(ang);
+    for(let t=-c.height;t<c.width+ c.height; t+=20){
+      ctx.beginPath();
+      ctx.moveTo(t,0); ctx.lineTo(t+e*c.height, d*c.height); ctx.stroke();
+    }
+    ctx.restore();
   }
-  pctx.stroke();
-  pctx.restore();
-};
+}
 
-// downloads
-$('#dlPNG').onclick=()=>{
-  const a=document.createElement('a');
-  a.download='preview.png';
-  a.href=pCanvas.toDataURL('image/png');
-  a.click();
-};
-$('#dlSVG').onclick=()=>{
-  const ec = document.getElementById('editCanvas');
-  const svg = writeSVG(stitches, ec.width, ec.height);
-  const a=document.createElement('a'); a.download='stitches.svg';
-  a.href=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'})); a.click();
-};
-$('#dlJSON').onclick=()=>{
-  const a=document.createElement('a'); a.download='stitches.json';
-  a.href=URL.createObjectURL(new Blob([JSON.stringify({stitches}),{type:'application/json'}])); a.click();
-};
-$('#dlDST').onclick=()=>{
-  const bin = writeDST(stitches);
-  const a=document.createElement('a'); a.download='stitches.dst';
-  a.href=URL.createObjectURL(new Blob([bin],{type:'application/octet-stream'})); a.click();
-};
+async function generateStitches(){
+  const c = document.getElementById('preview');
+  const ctx = c.getContext('2d');
+  drawPreviewHoop();
+
+  if (!EditorState.mask){
+    // no mask -> nothing to stitch
+    return;
+  }
+  const mmSpacing = Math.max(0.6, +document.getElementById('spacing').value || 1.6);
+  const pxPerMM = c.width / (Hoop.sizeMM[0] * 1.2); // add a safety margin
+  const spacing = Math.max(1, Math.floor(pxPerMM*mmSpacing));
+  const ang = (EditorState.directionAngle||45)*Math.PI/180;
+
+  // simple hatch generator
+  const w=c.width,h=c.height, m=EditorState.mask;
+  const lines=[]; // array of point arrays
+  const dirX=Math.cos(ang), dirY=Math.sin(ang);
+  for(let y=-h;y<h;y+=spacing){
+    const L=[];
+    for(let x=-w;x<2*w;x+=2){
+      // parametric line point
+      const px=Math.floor(x), py=Math.floor(y + (x*dirY));
+      // keep inside + masked
+      if(px>=0&&py>=0&&px<w&&py<h && m[py*w+px]===255){
+        L.push([px,py]);
+      }else if (L.length){
+        lines.push(L.slice()); L.length=0;
+      }
+    }
+    if (L.length) lines.push(L);
+  }
+
+  // draw lines
+  ctx.save(); ctx.strokeStyle='#333'; ctx.lineWidth=1;
+  for(const seg of lines){
+    ctx.beginPath();
+    ctx.moveTo(seg[0][0], seg[0][1]);
+    for(let i=1;i<seg.length;i++) ctx.lineTo(seg[i][0], seg[i][1]);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // store for export
+  window.__stitches = lines;
+}
+
+function saveCanvas(id, name){
+  const url = document.getElementById(id).toDataURL('image/png');
+  const a=document.createElement('a'); a.href=url; a.download=name; a.click();
+}
+
+function saveJSON(){
+  const data = {points: window.__stitches||[]};
+  const blob = new Blob([JSON.stringify(data)], {type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='stitches.json'; a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function saveSVG(){
+  const stitches = window.__stitches||[];
+  const c = document.getElementById('preview');
+  let d = '';
+  for(const seg of stitches){
+    d += 'M'+seg[0][0]+' '+seg[0][1];
+    for(let i=1;i<seg.length;i++){ const p=seg[i]; d+=' L'+p[0]+' '+p[1]; }
+    d += ' ';
+  }
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${c.width}" height="${c.height}" viewBox="0 0 ${c.width} ${c.height}">
+    <path d="${d.trim()}" fill="none" stroke="#000" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+  </svg>`;
+  const blob = new Blob([svg], {type:'image/svg+xml'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='stitches.svg'; a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// minimal DST writer (single color, running stitches)
+function saveDST(){
+  const stitches = window.__stitches||[];
+  const pts=[];
+  for(const seg of stitches) for(const p of seg) pts.push(p);
+
+  if (!pts.length){ alert('Generate stitches first.'); return; }
+
+  // normalize to DST coordinate space (0.1mm units, +/-121 step)
+  const c = document.getElementById('preview');
+  const widthMM = Hoop.sizeMM[0];
+  const pxPerMM = c.width / widthMM;
+  const scale = 10/pxPerMM; // px -> 0.1mm
+
+  function clamp7(v){ return Math.max(-121, Math.min(121, v|0)); }
+
+  let x0=pts[0][0], y0=pts[0][1];
+  const bytes=[];
+  for(const [x,y] of pts){
+    let dx = clamp7((x-x0)*scale);
+    let dy = clamp7((y-y0)*scale);
+    x0 = x0 + dx/scale; y0 = y0 + dy/scale;
+    // encode 3-byte DST stitch
+    const b1 = ((dx & 0x1F)      ) |
+               ((dx & 0x20)?0x20:0) |
+               ((dy & 0x01)?0x80:0) |
+               ((dy & 0x02)?0x01:0);
+    const b2 = ((dy & 0x1C)<<3) |
+               ((dx & 0x40)?0x04:0) |
+               ((dy & 0x20)?0x08:0) |
+               ((dx & 0x02)?0x80:0);
+    const b3 = ((dx & 0x04)?0x20:0) |
+               ((dy & 0x40)?0x02:0) |
+               0x03; // normal stitch
+    bytes.push(b1&0xFF,b2&0xFF,b3&0xFF);
+  }
+  // header
+  const header = `LA:EASBROIDERY;ST:${(bytes.length/3)|0};CO:1;+X:000;+Y:000;-X:000;-Y:000;AX:+000;AY:+000;MX:000;MY:000;PD:**********;\r`;
+  const pad = new Uint8Array(512); // Tajima header size
+  for(let i=0;i<header.length&&i<512;i++) pad[i]=header.charCodeAt(i);
+  const data = new Uint8Array(pad.length + bytes.length + 3);
+  data.set(pad,0); data.set(bytes,512);
+  data.set([0x00,0x00,0xF3], pad.length+bytes.length); // END
+
+  const blob = new Blob([data], {type:'application/octet-stream'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='stitches.dst'; a.click();
+  URL.revokeObjectURL(a.href);
+}

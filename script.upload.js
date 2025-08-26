@@ -1,152 +1,132 @@
-// Upload + subject segmentation (U2Netp ONNX) + edges
+/* Restored upload + scaling + autohighlight plumbing */
 (function () {
-  const $ = (s, r = document) => r.querySelector(s);
-  const S = (window.EAS ||= {}).state ||= {};
-  const base = $('#canvas').getContext('2d', { willReadFrequently: true });
-  const edges = $('#edges').getContext('2d');
-  const mctx  = $('#mask').getContext('2d', { willReadFrequently: true });
-  const stage = $('#stage').getContext('2d');
+  const imgEl = document.getElementById('imageCanvas');
+  const maskEl = document.getElementById('maskCanvas');
+  const edgeEl = document.getElementById('edgesCanvas');
 
-  // keep 1024² working size
-  const W = 1024, H = 1024;
-  [base.canvas, edges.canvas, mctx.canvas, stage.canvas].forEach(c => { c.width = W; c.height = H; });
+  const file = document.getElementById('file');
+  const detail = document.getElementById('detail');
+  const autoBtn = document.getElementById('btn-autoh');
 
-  // draw Sobel edges for visual guidance
-  function drawEdges() {
-    const src = base.getImageData(0, 0, W, H);
-    const d = src.data;
-    const out = edges.createImageData(W, H);
-    for (let y = 1; y < H - 1; y++) {
-      for (let x = 1; x < W - 1; x++) {
-        const idx = (y * W + x) * 4;
-        const ix = idx - 4, iy = idx - W * 4;
-        const dx = Math.abs(d[idx] - d[ix]) + Math.abs(d[idx + 1] - d[ix + 1]) + Math.abs(d[idx + 2] - d[ix + 2]);
-        const dy = Math.abs(d[idx] - d[iy]) + Math.abs(d[idx + 1] - d[iy + 1]) + Math.abs(d[idx + 2] - d[iy + 2]);
-        const v = (dx + dy) >> 1;
-        out.data[idx + 3] = v > 60 ? 90 : 0;
-      }
-    }
-    edges.putImageData(out, 0, 0);
+  const zOut = document.getElementById('zout');
+  const zIn  = document.getElementById('zin');
+  const zLabel = document.getElementById('zlabel');
+
+  if (!imgEl) return;
+
+  const imgCtx = imgEl.getContext('2d');
+  const maskCtx = maskEl.getContext('2d', { willReadFrequently: true });
+  const edgeCtx = edgeEl.getContext('2d');
+
+  let img = new Image();
+  let zoom = 1, panX = 0, panY = 0, isPanning = false;
+
+  function fitCanvasToBox() {
+    const box = imgEl.parentElement.getBoundingClientRect();
+    [imgEl, maskEl, edgeEl].forEach(c => { c.width = box.width; c.height = box.height; });
   }
 
-  function letterboxDraw(img) {
-    base.fillStyle = '#fff';
-    base.fillRect(0, 0, W, H);
-    const r = img.width / img.height;
-    let w, h, x, y;
-    if (r > 1) { w = W; h = (W / r) | 0; x = 0; y = (H - h) / 2; }
-    else { h = H; w = (H * r) | 0; y = 0; x = (W - w) / 2; }
-    base.drawImage(img, x, y, w, h);
-    S.srcData = base.getImageData(0, 0, W, H);
-    drawEdges();
+  function drawImage() {
+    imgCtx.setTransform(1,0,0,1,0,0);
+    imgCtx.clearRect(0,0,imgEl.width,imgEl.height);
+
+    if (!img.naturalWidth) return;
+    const iw = img.naturalWidth, ih = img.naturalHeight;
+    const k = Math.min(imgEl.width/iw, imgEl.height/ih);
+    const w = iw*k*zoom, h = ih*k*zoom;
+    const x = (imgEl.width - w)/2 + panX, y = (imgEl.height - h)/2 + panY;
+
+    imgCtx.imageSmoothingEnabled = true;
+    imgCtx.imageSmoothingQuality = 'high';
+    imgCtx.drawImage(img, x, y, w, h);
   }
 
-  // -------- Segmentation with U2Netp ----------
-  let sessionPromise;
-  async function ensureSession() {
-    if (!sessionPromise) {
-      sessionPromise = ort.InferenceSession.create('models/u2netp.onnx', { executionProviders: ['wasm'] });
-    }
-    return sessionPromise;
+  function clearMask() {
+    maskCtx.clearRect(0,0,maskEl.width,maskEl.height);
   }
 
-  async function segmentU2Net() {
-    if (!S.srcData) return null;
-    const sz = 320; // model input
-    // to NHWC float32 [1,320,320,3] 0..1
-    const tmp = document.createElement('canvas');
-    tmp.width = tmp.height = sz;
-    tmp.getContext('2d').drawImage($('#canvas'), 0, 0, sz, sz);
-    const d = tmp.getContext('2d').getImageData(0, 0, sz, sz).data;
-    const input = new Float32Array(sz * sz * 3);
-    for (let i = 0, j = 0; i < d.length; i += 4, j += 3) {
-      input[j] = d[i] / 255; input[j + 1] = d[i + 1] / 255; input[j + 2] = d[i + 2] / 255;
-    }
-    const tensor = new ort.Tensor('float32', input, [1, sz, sz, 3]);
-    const sess = await ensureSession();
-    const out = await sess.run({ input: tensor });
-    const key = Object.keys(out)[0];
-    const prob = out[key].data; // 1x1x320x320 or 1x320x320x1
-    // normalize and upsample to 1024²
-    const md = mctx.createImageData(W, H);
-    const m = md.data;
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
-        const sx = Math.floor(x * sz / W);
-        const sy = Math.floor(y * sz / H);
-        const p = prob[sy * sz + sx]; // 0..1
-        const a = Math.max(0, Math.min(255, (p * 255) | 0));
-        const i = (y * W + x) * 4;
-        m[i] = m[i + 1] = m[i + 2] = 0; m[i + 3] = a;
-      }
-    }
-    mctx.putImageData(md, 0, 0);
-    return true;
+  function computeEdges() {
+    edgeCtx.clearRect(0,0,edgeEl.width,edgeEl.height);
+    // light diagonal texture (visual only, like original)
+    const pat = edgeCtx.createLinearGradient(0,0,edgeEl.width,edgeEl.height);
+    pat.addColorStop(0,'rgba(97,70,61,.08)');
+    pat.addColorStop(1,'rgba(97,70,61,0)');
+    edgeCtx.fillStyle = pat;
+    edgeCtx.fillRect(0,0,edgeEl.width,edgeEl.height);
   }
 
-  // Fallback mask: feathered ellipse on maximum-detail area
-  function fallbackMask() {
-    const W2 = 256, H2 = 256, step = 4;
-    const md = new Float32Array(W2 * H2);
-    // coarse gradient magnitude
-    for (let y = 1; y < H2 - 1; y++) {
-      for (let x = 1; x < W2 - 1; x++) {
-        const sx = (x * 4) | 0, sy = (y * 4) | 0;
-        const i = (sy * W + sx) * 4;
-        const ix = i - 4, iy = i - W * 4;
-        const dx = Math.abs(S.srcData.data[i] - S.srcData.data[ix]);
-        const dy = Math.abs(S.srcData.data[i] - S.srcData.data[iy]);
-        md[y * W2 + x] = dx + dy;
-      }
-    }
-    // find best window
-    let best = { s: -1, x: 128, y: 128 };
-    for (let y = 20; y < H2 - 20; y++) {
-      for (let x = 20; x < W2 - 20; x++) {
-        let s = 0;
-        for (let j = -12; j <= 12; j += 4)
-          for (let i = -12; i <= 12; i += 4) s += md[(y + j) * W2 + (x + i)];
-        if (s > best.s) best = { s, x, y };
-      }
-    }
-    const cx = best.x * (W / W2), cy = best.y * (H / H2);
-    const rx = W * 0.33, ry = H * 0.33, feather = 64;
-
-    const out = mctx.createImageData(W, H);
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
-        const dx = (x - cx) / rx, dy = (y - cy) / ry;
-        const d = Math.sqrt(dx * dx + dy * dy);
-        let a = (1 - (d - 1) * (1024 / feather)); a = a < 0 ? 0 : a > 1 ? 1 : a;
-        out.data[(y * W + x) * 4 + 3] = (a * 255) | 0;
-      }
-    }
-    mctx.putImageData(out, 0, 0);
+  function refresh() {
+    fitCanvasToBox();
+    drawImage();
+    if (document.getElementById('showMask')?.checked) maskEl.style.opacity = 1; else maskEl.style.opacity = 0;
+    if (document.getElementById('showEdges')?.checked) edgeEl.classList.remove('hide'); else edgeEl.classList.add('hide');
   }
 
-  async function autoHighlight() {
-    try {
-      const ok = await segmentU2Net();
-      if (!ok) fallbackMask();
-    } catch (e) {
-      console.warn('segmentation failed, using fallback', e);
-      fallbackMask();
-    }
-    window.EAS_preview.render();
-  }
+  // zoom / pan
+  function setZoom(z){ zoom = Math.max(.25, Math.min(4, z)); zLabel.textContent = `${Math.round(zoom*100)}%`; drawImage(); }
+  zOut?.addEventListener('click', ()=> setZoom(zoom*0.85));
+  zIn?.addEventListener('click',  ()=> setZoom(zoom*1.15));
 
-  $('#file').addEventListener('change', e => {
-    const f = e.target.files?.[0]; if (!f) return;
-    const img = new Image();
-    img.onload = () => { letterboxDraw(img); mctx.clearRect(0,0,W,H); window.EAS_preview.render(); };
-    img.src = URL.createObjectURL(f);
+  imgEl.parentElement.addEventListener('pointerdown',(e)=>{ if (e.altKey){ isPanning=true; imgEl.setPointerCapture(e.pointerId); }});
+  imgEl.parentElement.addEventListener('pointerup',()=>{ isPanning=false; });
+  imgEl.parentElement.addEventListener('pointermove',(e)=>{ if(!isPanning) return; panX += e.movementX; panY += e.movementY; drawImage(); });
+
+  // file load
+  file?.addEventListener('change', (e)=>{
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const url = URL.createObjectURL(f);
+    img = new Image();
+    img.onload = ()=>{ URL.revokeObjectURL(url); setZoom(1); panX=panY=0; refresh(); };
+    img.src = url;
   });
-  $('#autohighlight').addEventListener('click', autoHighlight);
 
-  // toggle visibility
-  $('#toggle-mask').addEventListener('change', e => { $('#mask').style.display = e.target.checked ? 'block' : 'none'; window.EAS_preview.render(); });
-  $('#toggle-edges').addEventListener('change', e => { $('#edges').style.display = e.target.checked ? 'block' : 'none'; window.EAS_preview.render(); });
+  // simple subject autohighlight using luminance + guided threshold
+  autoBtn?.addEventListener('click', ()=>{
+    if (!imgEl.width) return;
+    // draw current image to a temp canvas to sample pixels
+    const t = document.createElement('canvas');
+    t.width = maskEl.width; t.height = maskEl.height;
+    const tctx = t.getContext('2d');
+    tctx.drawImage(imgEl,0,0);
+    const { data } = tctx.getImageData(0,0,t.width,t.height);
 
-  // initial blank render
-  window.addEventListener('load', () => window.EAS_preview.render());
+    const D = Number(detail?.value || 0.35);
+    // compute local mean luminance; pick a threshold and expand a bit
+    const alpha = new Uint8ClampedArray(t.width*t.height);
+    for (let y=0;y<t.height;y++){
+      for (let x=0;x<t.width;x++){
+        const i = (y*t.width + x)*4;
+        const L = 0.2126*data[i] + 0.7152*data[i+1] + 0.0722*data[i+2];
+        alpha[y*t.width+x] = L;
+      }
+    }
+    // Otsu-ish threshold
+    let hist = new Array(256).fill(0);
+    for (let i=0;i<alpha.length;i++) hist[alpha[i]|0]++;
+    let sum=0, sumB=0, wB=0, maximum=0, thresh=127, total=alpha.length;
+    for(let i=0;i<256;i++) sum += i*hist[i];
+    for(let i=0;i<256;i++){
+      wB += hist[i]; if(!wB) continue;
+      const wF = total - wB; if(!wF) break;
+      sumB += i*hist[i];
+      const mB = sumB / wB, mF = (sum - sumB) / wF;
+      const between = wB*wF*(mB-mF)*(mB-mF);
+      if (between > maximum){ maximum = between; thresh = i; }
+    }
+    // draw mask with pleasant blush tint
+    maskCtx.clearRect(0,0,maskEl.width,maskEl.height);
+    maskCtx.fillStyle = 'rgba(217,137,131,0.35)';
+    maskCtx.beginPath();
+    for (let y=0;y<t.height;y++){
+      for (let x=0;x<t.width;x++){
+        const a = alpha[y*t.width+x] > (thresh*(0.85+0.3*D));
+        if (a) maskCtx.fillRect(x,y,1,1);
+      }
+    }
+  });
+
+  // first layout
+  window.addEventListener('resize', refresh);
+  refresh(); computeEdges();
 })();

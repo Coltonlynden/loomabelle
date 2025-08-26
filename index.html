@@ -3,51 +3,49 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Easbroidery</title>
-  <link rel="preload" href="assets/hero-photo.jpg" as="image">
-  <link rel="preload" href="assets/hero-inset.jpg" as="image">
+  <title>Easbroidery — Home</title>
+  <link rel="icon" href="assets/logo.png">
   <link rel="stylesheet" href="styles.css"/>
+  <script defer src="app.js"></script>
 </head>
-<body class="site">
-  <header class="nav">
+<body class="shell">
+  <header class="site-header">
     <a class="brand" href="index.html">
-      <img src="assets/logo.png" alt="Easbroidery logo"/>
-      <span>EASBROIDERY</span>
+      <img src="assets/logo.png" alt="Easbroidery logo"><span>EASBROIDERY</span>
     </a>
-    <nav class="links">
-      <a href="index.html">Home</a>
-      <a href="features.html">Features</a>
-      <a href="pricing.html">Pricing</a>
+    <nav class="nav">
+      <a href="index.html" data-nav="home" class="active">Home</a>
+      <a href="features.html" data-nav="features">Features</a>
+      <a href="pricing.html" data-nav="pricing">Pricing</a>
     </nav>
   </header>
 
-  <main class="wrap hero">
-    <section class="card hero-card">
-      <h1>Digitize photos into<br/> embroidery files</h1>
+  <main class="container">
+    <section class="card hero">
+      <h1>Digitize photos into<br>embroidery files</h1>
       <p class="lede">
         Use AI-style math to convert your photos into embroidery designs with ease.
         Upload a photo, refine the subject, add curved text, and export stitch files.
         Runs entirely in your browser.
       </p>
 
-      <!-- Example image BELOW the body copy, ABOVE the button -->
-      <figure class="hero-photo">
-        <img src="assets/hero-photo.jpg" alt="Sweatshirt with embroidery"/>
+      <!-- Example image sits BELOW text BUT ABOVE the upload button -->
+      <figure class="example">
+        <img src="assets/hero-photo.jpg" alt="Sweatshirt with embroidery">
         <figcaption>Sweatshirt with embroidery</figcaption>
       </figure>
 
-      <div class="cta-row">
-        <a class="btn primary" href="editor.html">Upload photo</a>
-      </div>
+      <p>
+        <a class="btn btn-primary" href="editor.html">Upload photo</a>
+      </p>
 
-      <!-- Cute circular inset, slightly lower than heading -->
+      <!-- Inset image on the RIGHT, slightly overlapping (always stays on right) -->
       <div class="inset">
-        <img src="assets/hero-inset.jpg" alt="Inset detail"/>
+        <img src="assets/hero-inset.jpg" alt="">
       </div>
     </section>
   </main>
 
-  <footer class="wrap foot">© Easbroidery</footer>
-  <script src="app.js" defer></script>
+  <footer class="site-footer">© Easbroidery</footer>
 </body>
 </html>

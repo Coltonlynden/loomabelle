@@ -1,39 +1,29 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Easbroidery — Features</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css"/>
 </head>
-<body class="theme-peach">
-  <header class="site-header">
-    <a href="index.html" class="brand">
-      <img src="assets/logo.png" alt="Easbroidery" class="brand__logo" />
-      <span class="brand__name">EASBROIDERY</span>
-    </a>
-    <nav class="nav">
-      <a href="index.html">Home</a>
-      <a href="features.html">Features</a>
-      <a href="pricing.html">Pricing</a>
-    </nav>
-  </header>
-
-  <main class="container">
+<body class="site">
+<header class="nav">
+  <a class="brand" href="index.html"><img src="assets/logo.png" alt=""><span>EASBROIDERY</span></a>
+  <nav class="links"><a href="index.html">Home</a><a class="active" href="features.html">Features</a><a href="pricing.html">Pricing</a></nav>
+</header>
+<main class="wrap">
+  <section class="card">
     <h1>Features</h1>
-    <ul class="feature-list">
-      <li>Upload any photo (on-device — nothing leaves your browser).</li>
-      <li>Auto-highlight subject + manual Paint / Erase / Magic-wand refine.</li>
-      <li>Curved, draggable text with live preview.</li>
-      <li>Embroidery-hoop preview (4×4, 5×7, 6×10, 8×12) with scale control.</li>
-      <li>Direction/angle control with overlay.</li>
-      <li>Export PNG, SVG, Stitches JSON, and experimental DST.</li>
-      <li>Mobile-friendly, responsive UI.</li>
+    <ul class="bullets">
+      <li>Auto-highlight subject (ONNX U-2-Net or smart fallback).</li>
+      <li>Paint/erase/wand mask, undo/redo, scroll-lock while editing.</li>
+      <li>Curved text tool; drag to position; per-layer color.</li>
+      <li>Machine-style hoop preview with true physical sizing.</li>
+      <li>Stitch preview: running/fill hatching with direction overlay.</li>
+      <li>Exports: PNG, SVG, JSON, and DST.</li>
     </ul>
-  </main>
-
-  <footer class="site-footer">
-    <small>© Easbroidery</small>
-  </footer>
+  </section>
+</main>
+<footer class="wrap foot">© Easbroidery</footer>
 </body>
 </html>

@@ -10,14 +10,13 @@
 <header class="nav">
   <a class="brand" href="index.html"><img src="assets/logo.png" class="logo" alt=""> <span>EASBROIDERY</span></a>
   <nav class="links">
-    <a href="index.html">Home</a>
-    <a href="features.html">Features</a>
-    <a href="pricing.html">Pricing</a>
+    <a class="nav-link" href="index.html">Home</a>
+    <a class="nav-link" href="features.html">Features</a>
+    <a class="nav-link" href="pricing.html">Pricing</a>
   </nav>
 </header>
 
 <main class="editor">
-  <!-- left steps column (unchanged visual) -->
   <aside class="steps">
     <div class="step">1. Upload</div>
     <div class="step">2. Select &amp; refine</div>
@@ -25,9 +24,7 @@
     <div class="step">4. Stitches &amp; export</div>
   </aside>
 
-  <!-- right work area -->
   <section class="work">
-    <!-- Upload + view (zoom top of box) -->
     <section class="card">
       <h2>Image</h2>
       <div class="row">
@@ -45,7 +42,6 @@
         <span class="hint">• Hold Alt and drag to pan.</span>
       </div>
 
-      <!-- main editable canvas -->
       <div class="editbox">
         <canvas id="imageCanvas"></canvas>
         <canvas id="maskCanvas"></canvas>
@@ -53,7 +49,6 @@
       </div>
     </section>
 
-    <!-- Brush block directly UNDER the image (restored) -->
     <section class="card">
       <h2>Brush</h2>
 
@@ -63,28 +58,30 @@
         <button class="tab" data-mode="direction">Direction</button>
       </div>
 
-      <div class="grid2 gap">
-        <div>
-          <label class="lbl">Size</label>
-          <input id="size" type="range" min="4" max="120" value="36">
+      <div id="maskOpts">
+        <div class="grid2 gap">
+          <div>
+            <label class="lbl">Size</label>
+            <input id="size" type="range" min="4" max="120" value="34">
+          </div>
+          <div class="btnrow small">
+            <button class="chip act" data-tool="paint">Paint</button>
+            <button class="chip" data-tool="erase">Erase</button>
+            <button class="chip" data-tool="wand">Wand</button>
+            <button class="chip" id="undo">Undo</button>
+            <button class="chip" id="redo">Redo</button>
+            <button class="chip" id="clear">Clear</button>
+            <button class="chip" id="fill">Fill</button>
+          </div>
         </div>
-        <div class="btnrow">
-          <button class="chip act" data-tool="paint">Paint</button>
-          <button class="chip" data-tool="erase">Erase</button>
-          <button class="chip" data-tool="wand">Wand</button>
-          <button class="chip" id="undo">Undo</button>
-          <button class="chip" id="redo">Redo</button>
-          <button class="chip" id="clear">Clear</button>
-          <button class="chip" id="fill">Fill</button>
+
+        <div class="row">
+          <label class="sw"><input id="showMask" type="checkbox" checked> <span>Show mask</span></label>
+          <label class="sw"><input id="showEdges" type="checkbox"> <span>Show edges</span></label>
         </div>
       </div>
 
-      <div class="row">
-        <label class="sw"><input id="showMask" type="checkbox" checked> <span>Show mask</span></label>
-        <label class="sw"><input id="showEdges" type="checkbox"> <span>Show edges</span></label>
-      </div>
-
-      <!-- text options only show when Text tab is active -->
+      <!-- TEXT PANEL (shown only when Text tab is active) -->
       <div id="textOpts" class="hide">
         <input id="txt" class="input" placeholder="Add text">
         <button id="applyText" class="btn-s">Apply</button>
@@ -103,6 +100,7 @@
             <input id="txtAngle" type="range" min="0" max="180" step="1" value="45">
           </div>
         </div>
+
         <label class="lbl">Pattern</label>
         <select id="txtPattern">
           <option value="fill">Fill (running)</option>
@@ -110,9 +108,23 @@
         </select>
         <label class="sw"><input id="showDir" type="checkbox" checked> <span>Show direction overlay</span></label>
       </div>
+
+      <!-- DIRECTION PANEL (separate from text) -->
+      <div id="dirOpts" class="hide">
+        <div class="grid2 gap">
+          <div>
+            <label class="lbl">Angle</label>
+            <input id="dirAngle" type="range" min="0" max="180" step="1" value="45">
+          </div>
+          <div>
+            <label class="lbl">Spacing</label>
+            <input id="dirSpace" type="range" min="3" max="14" step="1" value="6">
+          </div>
+        </div>
+        <p class="hint">Use mask to select regions, then change direction here.</p>
+      </div>
     </section>
 
-    <!-- Live preview -->
     <section class="card">
       <h2>Live preview</h2>
       <canvas id="liveCanvas" class="live"></canvas>
@@ -120,7 +132,6 @@
   </section>
 </main>
 
-<!-- sticky export bar (unchanged visual) -->
 <div class="dock">
   <label class="sw"><input id="toggleStitch" type="checkbox" checked> <span>Show stitch preview</span></label>
   <button id="btn-generate" class="btn">Generate stitches</button>

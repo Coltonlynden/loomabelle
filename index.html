@@ -6,38 +6,39 @@
   <title>Easbroidery — Digitize photos into embroidery files</title>
   <link rel="stylesheet" href="styles.css" />
   <style>
-    /* Anchor overlay to the card that contains the hero */
-    .hero__grid { position: relative; }
-
-    .hero__example img {
-      display: block;
-      width: 100%;
-      height: auto;
-      border-radius: 12px;
+    /* Desktop-friendly hero layout without touching global CSS */
+    .hero__grid{display:grid;grid-template-columns:1fr;gap:1.25rem;align-items:center}
+    @media (min-width: 900px){
+      .hero__grid{grid-template-columns:1.05fr 1fr}
     }
 
-    /* Circular inset that scales with viewport */
-    .hero__inset {
-      position: absolute;
-      top: 42%;
-      left: 26%;
-      transform: translate(-50%, -50%);
-      width: clamp(96px, 14vw, 200px);
-      height: clamp(96px, 14vw, 200px);
-      border-radius: 50%;
-      overflow: hidden;
-      border: 5px solid #fff;
-      box-shadow: 0 2px 8px rgba(0,0,0,.2);
-      pointer-events: none;
-    }
-    .hero__inset img { width: 100%; height: 100%; object-fit: cover; }
+    /* Hero image container */
+    .hero__example{position:relative}
+    .hero__example img{display:block;width:100%;height:auto;border-radius:12px}
 
-    /* Nudge position on wider screens */
-    @media (min-width: 768px) {
-      .hero__inset { top: 38%; left: 22%; }
+    /* Inset pinned to the hero image, scales with viewport */
+    .hero__inset{
+      position:absolute;
+      width:clamp(96px,12vw,180px);
+      height:clamp(96px,12vw,180px);
+      border-radius:50%;
+      overflow:hidden;
+      border:5px solid #fff;
+      box-shadow:0 2px 8px rgba(0,0,0,.2);
+      /* Mobile placement */
+      top:18%;
+      left:18%;
+      transform:translate(-50%,-50%);
+      pointer-events:none;
     }
-    @media (min-width: 1200px) {
-      .hero__inset { top: 34%; left: 20%; }
+    .hero__inset img{width:100%;height:100%;object-fit:cover}
+
+    /* Desktop placement tweaks to match your circled spot */
+    @media (min-width: 900px){
+      .hero__inset{top:28%;left:24%}
+    }
+    @media (min-width: 1200px){
+      .hero__inset{top:26%;left:22%}
     }
   </style>
 </head>
@@ -56,6 +57,7 @@
 
   <main class="hero">
     <div class="hero__grid card">
+      <!-- Left column: text + CTA -->
       <div class="hero__copy">
         <h1>Digitize photos into<br/>embroidery files</h1>
         <p class="lede">
@@ -63,16 +65,16 @@
           Upload a photo, refine the subject, add curved text, and export stitch files.
           Runs entirely in your browser.
         </p>
-        <figure class="hero__example">
-          <img src="assets/hero-photo.jpg" alt="Sweatshirt with embroidery" />
-        </figure>
-
         <p><a class="btn btn--primary" href="editor.html">Upload photo</a></p>
       </div>
 
-      <div class="hero__inset">
-        <img src="assets/hero-inset.jpg" alt="Inset sample" />
-      </div>
+      <!-- Right column: hero photo with inset pinned on top -->
+      <figure class="hero__example">
+        <img src="assets/hero-photo.jpg" alt="Sweatshirt with embroidery" />
+        <div class="hero__inset">
+          <img src="assets/hero-inset.jpg" alt="Inset sample" />
+        </div>
+      </figure>
     </div>
   </main>
 

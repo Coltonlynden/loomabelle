@@ -6,31 +6,34 @@
   <title>Easbroidery — Digitize photos into embroidery files</title>
   <link rel="stylesheet" href="styles.css" />
   <style>
-    /* Keep original structure; only enable scaling */
-    .hero__grid { position: relative; }
+    /* Center the UI and let the hero card fill wide screens */
+    :root { --page-pad: 24px; }
+    @media (min-width: 900px){ :root { --page-pad: 48px; } }
 
-    .hero__example img {
-      display: block;
-      width: 100%;
-      height: auto;
-      border-radius: 12px;
+    .hero { padding-left: var(--page-pad); padding-right: var(--page-pad); }
+    .hero__grid.card{
+      width: min(1200px, 100%);       /* limit max width but fill desktop */
+      margin-left: auto;
+      margin-right: auto;             /* center the whole card */
     }
+    /* keep original hero image scaling */
+    .hero__example img{display:block;width:100%;height:auto;border-radius:12px;}
 
-    /* Overlay inset: unchanged position, responsive size */
-    .hero__inset {
-      position: absolute;
-      top: 45%;
-      left: 30%;
-      transform: translate(-50%, -50%);
-      width: clamp(96px, 12vw, 180px);
-      height: clamp(96px, 12vw, 180px);
-      border-radius: 50%;
-      overflow: hidden;
-      border: 5px solid #fff;
-      box-shadow: 0 2px 8px rgba(0,0,0,.2);
-      pointer-events: none;
+    /* DO NOT TOUCH INSET: keep your original values */
+    .hero__inset{
+      position:absolute;
+      top:45%;
+      left:30%;
+      transform:translate(-50%,-50%);
+      width:180px;
+      height:180px;
+      border-radius:50%;
+      overflow:hidden;
+      border:5px solid #fff;
+      box-shadow:0 2px 8px rgba(0,0,0,.2);
+      pointer-events:none;
     }
-    .hero__inset img { width: 100%; height: 100%; object-fit: cover; }
+    .hero__inset img{width:100%;height:100%;object-fit:cover;}
   </style>
 </head>
 <body class="theme-peach">
@@ -61,7 +64,7 @@
         <p><a class="btn btn--primary" href="editor.html">Upload photo</a></p>
       </div>
 
-      <!-- inset overlay (kept as separate sibling; same position) -->
+      <!-- inset unchanged -->
       <div class="hero__inset">
         <img src="assets/hero-inset.jpg" alt="Inset sample" />
       </div>

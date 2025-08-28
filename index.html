@@ -6,32 +6,38 @@
   <title>Easbroidery — Digitize photos into embroidery files</title>
   <link rel="stylesheet" href="styles.css" />
   <style>
-    /* Ensure inset positions correctly on hero */
-    .hero {
-      position: relative;
-    }
+    /* Anchor overlay to the card that contains the hero */
+    .hero__grid { position: relative; }
+
     .hero__example img {
       display: block;
       width: 100%;
       height: auto;
       border-radius: 12px;
     }
+
+    /* Circular inset that scales with viewport */
     .hero__inset {
       position: absolute;
-      top: 45%;   /* adjust to match circled spot */
-      left: 30%;  /* adjust to match circled spot */
+      top: 42%;
+      left: 26%;
       transform: translate(-50%, -50%);
-      width: 180px;
-      height: 180px;
+      width: clamp(96px, 14vw, 200px);
+      height: clamp(96px, 14vw, 200px);
       border-radius: 50%;
       overflow: hidden;
       border: 5px solid #fff;
       box-shadow: 0 2px 8px rgba(0,0,0,.2);
+      pointer-events: none;
     }
-    .hero__inset img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
+    .hero__inset img { width: 100%; height: 100%; object-fit: cover; }
+
+    /* Nudge position on wider screens */
+    @media (min-width: 768px) {
+      .hero__inset { top: 38%; left: 22%; }
+    }
+    @media (min-width: 1200px) {
+      .hero__inset { top: 34%; left: 20%; }
     }
   </style>
 </head>

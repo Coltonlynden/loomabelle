@@ -1,4 +1,4 @@
-// Centralized upload handler
+// Upload handler: decodes file -> HTMLImageElement -> waits until ready.
 (function(){
   const main = document.getElementById('fileInput');
   const add  = document.getElementById('addElementInput');
@@ -10,7 +10,7 @@
         const img = new Image();
         img.onload = ()=> resolve(img);
         img.onerror = reject;
-        img.src = fr.result; // data URL avoids CORS taint
+        img.src = fr.result;
       };
       fr.onerror = reject;
       fr.readAsDataURL(file);
@@ -21,9 +21,11 @@
     const f = e.target.files?.[0]; if(!f) return;
     try{
       const img = await fileToImage(f);
+      // Guarantee decode finishes before we hand it off
+      if (img.decode) { try { await img.decode(); } catch{} }
       window.dispatchEvent(new CustomEvent('editor:imageLoaded', { detail:{ img, file:f }}));
     } finally {
-      e.target.value = ''; // allow same file re-select
+      e.target.value = '';
     }
   }
 

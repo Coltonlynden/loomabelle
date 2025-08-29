@@ -60,6 +60,10 @@
 .editor-shell.context-collapsed .eb-context{display:none}
 .editor-shell.context-collapsed .eb-layout{grid-template-columns:320px 1fr}
 
+/* Ensure mask layer never hides uploads by default */
+#maskCanvas{ background:transparent !important; }
+#maskCanvas.is-hidden{ opacity:0; pointer-events:none; }
+
 /* phones */
 @media (max-width:640px){
   .eb-layout{grid-template-columns:1fr}

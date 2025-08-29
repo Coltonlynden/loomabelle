@@ -1,14 +1,11 @@
 /* =============== Loom preview rendering =============== */
 (function () {
   function getSourceCanvas() {
-    // Prefer stitched preview if your pipeline exposes it
-    if (window.Stitches && Stitches.canvas) return Stitches.canvas;
-    // Fallback to main edit canvas
-    return document.getElementById('mainCanvas');
+    if (window.Stitches && Stitches.canvas) return Stitches.canvas; // stitched bitmap
+    return document.getElementById('mainCanvas');                    // edit canvas fallback
   }
 
   function drawHoopFrame(ctx, w, h) {
-    // simple rounded hoop frame echoing your existing preview look
     const r = Math.min(w, h) * 0.08;
     ctx.save();
     ctx.fillStyle = '#f6e9de';
@@ -35,11 +32,10 @@
     const src = getSourceCanvas();
     if (!src || !src.width) return;
 
-    // inset within hoop
     const pad = Math.round(Math.min(w, h) * 0.14);
     const tw = w - pad * 2, th = h - pad * 2;
 
-    // draw grid
+    // grid
     ctx.save();
     ctx.translate(pad, pad);
     ctx.fillStyle = '#f6e9de';
@@ -54,7 +50,6 @@
     }
     // content
     try {
-      // if a stitched preview bitmap exists, prefer it
       if (window.Stitches && Stitches.previewBitmap) {
         ctx.drawImage(Stitches.previewBitmap, 0, 0, tw, th);
       } else {
@@ -64,14 +59,14 @@
     ctx.restore();
   };
 
-  // Re-render on idle after draw operations
+  // Re-render after interactions
   let raf;
   ['pointerup','keyup','tool:select','change'].forEach(ev=>{
     window.addEventListener(ev, ()=> {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(()=> {
-        if (document.getElementById('loomPreviewCanvas'))
-          window.renderLoomPreview('loomPreviewCanvas');
+        const c = document.getElementById('loomPreviewCanvas');
+        if (c) window.renderLoomPreview('loomPreviewCanvas');
       });
     }, {passive:true});
   });

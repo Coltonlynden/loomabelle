@@ -1,59 +1,58 @@
-// Robust upload: decodes image itself and also emits events.
-(function () {
-  const input = document.getElementById('fileInput');
-  const add   = document.getElementById('addElementInput');
+// Universal upload: decodes with FileReader → HTMLImageElement.
+// Emits an event and also draws immediately as a hard fallback.
+(function(){
+  const fileInput   = document.getElementById('fileInput');
+  const uploadBtn   = document.getElementById('uploadMainBtn');
 
-  async function decodeFile(file) {
-    if (!file) return null;
+  if (uploadBtn && fileInput) uploadBtn.addEventListener('click', ()=> fileInput.click());
 
-    // Prefer ImageBitmap when available and the type is canvas-safe.
-    const safeType = /image\/(png|jpeg|jpg|gif|webp)/i.test(file.type);
-    if ('createImageBitmap' in window && safeType) {
-      try { return await createImageBitmap(file); } catch {}
-    }
-    // Fallback: FileReader → HTMLImageElement
-    return await new Promise((resolve, reject) => {
+  async function toImage(file){
+    return new Promise((resolve, reject)=>{
       const fr = new FileReader();
-      fr.onload = () => { const img = new Image(); img.onload = () => resolve(img); img.onerror = reject; img.src = fr.result; };
-      fr.onerror = reject; fr.readAsDataURL(file);
+      fr.onload = () => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = fr.result;
+      };
+      fr.onerror = reject;
+      fr.readAsDataURL(file);
     });
   }
 
-  async function handleMain(e) {
-    const file = e.target.files && e.target.files[0];
-    if (!file) return;
-    const bitmap = await decodeFile(file);
-
-    // 1) Direct draw fallback (guarantees something appears)
-    if (bitmap) {
+  async function handle(e){
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    try{
+      const img = await toImage(f);
+      // Broadcast to the editor
+      window.dispatchEvent(new CustomEvent('editor:imageLoaded', { detail:{ img, file:f }}));
+      // Hard fallback: draw now in case listeners are missing
       const c = document.getElementById('imgCanvas');
-      if (c) {
-        const dpr = Math.max(1, window.devicePixelRatio || 1);
-        // Fit canvas to container before drawing
-        if (window.Editor && typeof Editor.fit === 'function') Editor.fit();
+      if (c && c.getContext){
+        const dpr = Math.max(1, window.devicePixelRatio||1);
+        const {w,h} = fitDims(img.naturalWidth||img.width, img.naturalHeight||img.height, c.parentElement);
+        c.width = Math.round(w*dpr); c.height = Math.round(h*dpr);
+        c.style.width = w+'px'; c.style.height = h+'px';
         const ctx = c.getContext('2d');
         ctx.setTransform(1,0,0,1,0,0);
         ctx.clearRect(0,0,c.width,c.height);
-        ctx.drawImage(bitmap, 0, 0, c.width, c.height);
-        if (window.renderLoomPreview) try { renderLoomPreview('loomPreviewCanvas'); } catch {}
+        ctx.drawImage(img, 0, 0, c.width, c.height);
       }
+    }catch(err){
+      console.error('Upload decode failed', err);
+    }finally{
+      e.target.value = ''; // allow re-select same file
     }
-
-    // 2) Fire both events so other modules can react
-    window.dispatchEvent(new CustomEvent('editor:file',  { detail: { file } }));
-    window.dispatchEvent(new CustomEvent('editor:image', { detail: { image: bitmap } }));
-
-    // Allow re-selecting same file
-    e.target.value = '';
   }
 
-  function handleAdd(e) {
-    const file = e.target.files && e.target.files[0];
-    if (!file) return;
-    window.dispatchEvent(new CustomEvent('editor:add-element', { detail: { file } }));
-    e.target.value = '';
+  function fitDims(iw, ih, container){
+    const cw = Math.max(320, container?.clientWidth || 800);
+    const ch = Math.max(220, container?.clientHeight || 600);
+    const r = Math.min(cw/iw, ch/ih);
+    return { w: Math.max(2, Math.floor(iw*r)), h: Math.max(2, Math.floor(ih*r)) };
   }
 
-  input && input.addEventListener('change', handleMain);
-  add   && add.addEventListener('change', handleAdd);
+  if (fileInput) fileInput.addEventListener('change', handle);
 })();

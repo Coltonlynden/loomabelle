@@ -1,7 +1,8 @@
-// Draw pipeline with deferred render to avoid races + guaranteed decode
+// Draw pipeline using an <img> base layer for display
 (function(){
   const $ = s => document.querySelector(s);
   const wrap  = $('#canvasWrap');
+  const imgEl = $('#imgLayer');          // new display layer
   const imgC  = $('#imgCanvas');
   const maskC = $('#maskCanvas');
   const textC = $('#textCanvas');
@@ -36,7 +37,9 @@
     return { w: Math.max(2, Math.floor(iw*r)), h: Math.max(2, Math.floor(ih*r)) };
   }
 
-  function resizeCanvases(w, h){
+  function resizeAll(w, h){
+    // size display image box via CSS; canvases match pixel size
+    if (imgEl){ imgEl.style.width = w+'px'; imgEl.style.height = h+'px'; }
     [imgC,maskC,textC].forEach(c=>{
       c.width  = Math.round(w*dpr);
       c.height = Math.round(h*dpr);
@@ -45,21 +48,19 @@
     });
   }
 
-  function draw(){
+  function redraw(){
     const w = imgC.width, h = imgC.height;
     const clear = ctx => { ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,w,h); };
     clear(ctxImg); clear(ctxText);
 
-    if (!currentImg || !(currentImg.naturalWidth || currentImg.width)){
+    // base bitmap is visually shown by <img>; keep a copy in imgCanvas for export if needed
+    if (currentImg && currentImg.naturalWidth){
+      ctxImg.imageSmoothingEnabled = true;
+      ctxImg.drawImage(currentImg, 0, 0, w, h);
+    } else {
       ctxImg.fillStyle='#fff'; ctxImg.fillRect(0,0,w,h);
-      return;
     }
 
-    // base image
-    ctxImg.imageSmoothingEnabled = true;
-    ctxImg.drawImage(currentImg, 0, 0, w, h);
-
-    // optional grid
     if (showEdges && showEdges.checked){
       ctxImg.save(); ctxImg.globalCompositeOperation='multiply';
       ctxImg.strokeStyle='rgba(50,50,50,.25)'; ctxImg.lineWidth=1;
@@ -67,60 +68,46 @@
       ctxImg.restore();
     }
 
+    if (state.text.content){
+      const cx = w*state.text.x, cy = h*state.text.y;
+      ctxText.font = `${state.text.px*dpr}px serif`; ctxText.textAlign='center'; ctxText.textBaseline='middle';
+      ctxText.fillStyle='#222'; ctxText.strokeStyle='rgba(0,0,0,.12)'; ctxText.lineWidth=2*dpr;
+      ctxText.strokeText(state.text.content, cx, cy); ctxText.fillText(state.text.content, cx, cy);
+    }
+
     if (window.renderLoomPreview) { try { renderLoomPreview('loomPreviewCanvas'); } catch{} }
   }
 
-  // Upload event — await decode before sizing/drawing
-  window.addEventListener('editor:imageLoaded', async e=>{
+  // Upload event
+  window.addEventListener('editor:imageLoaded', e=>{
     const img = e?.detail?.img; if(!img) return;
-
-    // ensure fully decoded; Safari may reject but image is still usable
-    if (img.decode) { try { await img.decode(); } catch{} }
-
-    // ignore zero-sized images
-    if (!(img.naturalWidth || img.width)) return;
-
     currentImg = img;
-
-    // ensure mask cannot cover image
     hideMask();
 
-    // compute new canvas size from image
     const {w,h} = computeFitDims(img);
-    resizeCanvases(w,h);
-
-    // defer draw to next frame to avoid race with layout
-    requestAnimationFrame(draw);
+    resizeAll(w,h);
+    requestAnimationFrame(redraw);
   });
 
-  // Mask overlay manual toggle
-  showMask && showMask.addEventListener('change', ()=>{
-    maskC.classList.toggle('is-hidden', !showMask.checked);
-  });
-
-  // Text
+  // toggles
+  showMask && showMask.addEventListener('change', ()=> maskC.classList.toggle('is-hidden', !showMask.checked));
   textApply && textApply.addEventListener('click', ()=>{
     state.text.content = textInput?.value || '';
     state.text.px      = +(textSize?.value || 72);
     state.text.curve   = +(textCurve?.value || 0);
-    draw();
+    redraw();
   });
+  window.addEventListener('resize', ()=>{ if (!currentImg) return; const {w,h}=computeFitDims(currentImg); resizeAll(w,h); requestAnimationFrame(redraw); });
 
-  // Resize -> refit to current image
-  window.addEventListener('resize', ()=>{
-    if (!currentImg) return;
-    const {w,h} = computeFitDims(currentImg);
-    resizeCanvases(w,h);
-    requestAnimationFrame(draw);
-  });
-
-  // Init
+  // init
   window.addEventListener('load', ()=>{
-    // initial blank stage sized to container
     const cw = Math.max(320, wrap?.clientWidth || 800);
     const ch = Math.max(220, wrap?.clientHeight || 600);
-    resizeCanvases(cw, ch);
+    resizeAll(cw, ch);
     hideMask();
-    draw();
+    redraw();
   });
+
+  // expose
+  window.Editor = { redraw };
 })();

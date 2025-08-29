@@ -99,22 +99,6 @@ input[type="range"]{width:100%}
 .exportbar{position:sticky;bottom:0;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.6rem 1rem;margin-top:1rem;background:linear-gradient(180deg,rgba(253,235,220,0),var(--bg) 24%);border-top:1px solid #efcdbd}
 .exportbar .btnbar{margin:0}
 
-/* Center page and let the hero use the width */
-.hero { padding-left: 24px; padding-right: 24px; }
-.hero__grid.card { width: min(1200px, 100%); margin: 0 auto; position: relative; }
-
-/* Main hero image scales like a normal website */
-.hero__example { max-width: 980px; margin: 0 auto; }
-@media (min-width: 1200px){ .hero__example { max-width: 1100px; } }
-.hero__example img { width: 100%; height: auto; border-radius: 12px; }
-
-/* Inset bigger on laptops, still responsive */
-.hero__inset {
-  /* keep your top/left as-is; only size changes */
-  width: clamp(140px, 16vw, 260px);
-  height: clamp(140px, 16vw, 260px);
-}
-
 /* keep your previous styles; add/override the following */
 
 .canvas-wrap{position:relative;width:100%;aspect-ratio:1/1;background:#fff;border:1px dashed #d9b8a8;border-radius:16px;overflow:hidden}
@@ -137,3 +121,23 @@ input[type="range"]{width:100%}
 .opts{margin-bottom:.5rem}
 .opts summary{cursor:pointer;font-weight:600}
 .opts__grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem;margin-top:.6rem}
+
+/* ===== Desktop layout fix (override) ===== */
+.hero { padding-left: 24px; padding-right: 24px; }
+
+.hero__grid.card{
+  position: relative;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  width: 100% !important;      /* let it fill the row */
+  max-width: 1400px !important;/* cap so it doesn't get absurdly wide */
+}
+
+/* Make the main hero image behave like a normal responsive image */
+.hero__example{ margin: 0; }
+.hero__example img{
+  display: block;
+  width: 100% !important;
+  height: auto !important;
+  border-radius: 12px;
+}

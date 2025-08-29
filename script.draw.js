@@ -1,4 +1,4 @@
-// Draw pipeline with deferred render to avoid races
+// Draw pipeline with deferred render to avoid races + guaranteed decode
 (function(){
   const $ = s => document.querySelector(s);
   const wrap  = $('#canvasWrap');
@@ -30,8 +30,8 @@
   function computeFitDims(img){
     const cw = Math.max(320, wrap?.clientWidth || 800);
     const ch = Math.max(220, wrap?.clientHeight || 600);
-    const iw = img.naturalWidth || img.width;
-    const ih = img.naturalHeight || img.height;
+    const iw = img.naturalWidth || img.width || 1;
+    const ih = img.naturalHeight || img.height || 1;
     const r = Math.min(cw/iw, ch/ih);
     return { w: Math.max(2, Math.floor(iw*r)), h: Math.max(2, Math.floor(ih*r)) };
   }
@@ -50,7 +50,7 @@
     const clear = ctx => { ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,w,h); };
     clear(ctxImg); clear(ctxText);
 
-    if (!currentImg){
+    if (!currentImg || !(currentImg.naturalWidth || currentImg.width)){
       ctxImg.fillStyle='#fff'; ctxImg.fillRect(0,0,w,h);
       return;
     }
@@ -70,19 +70,26 @@
     if (window.renderLoomPreview) { try { renderLoomPreview('loomPreviewCanvas'); } catch{} }
   }
 
-  // Upload event
-  window.addEventListener('editor:imageLoaded', e=>{
+  // Upload event — await decode before sizing/drawing
+  window.addEventListener('editor:imageLoaded', async e=>{
     const img = e?.detail?.img; if(!img) return;
+
+    // ensure fully decoded; Safari may reject but image is still usable
+    if (img.decode) { try { await img.decode(); } catch{} }
+
+    // ignore zero-sized images
+    if (!(img.naturalWidth || img.width)) return;
+
     currentImg = img;
 
     // ensure mask cannot cover image
     hideMask();
 
-    // 1) compute new canvas size from image
+    // compute new canvas size from image
     const {w,h} = computeFitDims(img);
     resizeCanvases(w,h);
 
-    // 2) defer draw to next frame to avoid race with layout
+    // defer draw to next frame to avoid race with layout
     requestAnimationFrame(draw);
   });
 

@@ -4,9 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Easbroidery — Editor</title>
-  <!-- keep your site styling intact -->
+  <!-- Keep global site styles exactly as-is -->
   <link rel="stylesheet" href="styles.css">
-  <!-- editor-only styling (scoped) -->
+  <!-- Editor-only styles (scoped so nothing leaks) -->
   <link rel="stylesheet" href="editor.css">
 </head>
 <body class="editor-shell">
@@ -33,15 +33,33 @@
     <!-- Left rail -->
     <aside class="eb-rail" aria-label="Tools">
       <ul class="eb-tools" role="toolbar" aria-orientation="vertical">
-        <li><button class="eb-tool" data-tool="select">Select</button></li>
-        <li><button class="eb-tool" data-tool="brush">Brush</button></li>
-        <li><button class="eb-tool" data-tool="eraser">Eraser</button></li>
-        <li><button class="eb-tool" data-tool="wand">Wand</button></li>
-        <li><button class="eb-tool" data-tool="lasso">Lasso</button></li>
-        <li><button class="eb-tool" data-tool="text">Text</button></li>
-        <li><button class="eb-tool" data-tool="shapes">Shapes</button></li>
-        <li><button class="eb-tool" data-tool="uploads">Uploads</button></li>
-        <li><button class="eb-tool" data-tool="layers">Layers</button></li>
+        <li><button class="eb-tool" data-tool="select" aria-label="Select">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4l12 8-12 8V4z"/></svg><span>Select</span>
+        </button></li>
+        <li><button class="eb-tool" data-tool="brush" aria-label="Brush">
+          <svg viewBox="0 0 24 24"><path d="M20 4l-6 6 2 2 6-6-2-2zM4 20c3 0 4-2 5-3l6-6-2-2-6 6c-1 1-3 2-3 5z"/></svg><span>Brush</span>
+        </button></li>
+        <li><button class="eb-tool" data-tool="eraser" aria-label="Eraser">
+          <svg viewBox="0 0 24 24"><path d="M16 3l5 5-9 9H7L2 12 11 3h5zM7 19h15v2H7z"/></svg><span>Eraser</span>
+        </button></li>
+        <li><button class="eb-tool" data-tool="wand" aria-label="Magic Wand">
+          <svg viewBox="0 0 24 24"><path d="M2 20l6-6 2 2-6 6-2-2zm9-9l7-7 2 2-7 7-2-2z"/></svg><span>Wand</span>
+        </button></li>
+        <li><button class="eb-tool" data-tool="lasso" aria-label="Lasso">
+          <svg viewBox="0 0 24 24"><path d="M12 4C7 4 4 7 4 10s3 6 8 6 8-3 8-6-3-6-8-6zm-2 13c-2 0-3 1-3 2s1 2 3 2 3-1 3-2-1-2-3-2z"/></svg><span>Lasso</span>
+        </button></li>
+        <li><button class="eb-tool" data-tool="text" aria-label="Text">
+          <svg viewBox="0 0 24 24"><path d="M4 6V4h16v2h-7v14h-2V6H4z"/></svg><span>Text</span>
+        </button></li>
+        <li><button class="eb-tool" data-tool="shapes" aria-label="Shapes">
+          <svg viewBox="0 0 24 24"><path d="M3 3h8v8H3zM13 13l4-4 4 4-4 4-4-4zM13 3h8v8h-8z"/></svg><span>Shapes</span>
+        </button></li>
+        <li><button class="eb-tool" data-tool="uploads" aria-label="Uploads">
+          <svg viewBox="0 0 24 24"><path d="M12 3l4 4h-3v6h-2V7H8l4-4zM4 17h16v4H4z"/></svg><span>Uploads</span>
+        </button></li>
+        <li><button class="eb-tool" data-tool="layers" aria-label="Layers">
+          <svg viewBox="0 0 24 24"><path d="M12 4l8 4-8 4-8-4 8-4zm0 6l8 4-8 4-8-4 8-4z"/></svg><span>Layers</span>
+        </button></li>
       </ul>
 
       <!-- Mini hoop -->
@@ -103,7 +121,7 @@
   <script src="processing.js"></script>
   <script src="worker.js"></script>
 
-  <!-- editor-only glue -->
+  <!-- Editor-only glue -->
   <script src="editor.ui.js"></script>
 </body>
 </html>

@@ -1,30 +1,26 @@
-window.EAS = {
-  state:{
-    img:null, hasImage:false, hasMask:false,
+/* ================= Editor UI helpers (non-breaking) ================ */
+(function () {
+  if (!document.body.classList.contains('editor-shell')) return;
 
-    brushSize:26,
-    tool:"brush",                 // brush | erase | wand
-    brushMode:"mask",             // mask | text | dir
+  // Context mount helper other scripts can use
+  window.EditorUI = window.EditorUI || {};
+  const ctx = document.getElementById('contextMount');
+  window.EditorUI.mount = function (node) {
+    if (!ctx) return;
+    ctx.innerHTML = '';
+    if (node) ctx.appendChild(node);
+  };
 
-    text:{content:"", size:56, curve:0, x:512, y:940, dragging:false, dx:0, dy:0},
+  // Save / Export buttons -> fall through to existing handlers
+  const btnSave = document.getElementById('eb-save');
+  if (btnSave) btnSave.addEventListener('click', () => {
+    if (window.onSaveProject) return window.onSaveProject();
+    console.warn('onSaveProject not found');
+  });
 
-    stitches:null,
-    scale:1, zoom:1, panX:0, panY:0,
-    undo:[], redo:[],
-
-    // direction + pattern maps
-    dirAngle:45,                      // current brush angle
-    dirPattern:"fill",                // fill | satin | cross
-    dirMap:new Uint8Array(1024*1024), // angle bin (0..180), 255 = unset
-    patMap:new Uint8Array(1024*1024)  // 0=fill 1=satin 2=cross 255=unset
-  },
-  setBrushMode(mode){
-    const panels={mask:"panel-mask", text:"panel-text", dir:"panel-dir"};
-    EAS.state.brushMode=mode;
-    for(const k of Object.keys(panels)){
-      document.getElementById(panels[k]).classList.toggle("hidden", k!==mode);
-    }
-    document.querySelectorAll(".chip").forEach(c=>c.classList.remove("chip--active"));
-    ({mask:"mode-mask", text:"mode-text", dir:"mode-dir"}[mode] && document.getElementById({mask:"mode-mask", text:"mode-text", dir:"mode-dir"}[mode]).classList.add("chip--active"));
-  }
-};
+  const btnExport = document.getElementById('eb-export');
+  if (btnExport) btnExport.addEventListener('click', () => {
+    if (window.onExportDesign) return window.onExportDesign();
+    console.warn('onExportDesign not found');
+  });
+})();

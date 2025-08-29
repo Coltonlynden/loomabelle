@@ -130,7 +130,7 @@ input[type="range"]{width:100%}
   margin-left: auto !important;
   margin-right: auto !important;
   width: 100% !important;      /* let it fill the row */
-  max-width: 1000px !important;/* cap so it doesn't get absurdly wide */
+  max-width: 1200px !important;/* cap so it doesn't get absurdly wide */
 }
 
 /* Make the main hero image behave like a normal responsive image */
@@ -141,3 +141,12 @@ input[type="range"]{width:100%}
   height: auto !important;
   border-radius: 12px;
 }
+
+/* Limit hero image size on larger screens */
+@media (min-width: 1024px) {
+  .hero__example {
+    max-width: 800px;     /* adjust this number to the width you want */
+    margin: 0 auto;       /* center it */
+  }
+}
+

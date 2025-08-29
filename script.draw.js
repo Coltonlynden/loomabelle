@@ -1,8 +1,8 @@
-// Draw pipeline using an <img> base layer for display
+// Draw pipeline using an <img> base layer; canvases transparent
 (function(){
   const $ = s => document.querySelector(s);
   const wrap  = $('#canvasWrap');
-  const imgEl = $('#imgLayer');          // new display layer
+  const imgEl = $('#imgLayer');
   const imgC  = $('#imgCanvas');
   const maskC = $('#maskCanvas');
   const textC = $('#textCanvas');
@@ -28,17 +28,16 @@
     ctxMask.clearRect(0,0,maskC.width,maskC.height);
   }
 
-  function computeFitDims(img){
+  function computeFitDims(imgLike){
     const cw = Math.max(320, wrap?.clientWidth || 800);
     const ch = Math.max(220, wrap?.clientHeight || 600);
-    const iw = img.naturalWidth || img.width || 1;
-    const ih = img.naturalHeight || img.height || 1;
+    const iw = imgLike?.naturalWidth || imgLike?.width || 1;
+    const ih = imgLike?.naturalHeight || imgLike?.height || 1;
     const r = Math.min(cw/iw, ch/ih);
     return { w: Math.max(2, Math.floor(iw*r)), h: Math.max(2, Math.floor(ih*r)) };
   }
 
   function resizeAll(w, h){
-    // size display image box via CSS; canvases match pixel size
     if (imgEl){ imgEl.style.width = w+'px'; imgEl.style.height = h+'px'; }
     [imgC,maskC,textC].forEach(c=>{
       c.width  = Math.round(w*dpr);
@@ -53,12 +52,10 @@
     const clear = ctx => { ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,w,h); };
     clear(ctxImg); clear(ctxText);
 
-    // base bitmap is visually shown by <img>; keep a copy in imgCanvas for export if needed
-    if (currentImg && currentImg.naturalWidth){
+    // keep a copy of the image in imgCanvas for export
+    if (currentImg && (currentImg.naturalWidth||currentImg.width)){
       ctxImg.imageSmoothingEnabled = true;
       ctxImg.drawImage(currentImg, 0, 0, w, h);
-    } else {
-      ctxImg.fillStyle='#fff'; ctxImg.fillRect(0,0,w,h);
     }
 
     if (showEdges && showEdges.checked){
@@ -89,7 +86,7 @@
     requestAnimationFrame(redraw);
   });
 
-  // toggles
+  // Toggles
   showMask && showMask.addEventListener('change', ()=> maskC.classList.toggle('is-hidden', !showMask.checked));
   textApply && textApply.addEventListener('click', ()=>{
     state.text.content = textInput?.value || '';
@@ -97,17 +94,17 @@
     state.text.curve   = +(textCurve?.value || 0);
     redraw();
   });
-  window.addEventListener('resize', ()=>{ if (!currentImg) return; const {w,h}=computeFitDims(currentImg); resizeAll(w,h); requestAnimationFrame(redraw); });
+  window.addEventListener('resize', ()=>{
+    const base = currentImg || imgEl; if(!base) return;
+    const {w,h}=computeFitDims(base); resizeAll(w,h); requestAnimationFrame(redraw);
+  });
 
-  // init
+  // Init empty stage
   window.addEventListener('load', ()=>{
     const cw = Math.max(320, wrap?.clientWidth || 800);
     const ch = Math.max(220, wrap?.clientHeight || 600);
-    resizeAll(cw, ch);
-    hideMask();
-    redraw();
+    resizeAll(cw, ch); hideMask(); redraw();
   });
 
-  // expose
   window.Editor = { redraw };
 })();

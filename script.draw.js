@@ -1,4 +1,4 @@
-/* draw + mask + text; remove-background composite */
+/* draw + mask + text; robust upload fallback + remove-background */
 (function(){
   const $ = s=>document.querySelector(s), $$ = s=>document.querySelectorAll(s);
 
@@ -8,7 +8,6 @@
     mask: $('#maskCanvas'),
     text: $('#textCanvas'),
 
-    file: $('#fileInput'),
     auto: $('#autoBtn'),
 
     showMask:  $('#showMask'),
@@ -31,7 +30,8 @@
   const ctxMask = C.mask.getContext('2d',{willReadFrequently:true});
   const ctxText = C.text.getContext('2d');
 
-  let bmp=null;
+  let bmp = null;        // ImageBitmap or HTMLImageElement
+  let bmpIsHTML = false; // track type for drawImage
   const state = {
     zoom:1,
     text:{content:'', x:.5, y:.5, px:72, curve:0},
@@ -39,10 +39,10 @@
     removeBg:false
   };
 
-  /* layout to container */
+  /* ---------- layout ---------- */
   function fit(){
     const w = Math.max(2, C.wrap.clientWidth);
-    const h = Math.max(2, C.wrap.clientHeight || w*0.75);
+    const h = Math.max(2, C.wrap.clientHeight || Math.round(w*0.75));
     [C.img,C.mask,C.text].forEach(c=>{
       c.width = Math.round(w*dpr);
       c.height= Math.round(h*dpr);
@@ -52,32 +52,62 @@
   }
   addEventListener('resize', fit);
 
-  /* upload from editor.ui.js */
-  window.addEventListener('editor:file', async e=>{
-    const f = e?.detail?.file; if(!f) return;
-    bmp = await createImageBitmap(f);
+  /* ---------- upload handler (robust) ---------- */
+  async function loadFile(file){
+    if(!file) return;
+    // try ImageBitmap first
+    try{
+      if('createImageBitmap' in window){
+        bmp = await createImageBitmap(file);
+        bmpIsHTML = false;
+      }else{
+        throw new Error('ImageBitmap not supported');
+      }
+    }catch{
+      // fallback: FileReader -> HTMLImageElement
+      bmpIsHTML = true;
+      bmp = await new Promise((resolve, reject)=>{
+        const fr = new FileReader();
+        fr.onload = ()=>{
+          const img = new Image();
+          img.onload = ()=> resolve(img);
+          img.onerror = reject;
+          img.src = fr.result;
+        };
+        fr.onerror = reject;
+        fr.readAsDataURL(file);
+      });
+    }
+
     // reset mask to full opaque
     ctxMask.clearRect(0,0,C.mask.width,C.mask.height);
     ctxMask.fillStyle='rgba(0,0,0,0.99)';
     ctxMask.fillRect(0,0,C.mask.width,C.mask.height);
-    fit();
+
+    fit(); // size canvases to container before we draw
+  }
+
+  // event from editor.ui.js / script.upload.js
+  window.addEventListener('editor:file', e=>{
+    const f = e?.detail?.file; if(!f) return;
+    loadFile(f);
   });
 
-  /* remove background shared toggle */
+  /* ---------- remove background shared toggle ---------- */
   window.addEventListener('editor:removebg', e=>{
     state.removeBg = !!(e?.detail?.enabled);
     draw();
   });
 
-  /* simple auto highlight subject (fast luminance k-means) */
+  /* ---------- auto highlight subject (fast luminance k-means) ---------- */
   C.auto?.addEventListener('click', ()=>{
     if(!bmp) return;
-    const W = 256, H = Math.round(W*(bmp.height/bmp.width));
-    const t = document.createElement('canvas'); t.width=W; t.height=H;
-    const cx = t.getContext('2d'); cx.drawImage(bmp,0,0,W,H);
-    const id = cx.getImageData(0,0,W,H);
+    const {w,h} = { w: 256, h: 256*(bmp.height/bmp.width) };
+    const t = document.createElement('canvas'); t.width=w; t.height=h;
+    const cx = t.getContext('2d'); cx.drawImage(bmp,0,0,w,h);
+    const id = cx.getImageData(0,0,w,h);
     const seg = kmeansMask(id);
-    const up = document.createElement('canvas'); up.width=W; up.height=H;
+    const up = document.createElement('canvas'); up.width=w; up.height=h;
     up.getContext('2d').putImageData(seg,0,0);
     ctxMask.clearRect(0,0,C.mask.width,C.mask.height);
     ctxMask.drawImage(up,0,0,C.mask.width,C.mask.height);
@@ -102,13 +132,13 @@
     return new ImageData(out,W,H);
   }
 
-  /* visibility + dir controls */
+  /* ---------- visibility + dir controls ---------- */
   C.showMask?.addEventListener('change', ()=>{ C.mask.classList.toggle('is-hidden', !C.showMask.checked); });
   C.showEdges?.addEventListener('change', draw);
   C.dirAngle?.addEventListener('input', e=>{state.dir.angle=+e.target.value; draw();});
   C.dirPattern?.addEventListener('input', e=>{state.dir.pattern=e.target.value; draw();});
 
-  /* text controls */
+  /* ---------- text controls ---------- */
   C.textApply?.addEventListener('click', ()=>{
     state.text.content = C.textInput.value||'';
     state.text.px      = +C.textSize.value;
@@ -116,10 +146,17 @@
     draw();
   });
 
-  /* render */
+  /* ---------- render ---------- */
   function draw(){
+    // clear
     [ctxImg,ctxText].forEach(c=>{ c.setTransform(1,0,0,1,0,0); c.clearRect(0,0,C.img.width,C.img.height); });
-    if(!bmp) return;
+
+    if(!bmp){
+      // placeholder paper
+      ctxImg.fillStyle = '#fff';
+      ctxImg.fillRect(0,0,C.img.width,C.img.height);
+      return;
+    }
 
     // base
     ctxImg.drawImage(bmp,0,0,C.img.width,C.img.height);
@@ -148,11 +185,10 @@
              ctxText.strokeText(t.content,cx,cy); ctxText.fillText(t.content,cx,cy); }
     }
 
-    // notify preview
+    // update mini preview
     if (window.renderLoomPreview) try{ renderLoomPreview('loomPreviewCanvas'); }catch(_){}
   }
 
-  // naive arc text helper
   function arcText(ctx, text, cx, cy, px, rad){
     const r = Math.min(C.text.width,C.text.height)*0.35;
     ctx.save(); ctx.translate(cx,cy); ctx.rotate(-rad/2);

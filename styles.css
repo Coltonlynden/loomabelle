@@ -122,7 +122,7 @@ input[type="range"]{width:100%}
 .opts summary{cursor:pointer;font-weight:600}
 .opts__grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem;margin-top:.6rem}
 
-/* ===== Desktop layout fix (override) ===== */
+/* ===== Desktop layout Settings ===== */
 .hero { padding-left: 24px; padding-right: 24px; }
 
 .hero__grid.card{
@@ -130,7 +130,7 @@ input[type="range"]{width:100%}
   margin-left: auto !important;
   margin-right: auto !important;
   width: 100% !important;      /* let it fill the row */
-  max-width: 1400px !important;/* cap so it doesn't get absurdly wide */
+  max-width: 1000px !important;/* cap so it doesn't get absurdly wide */
 }
 
 /* Make the main hero image behave like a normal responsive image */

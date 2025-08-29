@@ -1,163 +1,159 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Easbroidery — Editor</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="preload" href="assets/logo.png" as="image">
+  <link rel="stylesheet" href="styles.css">
 </head>
-<body class="theme-peach">
-  <header class="site-header">
-    <a href="index.html" class="brand">
-      <img src="assets/logo.png" alt="Easbroidery" class="brand__logo" />
-      <span class="brand__name">EASBROIDERY</span>
-    </a>
-    <nav class="nav">
-      <a href="index.html">Home</a>
-      <a href="features.html">Features</a>
-      <a href="pricing.html">Pricing</a>
+<body class="editor-shell">
+  <!-- Top Bar -->
+  <header class="eb-topbar" role="banner">
+    <div class="eb-topbar__left">
+      <a href="index.html" class="eb-brand">
+        <img src="assets/logo.png" alt="Easbroidery" class="eb-brand__logo">
+        <span class="eb-brand__name">Easbroidery</span>
+      </a>
+    </div>
+    <nav class="eb-menubar" aria-label="Editor menu">
+      <button class="eb-menu__btn" data-action="file">File</button>
+      <button class="eb-menu__btn" data-action="edit">Edit</button>
     </nav>
+    <div class="eb-topbar__right">
+      <button id="eb-save" class="eb-btn eb-btn--secondary" title="Save">Save</button>
+      <button id="eb-export" class="eb-btn eb-btn--primary" title="Export">Export</button>
+    </div>
   </header>
 
-  <main class="editor">
-    <section class="stage card">
-      <details class="opts">
-        <summary>General options (hoop & machine)</summary>
-        <div class="opts__grid">
-          <label>Machine
-            <select id="machine">
-              <option>Brother</option><option>Baby Lock</option><option>Janome</option>
-              <option>Bernina</option><option>Pfaff</option><option>Husqvarna Viking</option>
-            </select>
-          </label>
-          <label>Hoop size
-            <select id="hoopSelect">
-              <option value="100x100">4×4 in (100×100 mm)</option>
-              <option value="130x180" selected>5×7 in (130×180 mm)</option>
-              <option value="160x260">6×10 in (160×260 mm)</option>
-              <option value="200x300">8×12 in (200×300 mm)</option>
-            </select>
-          </label>
-          <label>Units
-            <select id="units">
-              <option value="mm" selected>mm</option>
-              <option value="in">in</option>
-            </select>
-          </label>
+  <!-- Main Layout -->
+  <main class="eb-layout" role="main">
+    <!-- Left Rail -->
+    <aside class="eb-rail" aria-label="Tools">
+      <ul class="eb-tools" role="toolbar" aria-orientation="vertical">
+        <li><button class="eb-tool" data-tool="select" aria-label="Select">Select</button></li>
+        <li><button class="eb-tool" data-tool="brush"  aria-label="Brush">Brush</button></li>
+        <li><button class="eb-tool" data-tool="eraser" aria-label="Eraser">Eraser</button></li>
+        <li><button class="eb-tool" data-tool="wand"   aria-label="Magic Wand">Wand</button></li>
+        <li><button class="eb-tool" data-tool="lasso"  aria-label="Lasso">Lasso</button></li>
+        <li><button class="eb-tool" data-tool="text"   aria-label="Text">Text</button></li>
+        <li><button class="eb-tool" data-tool="shapes" aria-label="Shapes">Shapes</button></li>
+        <li><button class="eb-tool" data-tool="uploads" aria-label="Uploads">Uploads</button></li>
+        <li><button class="eb-tool" data-tool="layers" aria-label="Layers">Layers</button></li>
+      </ul>
+
+      <!-- Loom preview card (mini) -->
+      <section class="eb-loom" aria-label="Loom preview">
+        <h2 class="eb-loom__title">Loom preview</h2>
+        <div class="eb-loom__card">
+          <canvas id="loomPreviewCanvas" width="160" height="160" aria-label="Mini hoop live preview"></canvas>
         </div>
-      </details>
+        <button id="loomPreviewEnlarge" class="eb-btn eb-btn--ghost">Enlarge</button>
+      </section>
 
-      <h2 class="card__title">1. Upload & edit</h2>
-      <div class="row row--stack">
-        <input id="fileInput" type="file" accept="image/*" />
-        <button id="autoBtn" class="btn-outline">Auto highlight</button>
-        <span class="zoombar">
-          <button id="zoomOut" class="chip">−</button>
-          <span id="zoomPct" class="chip">100%</span>
-          <button id="zoomIn" class="chip">+</button>
-        </span>
-      </div>
-      <p class="hint">Tip: Alt/Option + drag to pan when zoomed.</p>
+      <!-- Mobile FAB (preview hidden as button) -->
+      <button id="previewFab" class="eb-fab" aria-label="Open Loom preview" title="Preview">
+        Preview
+      </button>
+    </aside>
 
-      <!-- tools attached -->
-      <div class="tools-inline card">
-        <div class="seg" id="modeTabs">
-          <button class="chip chip--seg is-active" data-mode="mask">Mask</button>
-          <button class="chip chip--seg" data-mode="text">Text</button>
-          <button class="chip chip--seg" data-mode="dir">Direction</button>
-        </div>
-
-        <section class="panel" data-panel="mask">
-          <label class="row"><span>Brush</span><input id="brushSize" type="range" min="2" max="80" value="24"/></label>
-          <div class="btnbar">
-            <button class="btn" data-tool="paint">Paint</button>
-            <button class="btn" data-tool="erase">Erase</button>
-            <button class="btn" data-tool="wand">Wand</button>
-            <button class="btn" data-tool="undo">Undo</button>
-            <button class="btn" data-tool="redo">Redo</button>
-            <button class="btn" data-tool="clear">Clear</button>
-            <button class="btn" data-tool="fill">Fill</button>
-          </div>
-          <div class="row row--check">
-            <label><input id="showMask" type="checkbox" checked/> Show mask</label>
-            <label><input id="showEdges" type="checkbox"/> Show edges</label>
-          </div>
-        </section>
-
-        <section class="panel hidden" data-panel="text">
-          <label class="row"><span>Text</span><input id="textInput" type="text" placeholder="Add text"/></label>
-          <label class="row"><span>Size</span><input id="textSize" type="range" min="10" max="200" value="72"/></label>
-          <label class="row"><span>Curve</span><input id="textCurve" type="range" min="-180" max="180" value="0"/></label>
-          <button id="textApply" class="btn btn--primary">Apply / Update</button>
-        </section>
-
-        <section class="panel hidden" data-panel="dir">
-          <label class="row"><span>Angle</span><input id="dirAngle" type="range" min="0" max="180" value="45"/></label>
-          <label class="row"><span>Pattern</span>
-            <select id="dirPattern">
-              <option value="fill">Fill (running)</option>
-              <option value="zigzag">Zig-zag</option>
-              <option value="satin">Satin band</option>
-            </select>
-          </label>
-          <label class="row row--check"><input id="showDir" type="checkbox" checked/> <span>Show direction overlay</span></label>
-        </section>
-      </div>
-
-      <div class="canvas-wrap" id="canvasWrap">
-        <canvas id="imgCanvas"></canvas>
-        <canvas id="maskCanvas"></canvas>
-        <canvas id="textCanvas"></canvas>
-      </div>
-
-      <h2 class="card__title mt">2. Live preview</h2>
-
-      <!-- cute machine hoop frame (SVG) with canvas inside -->
-      <div class="hoop">
-        <svg class="hoop__svg" viewBox="0 0 1200 800" aria-hidden="true">
-          <!-- outer rail -->
-          <rect x="30" y="30" width="1140" height="740" rx="70" ry="70" fill="none" stroke="#5f5f5f" stroke-width="28"/>
-          <!-- inner rail -->
-          <rect x="90" y="90" width="1020" height="620" rx="50" ry="50" fill="none" stroke="#bdbdbd" stroke-width="12"/>
-          <!-- tick marks -->
-          <g stroke="#9a9a9a" stroke-width="2" opacity=".7">
-            <line x1="90" y1="200" x2="1110" y2="200"/>
-            <line x1="90" y1="400" x2="1110" y2="400"/>
-            <line x1="90" y1="600" x2="1110" y2="600"/>
-            <line x1="300" y1="90" x2="300" y2="710"/>
-            <line x1="600" y1="90" x2="600" y2="710"/>
-            <line x1="900" y1="90" x2="900" y2="710"/>
-          </g>
-          <!-- clamp (cute) -->
-          <g transform="translate(1080,360)">
-            <rect x="-26" y="-60" width="52" height="120" rx="12" fill="#d7d7d7" stroke="#8b8b8b" stroke-width="4"/>
-            <circle r="20" fill="#f4c7bf" stroke="#8b8b8b" stroke-width="4"/>
-          </g>
-        </svg>
-        <div class="hoop__inner">
-          <canvas id="previewCanvas"></canvas>
-        </div>
+    <!-- Stage -->
+    <section class="eb-stage" aria-label="Editor canvas">
+      <div class="eb-canvas-wrap">
+        <!-- Rulers are visual only; your existing canvas remains -->
+        <div class="eb-ruler eb-ruler--top"></div>
+        <div class="eb-ruler eb-ruler--left"></div>
+        <canvas id="mainCanvas" width="1600" height="1200" aria-label="Edit canvas"></canvas>
       </div>
     </section>
+
+    <!-- Right Context Panel -->
+    <aside class="eb-context" aria-label="Tool settings">
+      <div id="contextContent">
+        <!-- Populated by tool selection; your scripts can inject controls here -->
+        <h3>Contextual settings for active tool</h3>
+        <div id="contextMount"></div>
+      </div>
+    </aside>
   </main>
 
-  <footer class="exportbar">
-    <label class="row row--check">
-      <input id="showPreview" type="checkbox" checked />
-      <span>Show stitch preview</span>
-    </label>
-    <div class="btnbar btnbar--wrap">
-      <button id="genBtn" class="btn btn--primary">Generate stitches</button>
-      <button id="pngBtn" class="chip">PNG</button>
-      <button id="svgBtn" class="chip">SVG</button>
-      <button id="jsonBtn" class="chip">Stitches JSON</button>
-      <button id="dstBtn" class="chip">DST</button>
+  <!-- Bottom Status Bar -->
+  <footer class="eb-status" role="contentinfo">
+    <div class="eb-status__group">
+      <span id="statusZoom">Zoom 100%</span>
+      <span id="statusHoop">4.0" × 4.0</span>
+      <span id="statusStitches">0 stitches</span>
     </div>
+    <button id="btnConvert" class="eb-btn eb-btn--primary">Convert</button>
   </footer>
 
-  <!-- IMPORTANT: load scripts as plain scripts so all browsers work -->
+  <!-- Enlarge Preview Modal -->
+  <dialog id="previewModal" class="eb-modal" aria-label="Loom preview">
+    <div class="eb-modal__head">
+      <h4>Loom preview</h4>
+      <button id="previewModalClose" class="eb-iconbtn" aria-label="Close">✕</button>
+    </div>
+    <div class="eb-modal__body">
+      <canvas id="loomPreviewLarge" width="900" height="700" aria-label="Large hoop preview"></canvas>
+    </div>
+  </dialog>
+
+  <!-- Existing runtime + scripts -->
+  <script src="lib/ort.min.js"></script>
+  <script src="app.js"></script>
   <script src="script.upload.js"></script>
-  <script src="script.draw.js"></script>
   <script src="script.preview.js"></script>
+  <script src="script.draw.js"></script>
+  <script src="processing.js"></script>
+  <script src="worker.js"></script>
+
+  <!-- Small UI glue that calls existing functions if present -->
+  <script>
+    // Tool select -> try your existing setter
+    document.querySelectorAll('.eb-tool').forEach(btn=>{
+      btn.addEventListener('click', () => {
+        const t = btn.dataset.tool;
+        if (window.setActiveTool) { try { setActiveTool(t); } catch(e){} }
+        if (window.Tools && typeof window.Tools.set==='function') { try { window.Tools.set(t);} catch(e){} }
+        window.dispatchEvent(new CustomEvent('tool:select', {detail:{tool:t}}));
+        document.querySelectorAll('.eb-tool').forEach(b=>b.classList.toggle('is-active', b===btn));
+      });
+    });
+
+    // Convert button -> existing convert if present
+    document.getElementById('btnConvert').addEventListener('click', ()=>{
+      if (window.convertToEmbroidery) { try { convertToEmbroidery(); return; } catch(e){} }
+      if (window.Processing && typeof Processing.convert==='function') { try { Processing.convert(); return; } catch(e){} }
+      console.warn('Convert hook not found.');
+    });
+
+    // Status API for other scripts
+    window.EditorUI = {
+      setZoom(v){ document.getElementById('statusZoom').textContent = `Zoom ${v}%`; },
+      setHoop(w,h){ document.getElementById('statusHoop').textContent = `${w}" × ${h}"`; },
+      setStitches(n){ document.getElementById('statusStitches').textContent = `${n.toLocaleString()} stitches`; },
+      refreshMini(){ if (window.renderLoomPreview) renderLoomPreview('loomPreviewCanvas'); }
+    };
+
+    // Preview open/close
+    const openPreview = () => {
+      const dlg = document.getElementById('previewModal');
+      if (!dlg.open) dlg.showModal();
+      if (window.renderLoomPreview) renderLoomPreview('loomPreviewLarge');
+    };
+    document.getElementById('loomPreviewEnlarge').addEventListener('click', openPreview);
+    document.getElementById('previewFab').addEventListener('click', openPreview);
+    document.getElementById('previewModalClose').addEventListener('click', () => {
+      document.getElementById('previewModal').close();
+    });
+
+    // Keyboard toggle
+    window.addEventListener('keydown', (e)=>{ if(e.key.toLowerCase()==='p') openPreview(); });
+
+    // Initial mini render
+    window.addEventListener('load', ()=> {
+      if (window.renderLoomPreview) renderLoomPreview('loomPreviewCanvas');
+    });
+  </script>
 </body>
 </html>

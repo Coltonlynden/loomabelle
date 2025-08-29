@@ -4,11 +4,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Easbroidery — Editor</title>
-  <link rel="stylesheet" href="styles.css"><!-- keep original site styles -->
-  <link rel="stylesheet" href="editor.css"><!-- editor-only styles -->
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="editor.css">
 </head>
 <body class="editor-shell">
-  <!-- Top Bar -->
   <header class="eb-topbar" role="banner">
     <div class="eb-topbar__left">
       <a href="index.html" class="eb-brand">
@@ -16,55 +15,32 @@
         <span class="eb-brand__name">Easbroidery</span>
       </a>
     </div>
-
     <div class="eb-topbar__center">
       <button id="uploadMainBtn" class="eb-btn eb-btn--primary">Upload photo</button>
     </div>
-
     <div class="eb-topbar__right">
-      <button id="eb-save" class="eb-btn eb-btn--secondary">Save</button>
-      <button id="eb-export" class="eb-btn eb-btn--secondary">Export</button>
       <button id="panelToggle" class="eb-iconbtn" aria-label="Hide tool settings">▸</button>
     </div>
   </header>
 
   <main class="eb-layout" role="main">
-    <!-- Left rail -->
     <aside class="eb-rail" aria-label="Tools">
-      <!-- hidden inputs -->
       <input id="fileInput" type="file" accept="image/*" hidden />
       <input id="addElementInput" type="file" accept="image/*" hidden />
 
       <ul class="eb-tools eb-tools--grid" role="toolbar" aria-orientation="vertical">
-        <li><button class="eb-tool is-active" data-tool="select" aria-label="Select">
-          <svg viewBox="0 0 24 24"><path d="M6 4l12 8-12 8z"/></svg><span>Select</span>
-        </button></li>
-        <li><button class="eb-tool" data-tool="brush" aria-label="Brush">
-          <svg viewBox="0 0 24 24"><path d="M20 4l-6 6 2 2 6-6zM4 20c3 0 4-2 5-3l6-6-2-2-6 6c-1 1-3 2-3 5z"/></svg><span>Brush</span>
-        </button></li>
-        <li><button class="eb-tool" data-tool="eraser" aria-label="Eraser">
-          <svg viewBox="0 0 24 24"><path d="M16 3l5 5-9 9H7L2 12 11 3h5zM7 19h15v2H7z"/></svg><span>Eraser</span>
-        </button></li>
-        <li><button class="eb-tool" data-tool="wand" aria-label="Magic Wand">
-          <svg viewBox="0 0 24 24"><path d="M2 20l6-6 2 2-6 6zM11 11l7-7 2 2-7 7z"/></svg><span>Wand</span>
-        </button></li>
-        <li><button class="eb-tool" data-tool="lasso" aria-label="Lasso">
-          <svg viewBox="0 0 24 24"><path d="M12 4C7 4 4 7 4 10s3 6 8 6 8-3 8-6-3-6-8-6zM10 17c-2 0-3 1-3 2s1 2 3 2 3-1 3-2-1-2-3-2z"/></svg><span>Lasso</span>
-        </button></li>
-        <li><button class="eb-tool" data-tool="text" aria-label="Text">
-          <svg viewBox="0 0 24 24"><path d="M4 6V4h16v2h-7v14h-2V6H4z"/></svg><span>Text</span>
-        </button></li>
-        <li><button class="eb-tool" data-tool="shapes" aria-label="Shapes">
-          <svg viewBox="0 0 24 24"><path d="M3 3h8v8H3zM13 3h8v8h-8zM13 13l4-4 4 4-4 4z"/></svg><span>Shapes</span>
-        </button></li>
-        <li><button class="eb-tool" data-tool="uploads" id="uploadsBtn" aria-label="Add element">
-          <svg viewBox="0 0 24 24"><path d="M12 3l4 4h-3v6h-2V7H8zM4 17h16v4H4z"/></svg><span>Uploads</span>
-        </button></li>
+        <li><button class="eb-tool is-active" data-tool="select"><svg viewBox="0 0 24 24"><path d="M6 4l12 8-12 8z"/></svg><span>Select</span></button></li>
+        <li><button class="eb-tool" data-tool="brush"><svg viewBox="0 0 24 24"><path d="M20 4l-6 6 2 2 6-6zM4 20c3 0 4-2 5-3l6-6-2-2-6 6c-1 1-3 2-3 5z"/></svg><span>Brush</span></button></li>
+        <li><button class="eb-tool" data-tool="eraser"><svg viewBox="0 0 24 24"><path d="M16 3l5 5-9 9H7L2 12 11 3h5zM7 19h15v2H7z"/></svg><span>Eraser</span></button></li>
+        <li><button class="eb-tool" data-tool="wand"><svg viewBox="0 0 24 24"><path d="M2 20l6-6 2 2-6 6zM11 11l7-7 2 2-7 7z"/></svg><span>Wand</span></button></li>
+        <li><button class="eb-tool" data-tool="lasso"><svg viewBox="0 0 24 24"><path d="M12 4C7 4 4 7 4 10s3 6 8 6 8-3 8-6-3-6-8-6zM10 17c-2 0-3 1-3 2s1 2 3 2 3-1 3-2-1-2-3-2z"/></svg><span>Lasso</span></button></li>
+        <li><button class="eb-tool" data-tool="text"><svg viewBox="0 0 24 24"><path d="M4 6V4h16v2h-7v14h-2V6H4z"/></svg><span>Text</span></button></li>
+        <li><button class="eb-tool" data-tool="shapes"><svg viewBox="0 0 24 24"><path d="M3 3h8v8H3zM13 3h8v8h-8zM13 13l4-4 4 4-4 4z"/></svg><span>Shapes</span></button></li>
+        <li><button class="eb-tool" data-tool="uploads" id="uploadsBtn"><svg viewBox="0 0 24 24"><path d="M12 3l4 4h-3v6h-2V7H8zM4 17h16v4H4z"/></svg><span>Uploads</span></button></li>
       </ul>
 
       <button id="autoBtn" class="eb-btn eb-btn--accent" type="button">Auto highlight subject</button>
 
-      <!-- Loom preview -->
       <section class="eb-loom" aria-label="Loom preview">
         <h2 class="eb-loom__title">Loom preview</h2>
         <div class="eb-loom__card">
@@ -74,109 +50,81 @@
       </section>
     </aside>
 
-    <!-- Stage -->
     <section class="eb-stage" aria-label="Editor canvas">
       <div id="canvasWrap" class="eb-canvas-wrap">
+        <!-- New visual image layer -->
+        <img id="imgLayer" alt="" />
+
+        <!-- Canvases for processing and overlays -->
         <canvas id="imgCanvas"></canvas>
         <canvas id="maskCanvas"></canvas>
         <canvas id="textCanvas"></canvas>
       </div>
     </section>
 
-    <!-- Tool settings -->
     <aside class="eb-context" aria-label="Tool settings">
       <div class="eb-context__head">
         <h3>Tool settings</h3>
         <button id="contextClose" class="eb-iconbtn" aria-label="Hide settings">✕</button>
       </div>
 
-      <!-- hidden chips kept for script compatibility -->
       <div id="modeTabs" class="chips" hidden>
         <button class="chip is-active" data-mode="mask">Mask</button>
         <button class="chip" data-mode="text">Text</button>
       </div>
 
-      <!-- Panels: shown per selected tool -->
-      <div class="panel" data-panel="select">
-        <div class="group"><p>Select and drag items on the canvas.</p></div>
-      </div>
-
+      <div class="panel" data-panel="select"><div class="group"><p>Select and drag items.</p></div></div>
       <div class="panel hidden" data-panel="brush">
         <div class="group">
-          <label>Brush size</label>
-          <input id="brushSize" type="range" min="2" max="80" value="24">
+          <label>Brush size</label><input id="brushSize" type="range" min="2" max="80" value="24">
           <label class="row"><input id="showEdges" type="checkbox" checked> Show grid</label>
-          <label class="row"><input id="showMask" type="checkbox" checked> Show mask overlay</label>
+          <label class="row"><input id="showMask" type="checkbox"> Show mask overlay</label>
           <label class="row"><input id="removeBg" type="checkbox"> Remove background</label>
         </div>
       </div>
-
       <div class="panel hidden" data-panel="eraser">
         <div class="group">
-          <label>Eraser size</label>
-          <input id="eraserSize" type="range" min="4" max="120" value="36">
+          <label>Eraser size</label><input id="eraserSize" type="range" min="4" max="120" value="36">
           <label class="row"><input id="removeBgE" type="checkbox"> Remove background</label>
         </div>
       </div>
-
       <div class="panel hidden" data-panel="wand">
         <div class="group">
-          <label>Tolerance</label>
-          <input id="wandTol" type="range" min="1" max="80" value="24">
+          <label>Tolerance</label><input id="wandTol" type="range" min="1" max="80" value="24">
           <label class="row"><input id="showDir" type="checkbox"> Show stitch direction</label>
-          <label>Direction angle</label>
-          <input id="dirAngle" type="range" min="-90" max="90" value="45">
+          <label>Direction angle</label><input id="dirAngle" type="range" min="-90" max="90" value="45">
           <label>Pattern</label>
-          <select id="dirPattern">
-            <option value="hatch" selected>Hatch</option>
-            <option value="zigzag">Zig-zag</option>
-            <option value="satin">Satin</option>
-          </select>
+          <select id="dirPattern"><option value="hatch" selected>Hatch</option><option value="zigzag">Zig-zag</option><option value="satin">Satin</option></select>
           <label class="row"><input id="removeBgW" type="checkbox"> Remove background</label>
         </div>
       </div>
-
-      <div class="panel hidden" data-panel="lasso">
-        <div class="group"><p>Draw a freeform selection. Double-click to close.</p></div>
-      </div>
-
+      <div class="panel hidden" data-panel="lasso"><div class="group"><p>Freeform selection.</p></div></div>
       <div class="panel hidden" data-panel="text">
         <div class="group">
-          <label>Text</label>
-          <input id="textInput" type="text" placeholder="Your text">
+          <label>Text</label><input id="textInput" type="text" placeholder="Your text">
           <button id="textApply" class="eb-btn eb-btn--secondary" type="button">Apply</button>
         </div>
         <div class="group">
-          <label>Size</label>
-          <input id="textSize" type="range" min="8" max="200" value="64">
-          <label>Curve</label>
-          <input id="textCurve" type="range" min="0" max="180" value="60">
+          <label>Size</label><input id="textSize" type="range" min="8" max="200" value="64">
+          <label>Curve</label><input id="textCurve" type="range" min="0" max="180" value="60">
         </div>
       </div>
-
       <div class="panel hidden" data-panel="shapes">
         <div class="group">
           <label>Shape</label>
-          <select id="shapeType">
-            <option value="rect">Rectangle</option>
-            <option value="circle">Circle</option>
-            <option value="triangle">Triangle</option>
-          </select>
-          <label>Stroke width</label>
-          <input id="shapeStroke" type="range" min="0" max="20" value="2">
+          <select id="shapeType"><option value="rect">Rectangle</option><option value="circle">Circle</option><option value="triangle">Triangle</option></select>
+          <label>Stroke width</label><input id="shapeStroke" type="range" min="0" max="20" value="2">
         </div>
       </div>
-
       <div class="panel hidden" data-panel="uploads">
         <div class="group">
-          <p>Add additional images that export in the same stitch file.</p>
+          <p>Add additional images for the same stitch export.</p>
           <button id="addElementBtn" class="eb-btn eb-btn--secondary" type="button">Add image element</button>
         </div>
       </div>
     </aside>
   </main>
 
-  <!-- Status bar -->
   <footer class="eb-status" role="contentinfo">
     <div class="eb-status__group">
       <button id="zoomOut" class="eb-iconbtn" aria-label="Zoom out">−</button>
@@ -188,7 +136,6 @@
     <button id="btnConvert" class="eb-btn eb-btn--primary">Convert</button>
   </footer>
 
-  <!-- Enlarge preview modal -->
   <dialog id="previewModal" class="eb-modal" aria-label="Loom preview">
     <div class="eb-modal__head">
       <h4>Loom preview</h4>
@@ -199,7 +146,6 @@
     </div>
   </dialog>
 
-  <!-- runtime -->
   <script src="lib/ort.min.js"></script>
   <script src="app.js"></script>
   <script src="script.upload.js"></script>

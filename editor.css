@@ -1,1 +1,73 @@
+/* Editor-only stylesheet. Safe for other pages. */
+.editor-shell {
+  --eb-border: rgba(0,0,0,0.12);
+  --eb-border-strong: rgba(0,0,0,0.18);
+  --eb-bg: #f7efe6;
+  --eb-panel: #f4eadf;
+  --eb-text: #333;
+  --eb-accent: #8ea9bb;
+  background: var(--eb-bg);
+  color: var(--eb-text);
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
 
+/* Top bar */
+.editor-shell .eb-topbar{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--eb-border);background:var(--eb-panel)}
+.editor-shell .eb-brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit}
+.editor-shell .eb-brand__logo{height:28px;width:auto}
+.editor-shell .eb-brand__name{font-weight:700;font-size:20px}
+.editor-shell .eb-menubar{display:flex;gap:8px;justify-content:center}
+.editor-shell .eb-menu__btn{background:transparent;border:1px solid var(--eb-border);padding:6px 10px;border-radius:8px}
+.editor-shell .eb-btn{border:1px solid var(--eb-border);border-radius:10px;padding:8px 14px;background:#e8ded3}
+.editor-shell .eb-btn--primary{background:#8ea9bb;color:#fff;border-color:transparent}
+.editor-shell .eb-btn--secondary{background:#fff}
+
+/* Three-pane layout */
+.editor-shell .eb-layout{display:grid;grid-template-columns:300px 1fr 320px}
+.editor-shell .eb-rail{border-right:1px solid var(--eb-border);background:var(--eb-panel);padding:12px 10px;display:flex;flex-direction:column;gap:12px}
+.editor-shell .eb-tools{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px}
+.editor-shell .eb-tool{width:100%;text-align:left;padding:10px 12px;border:1px solid var(--eb-border);background:#fff;border-radius:10px}
+.editor-shell .eb-tool.is-active{outline:2px solid var(--eb-accent)}
+
+/* Loom mini */
+.editor-shell .eb-loom{margin-top:8px}
+.editor-shell .eb-loom__title{font-size:16px;margin:8px 4px}
+.editor-shell .eb-loom__card{border:3px solid #bfb7b0;border-radius:22px;background:#f6e9de;padding:8px;display:flex;justify-content:center;align-items:center}
+.editor-shell #loomPreviewCanvas{width:160px;height:160px;display:block}
+.editor-shell .eb-btn--ghost{background:#fff;border:1px solid var(--eb-border);margin-top:8px;width:100%}
+
+/* FAB for phones (default hidden) */
+.editor-shell .eb-fab{display:none;position:fixed;left:14px;bottom:86px;padding:10px 14px;border-radius:24px;background:#fff;border:1px solid var(--eb-border-strong);box-shadow:0 2px 6px rgba(0,0,0,.12)}
+
+/* Stage + rulers */
+.editor-shell .eb-stage{position:relative;overflow:auto}
+.editor-shell .eb-canvas-wrap{position:relative;margin:16px;background:#efe4d9;border:1px solid var(--eb-border);border-radius:12px;padding:16px}
+.editor-shell #mainCanvas{width:100%;max-width:1200px;height:auto;display:block;margin:0 auto;background:#fff;border-radius:8px}
+.editor-shell .eb-ruler{position:absolute;background:transparent;pointer-events:none}
+.editor-shell .eb-ruler--top{left:16px;right:16px;top:8px;height:16px;border-bottom:1px solid var(--eb-border)}
+.editor-shell .eb-ruler--left{top:16px;bottom:16px;left:8px;width:16px;border-right:1px solid var(--eb-border)}
+
+/* Right panel */
+.editor-shell .eb-context{border-left:1px solid var(--eb-border);background:var(--eb-panel);padding:16px;overflow:auto}
+
+/* Status bar */
+.editor-shell .eb-status{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 16px;border-top:1px solid var(--eb-border);background:var(--eb-panel)}
+.editor-shell .eb-status__group{display:flex;gap:22px}
+
+/* Modal */
+.editor-shell .eb-modal{border:none;border-radius:14px;width:min(96vw,980px);padding:0}
+.editor-shell .eb-modal::backdrop{background:rgba(0,0,0,.2)}
+.editor-shell .eb-modal__head{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--eb-border);background:var(--eb-panel)}
+.editor-shell .eb-modal__body{padding:12px;background:#fff}
+.editor-shell #loomPreviewLarge{width:100%;height:auto;display:block}
+
+/* Phone */
+@media (max-width:640px){
+  .editor-shell .eb-layout{grid-template-columns:1fr}
+  .editor-shell .eb-context{display:none}
+  .editor-shell .eb-loom{display:none}   /* hide mini preview */
+  .editor-shell .eb-fab{display:block}   /* show Preview button */
+  .editor-shell .eb-status{position:sticky;bottom:0}
+}

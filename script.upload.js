@@ -17,16 +17,9 @@
     const f = e.target.files?.[0]; if(!f) return;
     try{
       const dataUrl = await fileToDataURL(f);
-
-      // 1) Show photo immediately
       if (imgLayer){ imgLayer.src = dataUrl; imgLayer.style.opacity='1'; }
-
-      // 2) Build an Image object for canvas/export and ensure decode
-      const img = new Image();
-      img.src = dataUrl;
-      if (img.decode) { try{ await img.decode(); }catch{} }
-
-      // 3) Notify draw pipeline
+      const img = new Image(); img.src = dataUrl;
+      if (img.decode){ try{ await img.decode(); }catch{} }
       window.dispatchEvent(new CustomEvent('editor:imageLoaded', { detail:{ img, file:f, dataUrl } }));
     } finally {
       e.target.value = '';

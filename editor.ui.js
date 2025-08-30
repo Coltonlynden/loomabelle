@@ -1,4 +1,4 @@
-// UI glue only (no file decoding)
+// UI glue (selectors, toggles, modal behavior, hints)
 (function(){
   if(!document.body.classList.contains('editor-shell')) return;
   const $  = s=>document.querySelector(s);
@@ -18,40 +18,69 @@
   $$('.eb-tool').forEach(btn=>btn.addEventListener('click',()=> setTool(btn.dataset.tool)));
   setTool('select');
 
-  // Only open pickers here
+  // Open pickers
   by('uploadMainBtn')?.addEventListener('click', ()=> by('fileInput')?.click());
   by('uploadsBtn')?.addEventListener('click', ()=> setTool('uploads'));
   by('addElementBtn')?.addEventListener('click', ()=> by('addElementInput')?.click());
 
-  // Remove-bg unified toggle
-  function rb(){ return !!(by('removeBg')?.checked || by('removeBgW')?.checked || by('removeBgE')?.checked); }
-  ['removeBg','removeBgW','removeBgE'].forEach(id=>{
-    by(id)?.addEventListener('change', ()=> window.dispatchEvent(new CustomEvent('editor:removebg',{detail:{enabled: rb()}})));
+  // Tool settings show/hide
+  const toggleBtn = $('.eb-tools-toggle');
+  const toolSettings = by('toolSettings');
+  const setExpanded = (on)=>{
+    document.body.classList.toggle('context-collapsed', !on);
+    toggleBtn?.setAttribute('aria-expanded', on ? 'true' : 'false');
+    // arrow rotates via CSS
+  };
+  toggleBtn?.addEventListener('click', ()=> setExpanded(document.body.classList.contains('context-collapsed')));
+
+  // Hoop selector → status text + preview redraw
+  const hoopMap = { '4x4':'4.0" × 4.0', '5x7':'5.0" × 7.0', '6x10':'6.0" × 10.0', '8x12':'8.0" × 12.0' };
+  by('hoopSize')?.addEventListener('change', (e)=>{
+    const pretty = hoopMap[e.target.value] || e.target.value;
+    by('statusHoop').textContent = pretty;
+    window.dispatchEvent(new CustomEvent('preview:hoop', { detail:{ size:e.target.value }}));
   });
 
-  // Context collapse
-  const toggleContext = ()=> document.body.classList.toggle('context-collapsed');
-  by('panelToggle')?.addEventListener('click', toggleContext);
-  by('contextClose')?.addEventListener('click', toggleContext);
-
-  // Preview modal
-  const openPreview = ()=>{
-    const d=by('previewModal'); if(!d.open) d.showModal();
-    if(window.renderLoomPreview) renderLoomPreview('loomPreviewLarge');
+  // File type → brand hint
+  const brandHint = {
+    'DST':'Tajima compatible',
+    'PES':'Brother / Baby Lock / Bernina',
+    'JEF':'Janome / Elna',
+    'EXP':'Melco / Bernina',
+    'VP3':'Husqvarna Viking / Pfaff',
+    'XXX':'Singer',
+    'HUS':'Husqvarna Viking',
+    'PEC':'Brother (older)'
   };
-  by('loomPreviewEnlarge')?.addEventListener('click', openPreview);
-  by('previewModalClose')?.addEventListener('click', ()=>by('previewModal').close());
+  const typeSel = by('fileType'), hintEl = by('fileTypeHint');
+  const updateHint = ()=> hintEl.textContent = brandHint[typeSel.value] || '';
+  typeSel?.addEventListener('change', updateHint);
+  updateHint();
 
-  // Zoom
-  const zoomPct = by('zoomPct'); let zoom=1;
-  const applyZoom = ()=>{ $('#canvasWrap').style.transform=`scale(${zoom})`; zoomPct.textContent=`${Math.round(zoom*100)}%`; };
-  by('zoomIn')?.addEventListener('click', ()=>{ zoom=Math.min(4,zoom+0.1); applyZoom(); });
-  by('zoomOut')?.addEventListener('click', ()=>{ zoom=Math.max(0.25,zoom-0.1); applyZoom(); });
+  // Global show-direction toggle
+  by('showDirGlobal')?.addEventListener('change', (e)=>{
+    window.dispatchEvent(new CustomEvent('preview:showDirection', { detail:{ enabled:e.target.checked }}));
+  });
 
-  // Init
+  // Modal open/close
+  const modal = by('previewModal');
+  by('loomPreviewEnlarge')?.addEventListener('click', ()=>{
+    if (!modal.open) modal.showModal();
+    if (window.renderLoomPreview) renderLoomPreview('loomPreviewLarge');
+  });
+  // Click outside content closes the dialog
+  modal?.addEventListener('click', (ev)=>{
+    const rect = modal.querySelector('.eb-modal__body')?.getBoundingClientRect();
+    if (!rect) return;
+    const inside = ev.clientX >= rect.left && ev.clientX <= rect.right &&
+                   ev.clientY >= rect.top  && ev.clientY <= rect.bottom;
+    if (!inside) modal.close();
+  });
+
+  // Initial
   window.addEventListener('load', ()=>{
     by('maskCanvas')?.classList.add('is-hidden');
-    const sm = by('showMask'); if (sm) sm.checked = false;
+    by('showMask') && (by('showMask').checked = false);
     if(window.renderLoomPreview) renderLoomPreview('loomPreviewCanvas');
   });
 })();

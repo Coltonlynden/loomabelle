@@ -19,7 +19,7 @@
   const ctxText = textC.getContext('2d');
 
   let currentImg = null;
-  const state = { text:{content:'', x:.5, y:.5, px:72, curve:0}, removeBg:false };
+  const state = { text:{content:'', x:.5, y:.5, px:72, curve:0} };
 
   function hideMask(){
     maskC.classList.add('is-hidden');
@@ -52,7 +52,6 @@
     const clear = ctx => { ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,w,h); };
     clear(ctxImg); clear(ctxText);
 
-    // keep a copy of the image in imgCanvas for export
     if (currentImg && (currentImg.naturalWidth||currentImg.width)){
       ctxImg.imageSmoothingEnabled = true;
       ctxImg.drawImage(currentImg, 0, 0, w, h);
@@ -75,18 +74,14 @@
     if (window.renderLoomPreview) { try { renderLoomPreview('loomPreviewCanvas'); } catch{} }
   }
 
-  // Upload event
   window.addEventListener('editor:imageLoaded', e=>{
     const img = e?.detail?.img; if(!img) return;
-    currentImg = img;
-    hideMask();
-
+    currentImg = img; hideMask();
     const {w,h} = computeFitDims(img);
     resizeAll(w,h);
     requestAnimationFrame(redraw);
   });
 
-  // Toggles
   showMask && showMask.addEventListener('change', ()=> maskC.classList.toggle('is-hidden', !showMask.checked));
   textApply && textApply.addEventListener('click', ()=>{
     state.text.content = textInput?.value || '';
@@ -94,12 +89,12 @@
     state.text.curve   = +(textCurve?.value || 0);
     redraw();
   });
+
   window.addEventListener('resize', ()=>{
     const base = currentImg || imgEl; if(!base) return;
     const {w,h}=computeFitDims(base); resizeAll(w,h); requestAnimationFrame(redraw);
   });
 
-  // Init empty stage
   window.addEventListener('load', ()=>{
     const cw = Math.max(320, wrap?.clientWidth || 800);
     const ch = Math.max(220, wrap?.clientHeight || 600);

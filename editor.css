@@ -87,3 +87,18 @@
   .eb-topbar{grid-template-columns:auto 1fr auto}
   .eb-brand__name{display:none}
 }
+
+/* Shell and shared rules remain from previous version */
+
+/* New button rows inside settings */
+.btnrow{display:flex;gap:8px;flex-wrap:wrap}
+.chipbtn{display:inline-flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--eb-border);border-radius:10px;background:#fff}
+.chipbtn svg{width:16px;height:16px;fill:#555}
+.chipbtn.is-active{outline:2px solid var(--eb-accent)}
+
+/* Layer pills */
+.pillrow{display:flex;gap:6px;flex-wrap:wrap}
+.pillrow .pill{padding:6px 10px;border:1px solid var(--eb-border);border-radius:999px;background:#fff;cursor:pointer}
+.pillrow .pill.is-active{background:#8ea9bb;color:#fff;border-color:#8ea9bb}
+
+/* Keep previous editor.css content below unchanged */

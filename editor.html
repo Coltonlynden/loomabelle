@@ -29,7 +29,6 @@
     </div>
   </header>
 
-  <!-- 3-column layout -->
   <main class="eb-layout" role="main">
     <!-- Left rail -->
     <aside class="eb-rail" aria-label="Tools">
@@ -66,12 +65,13 @@
         </label>
       </section>
 
-      <!-- Tools -->
+      <!-- Tools, book order: Select, Move, Shapes, Draw, Text, Layers -->
       <ul class="eb-tools eb-tools--grid" role="toolbar" aria-orientation="vertical">
-        <li><button class="eb-tool is-active" data-tool="select"><svg viewBox="0 0 24 24"><path d="M6 4l12 8-12 8z"/></svg><span>Select</span></button></li>
+        <li><button class="eb-tool is-active" data-tool="select" aria-pressed="true"><svg viewBox="0 0 24 24"><path d="M6 4l12 8-12 8z"/></svg><span>Select</span></button></li>
+        <li><button class="eb-tool" data-tool="move"><svg viewBox="0 0 24 24"><path d="M12 2l3 3-2 0 0 4 4 0 0-2 3 3-3 3 0-2-4 0 0 4 2 0-3 3-3-3 2 0 0-4-4 0 0 2-3-3 3-3 0 2 4 0 0-4-2 0z"/></svg><span>Move</span></button></li>
+        <li><button class="eb-tool" data-tool="shapes"><svg viewBox="0 0 24 24"><path d="M3 3h8v8H3zM13 3h8v8h-8zM13 13l4-4 4 4-4 4z"/></svg><span>Shapes</span></button></li>
         <li><button class="eb-tool" data-tool="draw"><svg viewBox="0 0 24 24"><path d="M20 4l-6 6 2 2 6-6zM4 20c3 0 4-2 5-3l6-6-2-2-6 6c-1 1-3 2-3 5z"/></svg><span>Draw</span></button></li>
         <li><button class="eb-tool" data-tool="text"><svg viewBox="0 0 24 24"><path d="M4 6V4h16v2h-7v14h-2V6H4z"/></svg><span>Text</span></button></li>
-        <li><button class="eb-tool" data-tool="shapes"><svg viewBox="0 0 24 24"><path d="M3 3h8v8H3zM13 3h8v8h-8zM13 13l4-4 4 4-4 4z"/></svg><span>Shapes</span></button></li>
         <li><button class="eb-tool" data-tool="layers" id="layersBtn"><svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5zm0 8l9 5-9 5-9-5 9-5z"/></svg><span>Layers</span></button></li>
       </ul>
 
@@ -101,15 +101,20 @@
     <aside id="toolSettings" class="eb-context" aria-label="Tool settings">
       <div class="eb-context__head"><h3>Tool settings</h3></div>
 
-      <!-- Select tool consolidated modes -->
+      <!-- SELECT -->
       <div class="panel" data-panel="select">
         <div class="group">
-          <label>Mode</label>
-          <select id="selectMode">
-            <option value="wand" selected>Magic wand</option>
-            <option value="lasso">Lasso</option>
-            <option value="refine">Brush refine</option>
-          </select>
+          <div class="btnrow" id="selectModes">
+            <button class="chipbtn is-active" data-mode="wand" title="Magic Wand">
+              <svg viewBox="0 0 24 24"><path d="M2 20l6-6 2 2-6 6zM11 11l7-7 2 2-7 7z"/></svg><span>Wand</span>
+            </button>
+            <button class="chipbtn" data-mode="lasso" title="Lasso">
+              <svg viewBox="0 0 24 24"><path d="M12 4C7 4 4 7 4 10s3 6 8 6 8-3 8-6-3-6-8-6z"/></svg><span>Lasso</span>
+            </button>
+            <button class="chipbtn" data-mode="refine" title="Refine brush">
+              <svg viewBox="0 0 24 24"><path d="M20 4l-6 6 2 2 6-6zM4 20c3 0 4-2 5-3l6-6-2-2-6 6c-1 1-3 2-3 5z"/></svg><span>Refine</span>
+            </button>
+          </div>
         </div>
         <div class="group" id="selectWandGroup">
           <label>Tolerance</label><input id="wandTol" type="range" min="1" max="80" value="24">
@@ -120,7 +125,15 @@
         </div>
       </div>
 
-      <!-- Draw tool -->
+      <!-- MOVE -->
+      <div class="panel hidden" data-panel="move">
+        <div class="group">
+          <label class="row"><input id="moveEnable" type="checkbox" checked> Drag items on canvas</label>
+          <p class="hint">Use this to reposition created layers.</p>
+        </div>
+      </div>
+
+      <!-- DRAW -->
       <div class="panel hidden" data-panel="draw">
         <div class="group">
           <label>Brush size</label><input id="brushSize" type="range" min="2" max="80" value="24">
@@ -128,6 +141,7 @@
         </div>
       </div>
 
+      <!-- TEXT -->
       <div class="panel hidden" data-panel="text">
         <div class="group">
           <label>Text</label><input id="textInput" type="text" placeholder="Your text">
@@ -139,22 +153,34 @@
         </div>
       </div>
 
+      <!-- SHAPES -->
       <div class="panel hidden" data-panel="shapes">
         <div class="group">
-          <label>Shape</label>
-          <select id="shapeType"><option value="rect">Rectangle</option><option value="circle">Circle</option><option value="triangle">Triangle</option></select>
+          <div class="btnrow" id="shapeBtns">
+            <button class="chipbtn is-active" data-shape="rect" title="Rectangle">
+              <svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" /></svg><span>Rect</span>
+            </button>
+            <button class="chipbtn" data-shape="circle" title="Circle">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/></svg><span>Circle</span>
+            </button>
+            <button class="chipbtn" data-shape="triangle" title="Triangle">
+              <svg viewBox="0 0 24 24"><path d="M12 5l8 14H4z"/></svg><span>Triangle</span>
+            </button>
+          </div>
+        </div>
+        <div class="group">
           <label>Stroke width</label><input id="shapeStroke" type="range" min="0" max="20" value="2">
         </div>
       </div>
 
-      <!-- Layers -->
+      <!-- LAYERS -->
       <div class="panel hidden" data-panel="layers">
         <div class="group">
           <button id="layerFromSelection" class="eb-btn eb-btn--secondary" type="button" disabled>Create layer from selection</button>
         </div>
         <div class="group">
-          <label>Active layer</label>
-          <select id="layerList"></select>
+          <label>Layers</label>
+          <div id="layerPills" class="pillrow"></div>
         </div>
         <div class="group">
           <label class="row"><input id="layerMoveToggle" type="checkbox"> Drag to move</label>
@@ -177,7 +203,7 @@
     <button id="btnConvert" class="eb-btn eb-btn--primary">Convert</button>
   </footer>
 
-  <!-- Enlarge preview modal: backdrop click OR X to close -->
+  <!-- Enlarge preview modal -->
   <dialog id="previewModal" class="eb-modal" aria-label="Loom preview">
     <div class="eb-modal__head">
       <h4>Loom preview</h4>

@@ -18,7 +18,7 @@
     const w = IMG_CAN.width, h = IMG_CAN.height; if (!w||!h) return;
     const imgData  = grabImageData();
     const maskData = MASK_CAN.getContext('2d').getImageData(0,0,w,h);
-    // TODO: plug into your real worker/pipeline
+    // TODO: plug into your real pipeline
     console.log('convert stub', {w,h,imgBytes:imgData.data.length, maskBytes:maskData.data.length});
   };
 

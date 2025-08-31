@@ -33,7 +33,7 @@
   <main class="eb-layout" role="main">
     <!-- Left rail -->
     <aside class="eb-rail" aria-label="Tools">
-      <!-- Top-left controls -->
+      <!-- top-left controls -->
       <section class="eb-controls">
         <div class="ctrl">
           <label class="ctrl__label" for="hoopSize">Hoop size</label>
@@ -69,16 +69,14 @@
       <!-- Tools -->
       <ul class="eb-tools eb-tools--grid" role="toolbar" aria-orientation="vertical">
         <li><button class="eb-tool is-active" data-tool="select"><svg viewBox="0 0 24 24"><path d="M6 4l12 8-12 8z"/></svg><span>Select</span></button></li>
-        <li><button class="eb-tool" data-tool="brush"><svg viewBox="0 0 24 24"><path d="M20 4l-6 6 2 2 6-6zM4 20c3 0 4-2 5-3l6-6-2-2-6 6c-1 1-3 2-3 5z"/></svg><span>Brush</span></button></li>
-        <li><button class="eb-tool" data-tool="eraser"><svg viewBox="0 0 24 24"><path d="M16 3l5 5-9 9H7L2 12 11 3h5zM7 19h15v2H7z"/></svg><span>Eraser</span></button></li>
-        <li><button class="eb-tool" data-tool="wand"><svg viewBox="0 0 24 24"><path d="M2 20l6-6 2 2-6 6zM11 11l7-7 2 2-7 7z"/></svg><span>Wand</span></button></li>
-        <li><button class="eb-tool" data-tool="lasso"><svg viewBox="0 0 24 24"><path d="M12 4C7 4 4 7 4 10s3 6 8 6 8-3 8-6-3-6-8-6zM10 17c-2 0-3 1-3 2s1 2 3 2 3-1 3-2-1-2-3-2z"/></svg><span>Lasso</span></button></li>
+        <li><button class="eb-tool" data-tool="draw"><svg viewBox="0 0 24 24"><path d="M20 4l-6 6 2 2 6-6zM4 20c3 0 4-2 5-3l6-6-2-2-6 6c-1 1-3 2-3 5z"/></svg><span>Draw</span></button></li>
         <li><button class="eb-tool" data-tool="text"><svg viewBox="0 0 24 24"><path d="M4 6V4h16v2h-7v14h-2V6H4z"/></svg><span>Text</span></button></li>
         <li><button class="eb-tool" data-tool="shapes"><svg viewBox="0 0 24 24"><path d="M3 3h8v8H3zM13 3h8v8h-8zM13 13l4-4 4 4-4 4z"/></svg><span>Shapes</span></button></li>
-        <li><button class="eb-tool" data-tool="uploads" id="uploadsBtn"><svg viewBox="0 0 24 24"><path d="M12 3l4 4h-3v6h-2V7H8zM4 17h16v4H4z"/></svg><span>Uploads</span></button></li>
+        <li><button class="eb-tool" data-tool="layers" id="layersBtn"><svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5zm0 8l9 5-9 5-9-5 9-5z"/></svg><span>Layers</span></button></li>
       </ul>
 
       <button id="autoBtn" class="eb-btn eb-btn--accent" type="button">Auto highlight subject</button>
+      <button id="removeBgAction" class="eb-btn eb-btn--ghost" type="button" disabled>Remove background</button>
 
       <section class="eb-loom" aria-label="Loom preview">
         <h2 class="eb-loom__title">Loom preview</h2>
@@ -87,8 +85,6 @@
         </div>
         <button id="loomPreviewEnlarge" class="eb-btn eb-btn--ghost">Enlarge</button>
       </section>
-
-      <input id="addElementInput" type="file" accept="image/*" hidden />
     </aside>
 
     <!-- Center: stage -->
@@ -105,41 +101,32 @@
     <aside id="toolSettings" class="eb-context" aria-label="Tool settings">
       <div class="eb-context__head"><h3>Tool settings</h3></div>
 
-      <div id="modeTabs" class="chips" hidden>
-        <button class="chip is-active" data-mode="mask">Mask</button>
-        <button class="chip" data-mode="text">Text</button>
+      <!-- Select tool consolidated modes -->
+      <div class="panel" data-panel="select">
+        <div class="group">
+          <label>Mode</label>
+          <select id="selectMode">
+            <option value="wand" selected>Magic wand</option>
+            <option value="lasso">Lasso</option>
+            <option value="refine">Brush refine</option>
+          </select>
+        </div>
+        <div class="group" id="selectWandGroup">
+          <label>Tolerance</label><input id="wandTol" type="range" min="1" max="80" value="24">
+          <label class="row"><input id="showMask" type="checkbox"> Show mask overlay</label>
+        </div>
+        <div class="group hidden" id="selectRefineGroup">
+          <label>Refine size</label><input id="refineSize" type="range" min="4" max="80" value="24">
+        </div>
       </div>
 
-      <div class="panel" data-panel="select"><div class="group"><p>Select and drag items.</p></div></div>
-
-      <div class="panel hidden" data-panel="brush">
+      <!-- Draw tool -->
+      <div class="panel hidden" data-panel="draw">
         <div class="group">
           <label>Brush size</label><input id="brushSize" type="range" min="2" max="80" value="24">
           <label class="row"><input id="showEdges" type="checkbox" checked> Show grid</label>
-          <label class="row"><input id="showMask" type="checkbox"> Show mask overlay</label>
-          <label class="row"><input id="removeBg" type="checkbox"> Remove background</label>
         </div>
       </div>
-
-      <div class="panel hidden" data-panel="eraser">
-        <div class="group">
-          <label>Eraser size</label><input id="eraserSize" type="range" min="4" max="120" value="36">
-          <label class="row"><input id="removeBgE" type="checkbox"> Remove background</label>
-        </div>
-      </div>
-
-      <div class="panel hidden" data-panel="wand">
-        <div class="group">
-          <label>Tolerance</label><input id="wandTol" type="range" min="1" max="80" value="24">
-          <label class="row"><input id="showDir" type="checkbox"> Show stitch direction overlay</label>
-          <label>Direction angle</label><input id="dirAngle" type="range" min="-90" max="90" value="45">
-          <label>Pattern</label>
-          <select id="dirPattern"><option value="hatch" selected>Hatch</option><option value="zigzag">Zig-zag</option><option value="satin">Satin</option></select>
-          <label class="row"><input id="removeBgW" type="checkbox"> Remove background</label>
-        </div>
-      </div>
-
-      <div class="panel hidden" data-panel="lasso"><div class="group"><p>Freeform selection.</p></div></div>
 
       <div class="panel hidden" data-panel="text">
         <div class="group">
@@ -160,10 +147,19 @@
         </div>
       </div>
 
-      <div class="panel hidden" data-panel="uploads">
+      <!-- Layers -->
+      <div class="panel hidden" data-panel="layers">
         <div class="group">
-          <p>Add additional images for the same stitch export.</p>
-          <button id="addElementBtn" class="eb-btn eb-btn--secondary" type="button">Add image element</button>
+          <button id="layerFromSelection" class="eb-btn eb-btn--secondary" type="button" disabled>Create layer from selection</button>
+        </div>
+        <div class="group">
+          <label>Active layer</label>
+          <select id="layerList"></select>
+        </div>
+        <div class="group">
+          <label class="row"><input id="layerMoveToggle" type="checkbox"> Drag to move</label>
+          <label>Direction angle</label><input id="layerAngle" type="range" min="-90" max="90" value="45">
+          <label class="row"><input id="layerRemoveBg" type="checkbox"> Remove background for this layer</label>
         </div>
       </div>
     </aside>
@@ -181,9 +177,12 @@
     <button id="btnConvert" class="eb-btn eb-btn--primary">Convert</button>
   </footer>
 
-  <!-- Enlarge preview modal -->
+  <!-- Enlarge preview modal: backdrop click OR X to close -->
   <dialog id="previewModal" class="eb-modal" aria-label="Loom preview">
-    <div class="eb-modal__head"><h4>Loom preview</h4></div>
+    <div class="eb-modal__head">
+      <h4>Loom preview</h4>
+      <button id="previewModalClose" class="eb-iconbtn" aria-label="Close">✕</button>
+    </div>
     <div class="eb-modal__body">
       <canvas id="loomPreviewLarge" width="1000" height="740" aria-label="Large hoop preview"></canvas>
     </div>

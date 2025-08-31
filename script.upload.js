@@ -1,7 +1,6 @@
 // Centralized upload with guaranteed visual update
 (function(){
   const main = document.getElementById('fileInput');
-  const add  = document.getElementById('addElementInput');
   const imgLayer = document.getElementById('imgLayer');
 
   function fileToDataURL(file){
@@ -26,12 +25,5 @@
     }
   }
 
-  function onAddChange(e){
-    const f = e.target.files?.[0]; if(!f) return;
-    window.dispatchEvent(new CustomEvent('editor:add-element', { detail:{ file:f }}));
-    e.target.value = '';
-  }
-
   main?.addEventListener('change', onMainChange);
-  add?.addEventListener('change', onAddChange);
 })();

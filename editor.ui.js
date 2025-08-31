@@ -1,4 +1,4 @@
-// UI glue: selectors, toggles, hints, modal behavior
+// UI glue: tool switching, toggles, hints, selection enablement, modal behavior
 (function(){
   if(!document.body.classList.contains('editor-shell')) return;
   const $  = s=>document.querySelector(s);
@@ -15,10 +15,8 @@
   $$('.eb-tool').forEach(btn=>btn.addEventListener('click',()=> setTool(btn.dataset.tool)));
   setTool('select');
 
-  // Open pickers
+  // upload picker
   by('uploadMainBtn')?.addEventListener('click', ()=> by('fileInput')?.click());
-  by('uploadsBtn')?.addEventListener('click', ()=> setTool('uploads'));
-  by('addElementBtn')?.addEventListener('click', ()=> by('addElementInput')?.click());
 
   // Tool settings toggle
   const toggleBtn = $('.eb-tools-toggle');
@@ -55,13 +53,63 @@
     window.dispatchEvent(new CustomEvent('preview:showDirection', { detail:{ enabled:e.target.checked }}));
   });
 
+  // Select-mode sub-controls visibility
+  const selectMode = by('selectMode');
+  const selW = by('selectWandGroup'), selR = by('selectRefineGroup');
+  selectMode?.addEventListener('change', ()=>{
+    const m = selectMode.value;
+    selW.classList.toggle('hidden', m!=='wand');
+    selR.classList.toggle('hidden', m!=='refine');
+    window.dispatchEvent(new CustomEvent('select:mode',{detail:{mode:m}}));
+  });
+
+  // Enable/disable actions when a selection exists
+  const removeBgBtn = by('removeBgAction');
+  const layerFromSel = by('layerFromSelection');
+  window.addEventListener('selection:state', e=>{
+    const on = !!e.detail?.active;
+    removeBgBtn.disabled = !on;
+    layerFromSel.disabled = !on;
+  });
+
+  removeBgBtn?.addEventListener('click', ()=> window.dispatchEvent(new CustomEvent('selection:removebg')));
+
+  // Layers UI
+  const layerList = by('layerList');
+  function refreshLayerList(layers, idx){
+    layerList.innerHTML = '';
+    layers.forEach((L,i)=>{
+      const o=document.createElement('option'); o.value=i; o.textContent=`Layer ${i+1}`; layerList.appendChild(o);
+    });
+    if (layers.length){ layerList.value = String(idx ?? 0); }
+  }
+  by('layerMoveToggle')?.addEventListener('change', e=>{
+    window.dispatchEvent(new CustomEvent('layer:drag',{detail:{enabled:e.target.checked}}));
+  });
+  by('layerAngle')?.addEventListener('input', e=>{
+    window.dispatchEvent(new CustomEvent('layer:angle',{detail:{angle:+e.target.value||0}}));
+  });
+  by('layerRemoveBg')?.addEventListener('change', e=>{
+    window.dispatchEvent(new CustomEvent('layer:removebg',{detail:{enabled:e.target.checked}}));
+  });
+  layerList?.addEventListener('change', e=>{
+    window.dispatchEvent(new CustomEvent('layer:select',{detail:{index:+e.target.value}}));
+  });
+  by('layerFromSelection')?.addEventListener('click', ()=> window.dispatchEvent(new CustomEvent('layer:from-selection')));
+
+  // Editor tells us about layer changes
+  window.addEventListener('layers:update', e=>{
+    const {layers, active} = e.detail||{};
+    refreshLayerList(layers||[], active||0);
+  });
+
   // Modal open/close
   const modal = by('previewModal');
   by('loomPreviewEnlarge')?.addEventListener('click', ()=>{
     if (!modal.open) modal.showModal();
     if(window.renderLoomPreview) renderLoomPreview('loomPreviewLarge');
   });
-  // Click outside content closes
+  by('previewModalClose')?.addEventListener('click', ()=> modal.close());
   modal?.addEventListener('click', ev=>{
     const body = modal.querySelector('.eb-modal__body');
     if(!body) return;

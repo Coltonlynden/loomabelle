@@ -1,4 +1,4 @@
-// Editor core: image display, selection tools (wand/lasso/refine), draw tool, layers
+// Editor core: draw/select/move/layers with icon-mode wiring
 (function(){
   const $ = s => document.querySelector(s);
   const wrap  = $('#canvasWrap');
@@ -10,7 +10,6 @@
   const showEdges = $('#showEdges');
   const brushSize = $('#brushSize');
   const refineSize= $('#refineSize');
-  const selectMode= $('#selectMode');
 
   const dpr = Math.max(1, window.devicePixelRatio||1);
   const ctxImg  = imgC.getContext('2d');
@@ -19,12 +18,17 @@
 
   let currentImg = null;
   let activeTool = 'select';
+  let selectMode = 'wand';
   let selectionActive = false;
   let lassoPts = [];
   let isPointerDown = false;
   let lastX = 0, lastY = 0;
 
-  // Layers (simple bitmap layers cut from image)
+  // Shapes
+  let shapeType = 'rect';
+  let shapeStroke = 2;
+
+  // Layers
   const layers = []; // {canvas, x, y, angle, removeBg}
   let activeLayer = -1;
   let layerDrag = false;
@@ -71,10 +75,7 @@
     }
 
     // draw layers on top of base
-    layers.forEach(L=>{
-      if (!L) return;
-      ctxImg.drawImage(L.canvas, L.x, L.y);
-    });
+    layers.forEach(L=>{ if(L) ctxImg.drawImage(L.canvas, L.x, L.y); });
 
     if (showEdges && showEdges.checked){
       ctxImg.save(); ctxImg.globalCompositeOperation='multiply';
@@ -86,12 +87,18 @@
     if (window.renderLoomPreview) { try { renderLoomPreview('loomPreviewCanvas'); } catch{} }
   }
 
-  function setTool(t){ activeTool=t; if(t!=='select') { lassoPts.length=0; selectionActive=false; emitSelectionState(false); } }
+  function setTool(t){
+    activeTool=t;
+    if(t!=='select'){ lassoPts.length=0; selectionActive=false; emitSelectionState(false); }
+  }
   window.addEventListener('tool:select', e=> setTool(e.detail.tool));
 
-  // ===== Select tool modes =====
-  selectMode?.addEventListener('change', ()=> { lassoPts.length=0; });
+  // icon-mode events
+  window.addEventListener('select:mode', e=>{ selectMode = e.detail?.mode || 'wand'; lassoPts.length=0; });
+  window.addEventListener('shape:select', e=>{ shapeType = e.detail?.shape || 'rect'; });
+  window.addEventListener('shape:stroke', e=>{ shapeStroke = +e.detail?.width || 0; });
 
+  // pointer helpers
   function xyFromEvent(ev){
     const rect = imgC.getBoundingClientRect();
     const x = (ev.clientX - rect.left) * dpr;
@@ -109,22 +116,44 @@
       ctxMask.strokeStyle='rgba(0,0,0,1)'; ctxMask.lineWidth=(+brushSize.value||24)*dpr;
       ctxMask.beginPath(); ctxMask.moveTo(x,y);
       maskC.classList.remove('is-hidden');
+      selectionActive=true; emitSelectionState(true);
     } else if (activeTool==='select'){
-      const mode = selectMode?.value || 'wand';
-      if (mode==='lasso'){
+      if (selectMode==='lasso'){
         lassoPts=[{x,y}];
-      } else if (mode==='refine'){
+      } else if (selectMode==='refine'){
         ctxMask.globalCompositeOperation='source-over';
         ctxMask.lineCap='round'; ctxMask.lineJoin='round';
         ctxMask.strokeStyle='rgba(0,0,0,1)'; ctxMask.lineWidth=(+refineSize.value||24)*dpr;
         ctxMask.beginPath(); ctxMask.moveTo(x,y);
         maskC.classList.remove('is-hidden');
+        selectionActive=true; emitSelectionState(true);
       } else { // wand
-        // simple flood fill around clicked color with tolerance
         doWandSelection(x|0, y|0, (+document.getElementById('wandTol').value||24));
       }
+    } else if (activeTool==='move'){
+      // move tool acts like layer-drag if a layer is active
+      layerDrag = true;
     } else if (activeTool==='layers' && layerDrag && activeLayer>=0){
-      // dragging will be handled in move
+      // drag layer; handled in move
+    } else if (activeTool==='shapes'){
+      // stamp a simple shape into mask for selection -> can become layer
+      ctxMask.save();
+      ctxMask.globalCompositeOperation='source-over';
+      ctxMask.fillStyle='rgba(0,0,0,1)';
+      const size = Math.max(40*dpr, 120*dpr);
+      if (shapeType==='rect'){
+        ctxMask.fillRect(x-size/2, y-size/2, size, size);
+      } else if (shapeType==='circle'){
+        ctxMask.beginPath(); ctxMask.arc(x, y, size/2, 0, Math.PI*2); ctxMask.fill();
+      } else {
+        ctxMask.beginPath();
+        ctxMask.moveTo(x, y-size/2);
+        ctxMask.lineTo(x-size/2, y+size/2);
+        ctxMask.lineTo(x+size/2, y+size/2);
+        ctxMask.closePath(); ctxMask.fill();
+      }
+      ctxMask.restore();
+      maskC.classList.remove('is-hidden'); selectionActive=true; emitSelectionState(true);
     }
   }
 
@@ -132,17 +161,11 @@
     if (!isPointerDown) return;
     const {x,y} = xyFromEvent(ev);
 
-    if (activeTool==='draw'){
-      ctxMask.lineTo(x,y); ctxMask.stroke(); selectionActive=true; emitSelectionState(true);
-    } else if (activeTool==='select'){
-      const mode = selectMode?.value || 'wand';
-      if (mode==='lasso'){
-        lassoPts.push({x,y});
-        drawLassoPreview();
-      } else if (mode==='refine'){
-        ctxMask.lineTo(x,y); ctxMask.stroke(); selectionActive=true; emitSelectionState(true);
-      }
-    } else if (activeTool==='layers' && layerDrag && activeLayer>=0){
+    if (activeTool==='draw' || (activeTool==='select' && selectMode==='refine')){
+      ctxMask.lineTo(x,y); ctxMask.stroke();
+    } else if (activeTool==='select' && selectMode==='lasso'){
+      lassoPts.push({x,y}); drawLassoPreview();
+    } else if ((activeTool==='layers' || activeTool==='move') && layerDrag && activeLayer>=0){
       const dx = x-lastX, dy = y-lastY;
       layers[activeLayer].x += dx; layers[activeLayer].y += dy;
       redraw();
@@ -151,11 +174,9 @@
   }
 
   function endPointer(){
-    if (!isPointerDown) return;
-    isPointerDown=false;
+    if (!isPointerDown) return; isPointerDown=false;
 
-    if (activeTool==='select' && (selectMode?.value==='lasso') && lassoPts.length>2){
-      // fill lasso polygon into mask
+    if (activeTool==='select' && selectMode==='lasso' && lassoPts.length>2){
       ctxMask.save();
       ctxMask.globalCompositeOperation='source-over';
       ctxMask.fillStyle='rgba(0,0,0,1)';
@@ -163,14 +184,13 @@
       ctxMask.moveTo(lassoPts[0].x, lassoPts[0].y);
       for (let i=1;i<lassoPts.length;i++) ctxMask.lineTo(lassoPts[i].x, lassoPts[i].y);
       ctxMask.closePath(); ctxMask.fill(); ctxMask.restore();
-      maskC.classList.remove('is-hidden');
-      selectionActive=true; emitSelectionState(true);
-      lassoPts.length=0;
+      maskC.classList.remove('is-hidden'); selectionActive=true; emitSelectionState(true);
+      lassoPts.length=0; ctxText.clearRect(0,0,textC.width,textC.height);
     }
+    if (activeTool==='move'){ layerDrag=false; }
   }
 
   function drawLassoPreview(){
-    // lightweight preview by redrawing overlay path onto text canvas
     const w=textC.width,h=textC.height; ctxText.clearRect(0,0,w,h);
     if (!lassoPts.length) return;
     ctxText.save(); ctxText.strokeStyle='rgba(200,50,50,.8)'; ctxText.lineWidth=2*dpr;
@@ -180,7 +200,6 @@
   }
 
   function doWandSelection(sx,sy,tol){
-    // naive tolerance region grow on imgCanvas
     const w=imgC.width, h=imgC.height;
     const src = ctxImg.getImageData(0,0,w,h);
     const dst = ctxMask.getImageData(0,0,w,h);
@@ -200,30 +219,28 @@
       }
     }
     ctxMask.putImageData(dst,0,0);
-    maskC.classList.remove('is-hidden');
-    selectionActive=true; emitSelectionState(true);
+    maskC.classList.remove('is-hidden'); selectionActive=true; emitSelectionState(true);
   }
 
-  // Remove background action: erase selected area from base
+  // Remove background action
   window.addEventListener('selection:removebg', ()=>{
     if (!selectionActive) return;
     const w=imgC.width,h=imgC.height;
     const base = ctxImg.getImageData(0,0,w,h);
     const sel  = ctxMask.getImageData(0,0,w,h);
     for(let i=0;i<base.data.length;i+=4){
-      if (sel.data[i+3]>0){ base.data[i+3]=0; } // make transparent
+      if (sel.data[i+3]>0){ base.data[i+3]=0; }
     }
     ctxImg.putImageData(base,0,0);
     hideMask(); redraw();
   });
 
-  // ===== Layers =====
+  // Layers
   window.addEventListener('layer:from-selection', ()=>{
     if (!selectionActive) return;
     const w=imgC.width,h=imgC.height;
     const sub = document.createElement('canvas'); sub.width=w; sub.height=h;
     const sctx=sub.getContext('2d');
-    // copy selected pixels
     sctx.clearRect(0,0,w,h);
     sctx.drawImage(imgC,0,0);
     const imgD=sctx.getImageData(0,0,w,h);
@@ -236,7 +253,6 @@
     activeLayer = layers.length-1;
     hideMask(); redraw(); emitLayers();
   });
-
   window.addEventListener('layer:select', e=>{
     activeLayer = Math.max(0, Math.min(layers.length-1, +e.detail.index||0));
     emitLayers();
@@ -256,7 +272,7 @@
   imgC.addEventListener('pointerup', endPointer);
   imgC.addEventListener('pointerleave', endPointer);
 
-  // Upload event
+  // Upload
   window.addEventListener('editor:imageLoaded', e=>{
     const img = e?.detail?.img; if(!img) return;
     currentImg = img; hideMask();
@@ -279,6 +295,5 @@
     resizeAll(cw, ch); hideMask(); redraw();
   });
 
-  // For status/preview
   window.Editor = { redraw };
 })();
